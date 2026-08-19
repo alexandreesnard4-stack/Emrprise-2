@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
-  doc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
+  doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
 } from "firebase/firestore";
 
 // ---------- Multijoueur : code de partie à 5 lettres (sans caractères ambigus) ----------
@@ -3850,6 +3850,9 @@ const APP_STYLES = `
           color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
         }
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
+        /* Reprise d'une partie en ligne : un adversaire attend en face, donc elle passe
+           devant la reprise d'une partie solo, qui peut attendre. */
+        .landing-link.reprise-en-ligne { color: var(--gold-bright); font-weight: 600; }
         .order-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; width: 100%; }
         .order-option { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.15); cursor: pointer;
@@ -5029,6 +5032,12 @@ export default function Emprise() {
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
+  // Reconnexion : partie en ligne retrouvée au démarrage et proposée sur l'accueil.
+  const [repriseEnLigne, setRepriseEnLigne] = useState(null);
+  // Vrai le temps d'une reprise : indique à l'écouteur qu'il doit router vers le bon
+  // écran (jeu ou choix des Ordres) au lieu de laisser le joueur sur l'écran d'attente.
+  const repriseRef = useRef(false);
+  const repriseTesteeRef = useRef(false); // la recherche d'une partie à reprendre n'a lieu qu'une fois
 
 
   const [board, setBoard] = useState(Array(CELLS).fill(null));
@@ -5410,6 +5419,7 @@ export default function Emprise() {
 
   function reset() {
     clearSavedGame();
+    oublierPartieEnLigne();
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
@@ -5446,6 +5456,92 @@ export default function Emprise() {
     });
     return unsub;
   }, []);
+
+  // ---------- Reconnexion à une partie en ligne ----------
+  // Le problème réglé ici : sur téléphone, verrouiller l'écran ou changer d'application
+  // suffit à faire recharger la page. onlineGameId et onlineRole vivaient uniquement en
+  // mémoire React, donc la partie devenait injoignable — l'adversaire restait à attendre
+  // un coup qui ne viendrait jamais. On garde donc de quoi la retrouver.
+  // localStorage et pas sessionStorage (utilisé par la sauvegarde des parties solo) :
+  // sessionStorage est vidé dès que l'onglet se ferme, ce qui ne couvre pas le cas le
+  // plus fréquent, l'application chassée de la mémoire par le téléphone.
+  const CLE_PARTIE_EN_LIGNE = "emprise-partie-en-ligne";
+
+  function oublierPartieEnLigne() {
+    try { localStorage.removeItem(CLE_PARTIE_EN_LIGNE); } catch (e) { /* stockage indisponible */ }
+    setRepriseEnLigne(null);
+  }
+
+  // Mémorise la partie en cours à chaque changement, et l'oublie dès qu'elle est finie.
+  // Aucune donnée de jeu ici : Firestore fait foi, on ne stocke que de quoi s'y rebrancher.
+  useEffect(() => {
+    if (mode !== "online" || !onlineGameId || !onlineRole) return;
+    if (gameOver) { oublierPartieEnLigne(); return; }
+    try {
+      localStorage.setItem(CLE_PARTIE_EN_LIGNE, JSON.stringify({
+        gameId: onlineGameId, role: onlineRole, classee: partieClassee, uid: myUid,
+      }));
+    } catch (e) { /* stockage indisponible : pas de reprise possible, on continue */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, onlineGameId, onlineRole, partieClassee, gameOver, myUid]);
+
+  // Au démarrage, une fois l'identité connue : est-ce qu'une partie nous attend ?
+  // On ne propose la reprise qu'après avoir vérifié auprès de Firestore que la partie
+  // existe encore, qu'elle n'est pas terminée, et qu'on en fait bien partie — sinon on
+  // proposerait de reprendre une partie fantôme.
+  useEffect(() => {
+    if (!myUid || repriseTesteeRef.current) return;
+    repriseTesteeRef.current = true;
+    let brut = null;
+    try { brut = localStorage.getItem(CLE_PARTIE_EN_LIGNE); } catch (e) { return; }
+    if (!brut) return;
+    let enregistree = null;
+    try { enregistree = JSON.parse(brut); } catch (e) { oublierPartieEnLigne(); return; }
+    if (!enregistree || !enregistree.gameId) { oublierPartieEnLigne(); return; }
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "games", enregistree.gameId));
+        if (!snap.exists()) { oublierPartieEnLigne(); return; }
+        const data = snap.data();
+        // Terminée, ou appartenant à quelqu'un d'autre (deux joueurs sur le même
+        // appareil) : il n'y a rien à reprendre.
+        if (data.gameOver) { oublierPartieEnLigne(); return; }
+        // Camps que cette identité peut légitimement reprendre dans cette partie.
+        const campsPossibles = [];
+        if (data.blueUid === myUid) campsPossibles.push("blue");
+        if (data.redUid === myUid) campsPossibles.push("red");
+        if (!campsPossibles.length) { oublierPartieEnLigne(); return; }
+        // Le camp mémorisé fait foi tant qu'il reste plausible : une même identité peut
+        // occuper les DEUX camps (deux onglets d'un même navigateur partagent le compte
+        // anonyme Firebase), et déduire le camp de la seule identité renvoyait alors
+        // systématiquement Azur — un joueur Écarlate se retrouvait dans le camp adverse.
+        const camp = campsPossibles.includes(enregistree.role) ? enregistree.role : campsPossibles[0];
+        setRepriseEnLigne({
+          gameId: enregistree.gameId,
+          role: camp,
+          classee: !!enregistree.classee,
+        });
+      } catch (e) { /* réseau absent : on ne propose rien, la partie reste mémorisée */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid]);
+
+  function reprendrePartieEnLigne() {
+    if (!repriseEnLigne) return;
+    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setConfluenceActive(false);
+    setTestMode(false);
+    setPickerChoice([]);
+    setOnlineError("");
+    setOnlineGameId(repriseEnLigne.gameId);
+    setOnlineRole(repriseEnLigne.role);
+    setPartieClassee(!!repriseEnLigne.classee);
+    setMode("online");
+    setOnlineStatus("Reprise de la partie...");
+    repriseRef.current = true;
+    setRepriseEnLigne(null);
+    setPhase("online-waiting");
+  }
 
   async function createOnlineGame() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
@@ -5558,6 +5654,7 @@ export default function Emprise() {
         setOnlineError("");
         setOnlineStatus("");
         setPhase((p) => (p === "play" ? p : "play"));
+        repriseRef.current = false; // reprise aboutie : la partie est retrouvée
 
         // Coup de l'adversaire : on rejoue chez nous les animations qu'il a vues (chute
         // de la carte, captures, retournements, brume empoisonnée). Sans ça le plateau
@@ -5578,6 +5675,17 @@ export default function Emprise() {
         }
       } else {
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
+        // Reprise alors que la partie n'avait pas encore démarré : si mes Ordres
+        // n'étaient pas choisis, il faut revenir à l'écran de choix. Sans ça le joueur
+        // resterait indéfiniment sur un écran d'attente que rien ne peut débloquer,
+        // puisque c'est lui qu'on attend.
+        if (repriseRef.current && !iAmReady) {
+          repriseRef.current = false;
+          setOnlineStatus("");
+          setPhase("select-blue");
+          return;
+        }
+        repriseRef.current = false;
         setOnlineStatus(iAmReady ? "En attente que l'adversaire choisisse ses Ordres..." : "");
       }
     });
@@ -6823,6 +6931,11 @@ export default function Emprise() {
           </div>
 
           <button className="landing-cta" onClick={startNewGameAnimated}>⚔ Nouvelle partie</button>
+          {repriseEnLigne && (
+            <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
+              Reprendre la partie en ligne
+            </button>
+          )}
           {hasSavedGame && (
             <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
           )}
