@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
-  doc, setDoc, getDoc, updateDoc, onSnapshot, serverTimestamp,
+  doc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
 } from "firebase/firestore";
-
 
 // ---------- Multijoueur : code de partie à 5 lettres (sans caractères ambigus) ----------
 function makeGameCode() {
@@ -113,14 +112,14 @@ function CountdownLabel({ order }) {
 
   if (!order.releaseDate) return "Ordre encore scellé par la Faille, son heure viendra.";
   const diffMs = order.releaseDate - now;
-  if (diffMs <= 0) return "Prochainement — son heure est presque venue...";
+  if (diffMs <= 0) return "Prochainement, son heure est presque venue...";
   const totalSeconds = Math.floor(diffMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  return `Prochainement — ${days}j ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+  return `Prochainement : ${days}j ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
 }
 
 
@@ -203,7 +202,7 @@ const TUTORIAL_STEPS = [
   {
     kind: "play",
     title: "Résonance et Onde",
-    text: "Si 2 de vos rangs ou plus répondent à ceux des cartes voisines — les vôtres comptent aussi — toutes les ennemies concernées sont capturées d'un coup : c'est la Résonance. Et si une carte ainsi capturée peut à son tour en capturer une autre, ça continue en chaîne : c'est une Onde. Placez votre carte pour voir les deux à l'œuvre.",
+    text: "Si 2 de vos rangs ou plus répondent à ceux des cartes voisines, les vôtres comptent aussi, toutes les ennemies concernées sont capturées d'un coup : c'est la Résonance. Et si une carte ainsi capturée peut à son tour en capturer une autre, ça continue en chaîne : c'est une Onde. Placez votre carte pour voir les deux à l'œuvre.",
     requiredCell: 7,
     handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -266,7 +265,39 @@ const KEY_ACTIVATE = (fn) => (e) => {
 };
 // Le portrait de Gardiens (armure noire) est plus sombre que les autres à cette petite
 // taille : on lui donne un léger coup de projecteur pour rester lisible.
-const portraitStyle = (card) => (card && card.ability === "guardian" ? { filter: "brightness(1.45) contrast(1.08)" } : undefined);
+// Les quatre cartes d'un meme Ordre partagent un seul portrait : cote a cote sur le
+// plateau, elles se lisaient comme du papier peint plutot que comme quatre combattants.
+// On decale legerement le cadrage et la temperature selon l'ORIENTATION de la carte
+// (chacune des quatre a la sienne) : jamais deux identiques voisines, sans toucher aux
+// images. Les ecarts sont faibles a dessein — de pres on ne sait pas dire ce qui change,
+// de loin la repetition disparait.
+// Deterministe : la meme carte a toujours exactement le meme cadrage, d'une partie a
+// l'autre comme d'un rendu a l'autre. Aucun tirage au sort.
+const PORTRAIT_VARIANTES = [
+  { zoom: 1.0, x: 50, y: 34, teinte: 0, lum: 1.0 },
+  { zoom: 1.08, x: 42, y: 30, teinte: -5, lum: 1.05 },
+  { zoom: 1.04, x: 58, y: 38, teinte: 5, lum: 0.95 },
+  { zoom: 1.12, x: 50, y: 26, teinte: -2, lum: 1.02 },
+];
+
+const portraitStyle = (card) => {
+  if (!card) return undefined;
+  // card.orientation est le numero de quart de tour (0 a 3) pose par makeOrderQuad : il
+  // distingue exactement les quatre cartes d'un Ordre.
+  // Deux tentatives ratees avant d'en arriver la, toutes deux fondees sur les RANGS :
+  // baseTop+baseLeft, puis un melange pondere des deux. La rotation permute les rangs,
+  // les collisions modulo 4 sont donc inevitables — mesure sur les 10 Ordres, on
+  // obtenait 2 a 3 variantes distinctes au lieu de 4. Il fallait numeroter a la source.
+  const v = PORTRAIT_VARIANTES[(card.orientation || 0) % 4];
+  const gardien = card.ability === "guardian";
+  return {
+    transform: `scale(${v.zoom})`,
+    objectPosition: `${v.x}% ${v.y}%`,
+    filter: gardien
+      ? `brightness(${(1.45 * v.lum).toFixed(2)}) contrast(1.08) hue-rotate(${v.teinte}deg)`
+      : `brightness(${v.lum}) hue-rotate(${v.teinte}deg)`,
+  };
+};
 
 // Sauvegarde de partie : on retire le portrait (gros texte d'image) avant de
 // sauvegarder pour rester léger, et on le remet en le retrouvant via orderKey
@@ -274,7 +305,22 @@ const portraitStyle = (card) => (card && card.ability === "guardian" ? { filter:
 function stripForSave(card) {
   if (!card) return null;
   const { portrait, ...rest } = card;
+  // Firestore REFUSE les valeurs undefined et fait échouer l'écriture entière. La pose
+  // d'une carte pose systématiquement scribeConcealTurnsLeft/scribePlacedBy à undefined
+  // pour tout Ordre autre que les Scribes : sans ce nettoyage, aucun coup ne part en
+  // ligne. La sauvegarde locale, elle, ne montrait rien — JSON.stringify supprime les
+  // clés undefined en silence.
+  for (const cle of Object.keys(rest)) if (rest[cle] === undefined) delete rest[cle];
   return rest;
+}
+
+// Même contrainte que stripForSave, pour les objets qui ne sont pas des cartes : les
+// événements d'animation portent des champs optionnels (comboLevel...) qui valent
+// undefined la plupart du temps et feraient échouer l'écriture Firestore entière.
+function sansUndefined(objet) {
+  const propre = {};
+  for (const cle of Object.keys(objet)) if (objet[cle] !== undefined) propre[cle] = objet[cle];
+  return propre;
 }
 function hydrateFromSave(card) {
   if (!card) return null;
@@ -337,7 +383,7 @@ const ARENE_PARTICULES = [
 // mange l'interface.
 const ARENES = {
   Bronze: { img: "/arenes/bronze.webp", marge: 11, braise: "rgba(255,150,60,0.75)" },
-  Argent: { img: "/arenes/argent.webp", marge: 15, braise: "rgba(180,205,235,0.6)" },
+  Argent: { img: "/arenes/argent.webp", marge: 10, braise: "rgba(180,205,235,0.6)" },
   Or: { img: "/arenes/or.webp", marge: 13, braise: "rgba(235,180,80,0.75)" },
   Platine: { img: "/arenes/platine.webp", marge: 10, braise: "rgba(150,190,255,0.7)" },
   Légende: { img: "/arenes/legende.webp", marge: 13, braise: "rgba(255,95,35,0.85)" },
@@ -896,7 +942,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
       {perceeEvent && (perceeEvent.dir === "top" || perceeEvent.dir === "bottom") && <span className={`percee-spikes spikes-from-${perceeEvent.dir}`} />}
       {guardianEvent && <span className={`guardian-edge edge-from-${guardianEvent.dir}`} />}
       {hiddenFromFoe > 0 && (
-        <span className="scribe-hidden-badge" title={`Cachée à l'adversaire — ${hiddenFromFoe} tour(s)`}>
+        <span className="scribe-hidden-badge" title={`Cachée à l'adversaire, ${hiddenFromFoe} tour(s)`}>
           <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
             <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="2" />
             <circle cx="12" cy="12" r="2.6" fill="currentColor" />
@@ -954,13 +1000,17 @@ function makeCardId() {
   return `card-${Date.now()}-${uidCounter}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function buildCard(order, top, right, bottom, left) {
+function buildCard(order, top, right, bottom, left, orientation) {
   return {
     id: makeCardId(),
     name: order.name,
     icon: order.icon,
     portrait: order.portrait,
     ability: order.ability,
+    // Numero de quart de tour, 0 a 3. Purement cosmetique : il sert a depareiller le
+    // cadrage du portrait pour que les quatre cartes d'un Ordre ne se lisent pas comme
+    // la meme image repetee. Ne touche jamais aux rangs ni aux regles.
+    orientation: orientation || 0,
     top, right, bottom, left,
     baseTop: top, baseRight: right, baseBottom: bottom, baseLeft: left,
   };
@@ -979,7 +1029,7 @@ function makeOrderQuad(order) {
   let sides = { top: t, left: l, right: r, bottom: b };
   const cards = [];
   for (let i = 0; i < 4; i++) {
-    cards.push(buildCard(order, sides.top, sides.right, sides.bottom, sides.left));
+    cards.push(buildCard(order, sides.top, sides.right, sides.bottom, sides.left, i));
     sides = rotateSides(sides);
   }
   return cards;
@@ -1185,6 +1235,139 @@ function poisonAjoute(poisonValue, marque) {
   const pile = poisonMarques(poisonValue);
   if (pile.length >= POISON_MAX) return pile;
   return [...pile, marque];
+}
+
+// ---------------------------------------------------------------------------
+// capaciteOffensive — les capacites qui FRAPPENT une voisine, en un seul endroit.
+// Appelee pour la carte qu'on pose, et pour chaque carte capturee par une Onde : c'est
+// ce qui permet a une Chimere capturee de retourner un rang a son tour.
+// Renvoie la liste des cases nouvellement capturees, pour alimenter la chaine.
+//
+// Ne sont PAS ici, volontairement :
+//  - l'attraction des Cendres : elle deplace une carte a travers le plateau, ce qui
+//    n'a de sens qu'a la pose (decision d'Alexandre) ;
+//  - le poison des Pestiferes, le bonus des Abysses, l'echange des Dores : ce sont des
+//    effets de POSE, pas des attaques, et ils restent dans resolvePlacement.
+// ---------------------------------------------------------------------------
+function capaciteOffensive(board, from, player, events, comboLevel, eveilEcarts) {
+  const carte = board[from];
+  const prises = [];
+  if (!carte) return prises;
+  const fr = Math.floor(from / COLS), fc = from % COLS;
+  const niveau = comboLevel === undefined ? undefined : comboLevel;
+
+  // DORES — l'Eveil, au service du nouveau camp : echange de rangs avec chaque ennemie
+  // adjacente (le rang defensif de l'ennemie contre le sien), puis re-jugement immediat,
+  // exactement comme a la pose. C'est l'identite de l'Ordre : il bat plus fort que lui.
+  // Les ecarts sont pousses dans eveilEcarts pour etre annules en fin de resolution
+  // (seules les captures restent acquises), comme pour l'Eveil de pose.
+  if (carte.ability === "eveil" && eveilEcarts) {
+    DIRS.forEach((d) => {
+      const nr = fr + d.dr, nc = fc + d.dc;
+      if (!inBounds(nr, nc)) return;
+      const ni = idx(nr, nc);
+      const cell = board[ni];
+      if (cell && cell.owner !== player) {
+        const courant = board[from];
+        const myRank = courant[d.my];
+        const theirRank = defRank(cell, d.their);
+        board[from] = { ...courant, [d.my]: theirRank };
+        board[ni] = {
+          ...cell,
+          [d.their]: myRank,
+          eveilSansBouclier: [...(cell.eveilSansBouclier || []), d.their],
+        };
+        eveilEcarts.push({ index: from, side: d.my, ecart: theirRank - myRank });
+        eveilEcarts.push({ index: ni, side: d.their, ecart: myRank - cell[d.their] });
+        events.push({ index: ni, kind: "eveil", dir: d.their, comboLevel: niveau });
+        events.push({ index: from, kind: "eveil-self", dir: d.my, comboLevel: niveau });
+        // Re-jugement avec les rangs echanges : l'echange peut suffire a faire tomber la carte.
+        if (atkRank(board[from], d.my) > defRank(board[ni], d.their)) {
+          board[ni] = { ...board[ni], owner: player };
+          events.push({ index: ni, kind: "combo", dir: d.their, comboLevel: (niveau || 0) + 1 });
+          prises.push(ni);
+        }
+      }
+    });
+  }
+
+  // CHIMERES — retourne le rang de chaque ennemie adjacente sur l'axe attaque.
+  if (carte.ability === "mue") {
+    let touche = false;
+    DIRS.forEach((d) => {
+      const nr = fr + d.dr, nc = fc + d.dc;
+      if (!inBounds(nr, nc)) return;
+      const ni = idx(nr, nc);
+      const cell = board[ni];
+      if (cell && cell.owner !== player) {
+        const horizontal = d.my === "left" || d.my === "right";
+        board[ni] = horizontal
+          ? { ...cell, left: cell.right, right: cell.left }
+          : { ...cell, top: cell.bottom, bottom: cell.top };
+        events.push({ index: ni, kind: "mue", axis: horizontal ? "h" : "v", comboLevel: niveau });
+        touche = true;
+        // Le retournement peut suffire a faire tomber la carte : on rejuge apres coup.
+        if (atkRank(carte, d.my) > defRank(board[ni], d.their)) {
+          board[ni] = { ...board[ni], owner: player };
+          events.push({ index: ni, kind: "combo", dir: d.their, comboLevel: (niveau || 0) + 1 });
+          prises.push(ni);
+        }
+      }
+    });
+    if (touche) events.push({ index: from, kind: "mue-self", comboLevel: niveau });
+  }
+
+  // PIQUES — transperce jusqu'a 2 cartes alignees (3 avec le Heraut).
+  if (carte.ability === "percee") {
+    let touche = false;
+    DIRS.forEach((d) => {
+      let nr = fr + d.dr, nc = fc + d.dc;
+      let perces = 0;
+      while (inBounds(nr, nc) && perces < (carte.heroActive ? 3 : 2)) {
+        const ni = idx(nr, nc);
+        const cell = board[ni];
+        if (!cell || cell.owner === player) break;
+        if (atkRank(carte, d.my) > defRank(cell, d.their)) {
+          board[ni] = { ...cell, owner: player };
+          events.push({ index: ni, kind: "percee", dir: d.my, comboLevel: niveau });
+          prises.push(ni);
+          touche = true;
+          perces += 1;
+          nr += d.dr; nc += d.dc;
+        } else break;
+      }
+    });
+    if (touche) events.push({ index: from, kind: "percee-self", comboLevel: niveau });
+  }
+
+  // ARCHERS — la fleche part en ligne droite jusqu'a la premiere ennemie.
+  if (carte.ability === "portee") {
+    let touche = false;
+    DIRS.forEach((d) => {
+      let nr = fr + d.dr, nc = fc + d.dc;
+      while (inBounds(nr, nc)) {
+        const ni = idx(nr, nc);
+        const cell = board[ni];
+        if (cell) {
+          if (cell.owner === player) {
+            if (carte.heroActive) { nr += d.dr; nc += d.dc; continue; }
+            break;
+          }
+          if (atkRank(carte, d.my) > defRank(cell, d.their)) {
+            board[ni] = { ...cell, owner: player };
+            events.push({ index: ni, kind: "portee", dir: d.their, comboLevel: niveau });
+            prises.push(ni);
+            touche = true;
+          }
+          break;
+        }
+        nr += d.dr; nc += d.dc;
+      }
+    });
+    if (touche) events.push({ index: from, kind: "portee", comboLevel: niveau });
+  }
+
+  return prises;
 }
 
 function resolvePlacement(board, position, player, poisonedCells) {
@@ -1473,27 +1656,21 @@ function resolvePlacement(board, position, player, poisonedCells) {
       }
     });
 
-    // RÉSONANCE — deux façons de la déclencher, jugées sur TOUTES les voisines (les
-    // siennes comprises) :
-    //  - un rang EXACTEMENT égal, à condition d'avoir au moins 2 voisines, ou
-    //  - deux rangs PROCHES (écart de 1 au plus) : une résonance accorde des fréquences
-    //    voisines, pas seulement identiques.
-    // sameMatches (ennemies, tolérance ±1) définit QUELLES cartes sont emportées.
-    // Mesuré au simulateur sur 500 parties : 5,3 % des coups déclenchaient une résonance
-    // quand les alliées étaient ignorées, 19 % en les comptant.
-    // Le DECLENCHEMENT se juge sur toutes les voisines, alliees comprises.
+    // RESONANCE — une seule condition, celle de la regle : au moins DEUX rangs
+    // EXACTEMENT identiques parmi toutes les voisines, alliees comprises. Une alliee au
+    // meme rang compte donc pour declencher, mais ne sera jamais capturee.
+    // Ce qui a ete retire ici : la tolerance maison "rangs proches a plus ou moins 1", et
+    // le declenchement sur UN seul rang identique des qu'il y avait deux voisines. Mesure
+    // avant correction sur 30 000 poses : 92,1 % des Resonances partaient hors regle
+    // (47,3 % sur un seul rang egal, 44,8 % sans aucun rang egal).
     const exactTous = voisinsTous.filter((n) => atkRank(placedCard, n.dir.my) === defRank(n.card, n.dir.their));
-    const prochesTous = voisinsTous.filter((n) => Math.abs(atkRank(placedCard, n.dir.my) - defRank(n.card, n.dir.their)) <= 1);
-    // La CAPTURE ne concerne que les ennemies.
-    const sameMatches = neighbors.filter((n) => Math.abs(atkRank(placedCard, n.dir.my) - defRank(n.card, n.dir.their)) <= 1);
+    // La CAPTURE ne concerne que les ennemies, et seulement au rang exactement egal.
+    const sameMatches = neighbors.filter((n) => atkRank(placedCard, n.dir.my) === defRank(n.card, n.dir.their));
     const basicMatches = neighbors.filter((n) => atkRank(placedCard, n.dir.my) > defRank(n.card, n.dir.their));
     const captured = new Set();
-    // Derniere condition (sameMatches >= 1) : une resonance qui ne prendrait aucune carte
-    // n'aurait rien a montrer. Deux rangs qui se repondent entre cartes alliees uniquement
-    // ne declenchent donc pas d'eclair — il ne se passerait rien a l'ecran.
-    const sameTriggered =
-      ((exactTous.length >= 1 && voisinsTous.length >= 2) || prochesTous.length >= 2)
-      && sameMatches.length >= 1;
+    // sameMatches >= 1 : une Resonance entre alliees seules n'aurait aucune carte a
+    // retourner, donc rien a montrer a l'ecran.
+    const sameTriggered = exactTous.length >= 2 && sameMatches.length >= 1;
     if (sameTriggered) sameMatches.forEach((n) => captured.add(n.index));
     basicMatches.forEach((n) => captured.add(n.index));
 
@@ -1507,20 +1684,42 @@ function resolvePlacement(board, position, player, poisonedCells) {
     if (sameTriggered) {
       // On eclaire TOUS les cotes qui ont resonne, y compris ceux tournes vers une carte
       // alliee : c'est ce qui rend l'enchainement lisible pour le joueur.
-      prochesTous.forEach((n) => events.push({ index: position, kind: "same-self", dir: n.dir.my }));
+      exactTous.forEach((n) => events.push({ index: position, kind: "same-self", dir: n.dir.my }));
     }
 
-    // ═══ ESSAI — Geôliers : toute capture propage une Onde, sans exiger de Résonance.
-    // On réutilise la file existante en la démarrant depuis les cartes capturées.
+    // ═══ L'ONDE. Une carte capturee ne se contente pas de recomparer ses rangs : elle
+    // ACTIVE SA CAPACITE au service de son nouveau proprietaire. Une Chimere capturee
+    // retourne donc le rang d'une voisine, et si cette voisine tombe, l'onde continue.
+    // Avant, la capacite n'etait jamais appelee (prouve en Node : aucun evenement "mue"
+    // sur une Chimere capturee) — la chaine n'etait qu'une comparaison de chiffres.
+    // Les Geoliers gardent leur particularite : chez eux TOUTE capture propage, sans
+    // exiger de Resonance.
     const estGeolier = placedCard.ability === "geolier" && captured.size > 0;
     if (sameTriggered || estGeolier) {
       const queue = (estGeolier && !sameTriggered)
         ? [...captured].map((i) => ({ index: i, comboLevel: 0 }))
         : sameMatches.map((n) => ({ index: n.index, comboLevel: 0 }));
+      // Sans ce garde-fou, deux cartes qui se reprennent l'une l'autre boucleraient
+      // indefiniment et figeraient le jeu.
+      const dejaVues = new Set(queue.map((q) => q.index));
       while (queue.length) {
         const { index: curIdx, comboLevel } = queue.shift();
-        const curCard = newBoard[curIdx];
         const cr = Math.floor(curIdx / COLS), cc = curIdx % COLS;
+
+        // 1. la capacite de la carte capturee, au service de son nouveau camp
+        const prises = capaciteOffensive(newBoard, curIdx, player, events, comboLevel, eveilEcarts);
+        prises.forEach((ni) => {
+          if (dejaVues.has(ni)) return;
+          dejaVues.add(ni);
+          events.push({ index: curIdx, kind: "combo-emit", comboLevel });
+          queue.push({ index: ni, comboLevel: comboLevel + 1 });
+        });
+        // Lue APRES la capacite : l'Eveil d'un Dores capture modifie ses propres rangs
+        // (echange), le choc de rang ci-dessous doit se jouer avec ces rangs-la, comme a
+        // la pose. Mue/percee/portee ne touchent pas la carte emettrice : rien ne change.
+        const curCard = newBoard[curIdx];
+
+        // 2. puis le choc de rang classique sur les quatre voisines
         DIRS.forEach((d) => {
           const nr = cr + d.dr, nc = cc + d.dc;
           if (!inBounds(nr, nc)) return;
@@ -1532,7 +1731,7 @@ function resolvePlacement(board, position, player, poisonedCells) {
             events.push({ index: ni, kind: "combo", dir: d.their, comboLevel: comboLevel + 1 });
             // La carte émettrice (celle qui vient de capturer et transmet le choc) clignote aussi.
             events.push({ index: curIdx, kind: "combo-emit", dir: d.my, comboLevel });
-            queue.push({ index: ni, comboLevel: comboLevel + 1 });
+            if (!dejaVues.has(ni)) { dejaVues.add(ni); queue.push({ index: ni, comboLevel: comboLevel + 1 }); }
           }
         });
       }
@@ -1788,13 +1987,16 @@ const APP_STYLES = `
         .reduced-motion .sm-coulee-veine { display: none !important; }
         .reduced-motion .sm-brasier-lueur { opacity: 0.55 !important; }
 
+        /* Reference de positionnement du bouton Retour : la racine, qui defile avec la
+           page, et non le conteneur d'ecran. */
+        .emprise-root { position: relative; }
         .emprise-root {
           --bg: #14111c; --panel: #1e1a29; --gold: #cba456; --gold-bright: #e8c877; --bone: #eee7d8; --muted: #948aa3;
           --blue: #3f6fb0; --blue-bright: #6fa4e6; --red: #a8443c; --red-bright: #e0655a; --combo: #8a63c9;
-          --poison: #6ea35c; --mue: #4bc9c9; --portee: #4b8fc9; --percee: #d8d8d8; --devour: #a15fc4; --attract: #d98f3c;
+          --poison: #6ea35c; --mue: #4bc9c9; --portee: #6cc0ff; --percee: #d8d8d8; --devour: #a15fc4; --attract: #d98f3c;
           --malus: #e15b52; --bonus: #5fcf6e;
           min-height: 100vh; min-height: 100dvh; background: radial-gradient(ellipse at 50% -10%, #241e33 0%, var(--bg) 55%), var(--bg);
-          color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 18px 14px 22px;
+          color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
         .landing {
@@ -1872,26 +2074,40 @@ const APP_STYLES = `
         /* Engrenage des parametres, en haut a droite. */
         /* Volontairement discret : l'engrenage ne doit pas concurrencer "Nouvelle partie".
            Il reste dans un coin, a peine dessine, et ne se revele qu'au survol ou au
-           toucher — sa zone cliquable, elle, garde ses 42 px pour rester facile a viser.
+           toucher, sa zone cliquable, elle, garde ses 42 px pour rester facile a viser.
            La discretion passe par la COULEUR et la BORDURE, jamais par opacity : la
            sequence d'intro pilote deja opacity sur cet element (.landing.intro-e3 ...),
            regle plus specifique qui ecraserait toute valeur posee ici. */
+        /* L'engrenage doit se poser DANS l'image, pas dessus : opacite basse, bordure
+           quasi effacee, et un leger assombrissement pour qu'il ne brille jamais sur un
+           fond clair. Il reste trouvable, il cesse d'attirer l'oeil. */
         .landing-gear {
           position: absolute; top: 20px; right: 20px; z-index: 35;
           width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
-          font-size: 16px; line-height: 1; padding: 0;
-          color: rgba(203,164,86,0.3); background: transparent;
-          border: 1px solid rgba(203,164,86,0.07);
-          transition: color .2s, border-color .2s, background .2s, transform .35s ease;
+          font-size: 15px; line-height: 1; padding: 0;
+          color: rgba(203,164,86,0.16); background: transparent;
+          border: 1px solid rgba(203,164,86,0.03);
+          filter: brightness(0.75) contrast(0.85);
+          transition: color .2s, border-color .2s, background .2s, filter .2s, transform .35s ease;
         }
         .landing-gear:hover {
           color: var(--gold-bright); border-color: rgba(203,164,86,0.4);
-          background: rgba(203,164,86,0.1); transform: rotate(60deg);
+          background: rgba(203,164,86,0.1); transform: rotate(60deg); filter: none;
         }
         .landing-gear:active { transform: rotate(60deg) scale(0.94); }
 
         /* Modale Parametres : lignes cliquables, avec une bascule pour les reglages. */
+        /* 380 px et pas plus : le voile qui entoure le panneau a 24 px de marge
+           interieure de chaque cote. Au-dela, sur un ecran de 390 px, il toucherait les
+           bords. C'est une limite mesuree, pas un choix esthetique. */
         .settings-panel { max-width: 420px; }
+        .info-panel.settings-panel { max-width: 380px; }
+        /* Mesure : ce n'est pas max-width qui bridait la largeur, c'est le voile qui
+           entoure le panneau, avec ses 24 px de marge interieure de chaque cote. Sur un
+           ecran de 390, il plafonnait donc a 342 px quoi qu'on ecrive. On desserre le
+           voile pour les seuls Parametres, en gardant 14 px pour que le panneau ne
+           touche jamais les bords. */
+        .info-overlay:has(.settings-panel) { padding: 20px 14px; }
         .settings-row {
           display: flex; align-items: center; gap: 14px; width: 100%;
           padding: 13px 15px; margin-bottom: 10px; border-radius: 12px; cursor: pointer;
@@ -1955,8 +2171,20 @@ const APP_STYLES = `
         }
         .landing-link:hover { color: var(--gold-bright); }
 
+        /* RETOUR : repere fixe en haut a gauche, au-dessus du titre, en miroir de
+           l'engrenage de l'accueil qui occupe le coin droit a la meme hauteur.
+           Il est sorti du flux exprès : le bouton est ecrit douze fois dans le JSX, un
+           par ecran, et sa place variait selon ce qui le precedait. Une seule regle ici
+           les aligne tous, et tout ecran ajoute plus tard heritera du bon placement. */
         .back-btn {
-          align-self: flex-start; margin-bottom: 10px; background: rgba(203,164,86,0.06); cursor: pointer;
+          /* absolute, ancre sur .emprise-root : le bouton doit DEFILER avec la page.
+             En fixed il restait colle a l'ecran pendant qu'on faisait defiler la liste des
+             Ordres, ce qui donnait l'impression qu'il etait bloque.
+             .order-picker portait position: relative et captait l'ancrage (le bouton
+             retombait a y=132, sous le titre) : il passe en static juste en dessous, ce
+             qui fait de .emprise-root la reference. */
+          position: absolute; top: 18px; left: 14px; z-index: 40;
+          margin-bottom: 0; background: rgba(203,164,86,0.06); cursor: pointer;
           border: 1px solid rgba(203,164,86,0.55); border-radius: 8px; padding: 8px 16px;
           font-family: 'Spectral', Georgia, serif; font-size: 14px; color: var(--gold);
           transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
@@ -2042,7 +2270,7 @@ const APP_STYLES = `
            l'ecran et obligeaient a balayer toute la page pour comparer.
            Lecture : chaque camp avance depuis son bord, l'espace sombre au milieu est
            ce qui reste a conquerir, et le repere dore central marque la majorite. Le
-           camp qui depasse le centre a gagne — la regle se lit sans un mot.
+           camp qui depasse le centre a gagne, la regle se lit sans un mot.
            Le glissement est retarde de 1,1 s pour tomber au moment ou la carte pivote,
            pas avant : sinon le score bougeait alors que la carte n'avait pas bascule.
            .emprise-root est un flex en colonne centre : sans width 100 % la barre se
@@ -2050,15 +2278,21 @@ const APP_STYLES = `
            Aucune apostrophe inversee ici : APP_STYLES est une chaine template. */
         .bras-de-fer { display: flex; align-items: center; gap: 9px; margin: 3px 0 8px;
           width: 100%; box-sizing: border-box; padding: 0 2px; }
+        /* Les chiffres doivent tenir sur N'IMPORTE quel fond : une arene claire comme
+           Argent les effacait. L'ombre portee sombre les detache sans les alourdir. */
         .bdf-num { font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
-          min-width: 20px; text-align: center; transition: text-shadow 0.5s ease; }
+          min-width: 20px; text-align: center; transition: text-shadow 0.5s ease;
+          text-shadow: 0 1px 3px rgba(8,6,12,0.95), 0 0 8px rgba(8,6,12,0.8); }
         .bdf-num.blue { color: var(--blue-bright); }
         .bdf-num.red { color: var(--red-bright); }
-        .bdf-num.acquis { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+        .bdf-num.acquis { text-shadow: 0 1px 3px rgba(8,6,12,0.95), 0 0 10px currentColor, 0 0 20px currentColor; }
+        /* Fond franchement opaque et halo sombre autour : sur une arene, la piste se
+           detachait a peine du decor. Elle doit rester lisible sans dependre du fond. */
         .bdf-piste { position: relative; flex: 1; min-width: 0; height: 10px; border-radius: 999px;
-          background: linear-gradient(180deg, #272134, #1a1624);
-          border: 1px solid rgba(203,164,86,0.3);
-          box-shadow: inset 0 1px 3px rgba(0,0,0,0.55); overflow: hidden; }
+          background: linear-gradient(180deg, #2b2439, #16121f);
+          border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: inset 0 1px 3px rgba(0,0,0,0.7), 0 0 0 3px rgba(10,8,15,0.55);
+          overflow: hidden; }
         .bdf-cote { position: absolute; top: 0; bottom: 0;
           transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.1s; }
         .bdf-azur { left: 0; border-radius: 999px 0 0 999px;
@@ -2079,13 +2313,17 @@ const APP_STYLES = `
 
         /* ---------- Dernier coup : la carte posee porte l'or, un tour ----------
            La bordure passe a l'or (regle a 4 classes : elle gagne sur la couleur de
-           camp), et un anneau dore respire sur ::after — jamais sur la propriete
+           camp), et un anneau dore respire sur ::after, jamais sur la propriete
            animation de la carte elle-meme, deja occupee par l'atterrissage et le halo
            de camp. Le marqueur saute de lui-meme a la carte du coup suivant. */
         .card.dernier-coup.dernier-coup:not(.hand) { border-color: var(--gold-bright); }
+        /* Celui-ci animait deja l'opacite, mais la partait de 0,8 : le navigateur devait
+           donc composer un calque opaque en permanence. Meme animation, meme rendu, mais
+           promue explicitement pour ne plus etre reevaluee a chaque image. */
         .card.dernier-coup:not(.hand)::after {
           content: ""; position: absolute; inset: -2px; border-radius: 10px; pointer-events: none;
           box-shadow: 0 0 0 1.5px rgba(232,200,119,0.95), 0 0 10px rgba(232,200,119,0.55), 0 0 22px rgba(203,164,86,0.3);
+          will-change: opacity;
           animation: or-dernier 2.6s ease-in-out infinite;
         }
         @keyframes or-dernier { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
@@ -2154,7 +2392,7 @@ const APP_STYLES = `
           100% { transform: translate(var(--derive, 0px), -105vh); opacity: 0; } }
 
         /* ==========================================================================
-           DEFAITE — storyboard et identite visuelle de Gemini, cablage et finitions ici.
+           DEFAITE, storyboard et identite visuelle de Gemini, cablage et finitions ici.
            4 temps : onde de choc sombre, fracture du plateau, blason qui tombe, ruine.
            Notes d'integration (voir aussi le commentaire du patch) :
            - backdrop-filter reste STATIQUE, seule l'opacite est animee. L'animer coutait
@@ -2175,7 +2413,7 @@ const APP_STYLES = `
         }
         @keyframes defeatFadeIn { to { opacity: 1; } }
 
-        /* Phase 2 — la fracture du plateau. La classe existait mais rien ne la posait :
+        /* Phase 2, la fracture du plateau. La classe existait mais rien ne la posait :
            elle est desormais appliquee sur .table quand la Defaite se declenche.
            Le filter: opacity(0.5) de la version d'origine a ete retire : avec forwards,
            il laissait le plateau a moitie transparent bien apres la fin. */
@@ -2191,7 +2429,7 @@ const APP_STYLES = `
           100% { transform: translate3d(0, 10px, 0) scale(0.96); }
         }
 
-        /* Phase 3 — le blason tombe du haut avec un impact lourd. */
+        /* Phase 3, le blason tombe du haut avec un impact lourd. */
         .defeat-title-container {
           display: flex; flex-direction: column; align-items: center;
           opacity: 0; transform: translate3d(0, -50px, 0) scale(0.8);
@@ -2220,7 +2458,7 @@ const APP_STYLES = `
           color: var(--muted); margin: 8px 0 0; text-transform: uppercase; opacity: 0.85; text-align: center;
         }
 
-        /* Phase 4 — la fumee de ruine. Decrite dans le storyboard, sans CSS fourni :
+        /* Phase 4, la fumee de ruine. Decrite dans le storyboard, sans CSS fourni :
            ecrite ici. Le voile monte du bas, les braises ETEINTES retombent (derive
            inversee et translation positive, l'exact contraire des braises de Victoire). */
         .defeat-ruine { position: absolute; inset: 0; pointer-events: none; }
@@ -2270,9 +2508,26 @@ const APP_STYLES = `
         }
         .defeat-lien:hover { color: var(--bone); }
 
+        /* LA DALLE dans laquelle les alveoles sont taillees.
+           Meme regle physique que les cases, appliquee a l'envers : une dalle est un
+           RELIEF vu de dessus, donc son bord superieur capte la lumiere (clair) et son
+           bord inferieur tombe dans l'ombre (sombre). Les alveoles, elles, font
+           l'inverse. C'est ce couple relief/creux qui donne l'epaisseur de la pierre.
+           Le padding passe de 8 a 13 px : sans marge, un rebord n'a nulle part ou
+           exister, il se confondrait avec la premiere rangee de cases. */
         .table { position: relative; display: grid; isolation: isolate; grid-template-columns: repeat(var(--board-cols, 5), 1fr); gap: 5px;
-          background: linear-gradient(180deg, #221c30, #191420); padding: 8px; border-radius: 14px;
-          border: 1px solid rgba(203,164,86,0.15); box-shadow: inset 0 0 40px rgba(0,0,0,0.5), 0 20px 40px rgba(0,0,0,0.35); }
+          background: linear-gradient(180deg, #2b2438 0%, #241d31 46%, #17121f 100%);
+          padding: 13px; border-radius: 16px;
+          border: 1px solid rgba(203,164,86,0.16);
+          box-shadow:
+            inset 0 1.5px 0 rgba(255,240,205,0.10),
+            inset 0 -2px 3px rgba(0,0,0,0.75),
+            inset 0 0 46px rgba(0,0,0,0.5),
+            0 3px 0 rgba(10,8,14,0.9),
+            0 22px 42px rgba(0,0,0,0.45); }
+        /* En mode arene le cadre de la ligue joue deja ce role : la dalle s'efface pour
+           ne pas empiler deux bordures. */
+        .table.arene { padding: 20px; box-shadow: none; }
         /* Arène de ligue : un CALQUE placé derrière le plateau, jamais un padding.
            La première version gonflait le plateau par un padding en %, qui débordait du
            conteneur et se faisait couper. Ici le plateau garde exactement sa taille ; le
@@ -2290,12 +2545,18 @@ const APP_STYLES = `
            d'après la LARGEUR de l'écran. Sur un téléphone étroit et haut, cinq colonnes
            tenaient en largeur mais les quatre lignes dépassaient en hauteur. Elles se
            calent maintenant sur la plus contraignante des deux dimensions. */
+        .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
           height: 100dvh; max-height: 100dvh; overflow: hidden;
           display: flex; flex-direction: column; justify-content: space-between;
           padding-top: 4px; padding-bottom: 4px; gap: 2px;
         }
-        .emprise-root.ecran-jeu .status-line { margin: 2px 0; font-size: 12px; }
+        /* La ligne est vide la plupart du temps depuis qu'on a retire l'invite
+           permanente. Hauteur reservee : sans elle, le plateau remonte et redescend
+           a chaque fois qu'un message apparait ou disparait. */
+        .emprise-root.ecran-jeu .status-line {
+          margin: 2px 0; font-size: 12px; min-height: 1.25em;
+        }
         .emprise-root.ecran-jeu .hand-row { padding: 5px 7px; gap: 5px; }
         .emprise-root.ecran-jeu .table { gap: 4px; }
         /* Hauteur de case = la plus petite des deux contraintes. Le rapport 1,333 est celui
@@ -2306,7 +2567,7 @@ const APP_STYLES = `
            latérale confortable (18 px sur un iPhone 13) ; au-delà les cases touchent les
            bords de l'écran. Les coefficients dvh (11,2 / 8,4) sont volontairement
            inchangés : ils prennent le relais sur les écrans courts (iPhone SE et compagnie),
-           déjà pleins en hauteur à 4 px près — là, les cases gardent exactement leur taille
+           déjà pleins en hauteur à 4 px près, là, les cases gardent exactement leur taille
            d'avant au lieu de pousser la main et les boutons hors de l'écran. Mesuré écran par
            écran avant d'être appliqué. */
         .emprise-root.ecran-jeu .cell {
@@ -2318,7 +2579,7 @@ const APP_STYLES = `
         .emprise-root.ecran-jeu .card.hand {
           height: min(14.5vw, 8dvh); width: min(11vw, 6dvh);
         }
-        /* Cartes en éventail : nettement plus grandes que la main repliée — c'est tout
+        /* Cartes en éventail : nettement plus grandes que la main repliée, c'est tout
            l'intérêt des vignettes, qui libèrent la place pour les lire confortablement le
            temps de choisir. Le sélecteur à 3 classes l'emporte sur la règle ci-dessus. */
         .emprise-root.ecran-jeu .card.hand.in-fan {
@@ -2353,11 +2614,20 @@ const APP_STYLES = `
         }
 
         .table.arene { background: transparent; border: none; box-shadow: none; overflow: visible; padding: 20px; }
-        /* Avec une arène, les cases se resserrent d'environ 10 % : sinon les cartes des
-           quatre coins viennent se coller au cadre et masquent ses gemmes. On rétrécit les
-           cases plutôt que d'écarter le cadre — écarter le cadre le ferait déborder de
-           l'écran, ce qui est le bug qu'on cherche justement à éviter. */
-        .table.arene .cell { width: min(13.2vw, 7.6dvh); height: min(17.5vw, 10.1dvh); }
+        /* Sur un ecran court (iPhone SE et compagnie) il n'y a pas de place a reprendre :
+           mesure, le cadre agrandi remontait sur la barre de score. On y garde l'ancien
+           reglage. Le gain vertical ne profite qu'aux ecrans qui ont de quoi le donner. */
+        @media (max-height: 700px) {
+          .arene-cadre { inset: calc(var(--arene-marge, 16) * -0.4%) calc(var(--arene-marge, 16) * -0.7%) !important; }
+          .table.arene .cell { height: min(17.5vw, 10.1dvh); }
+        }
+        /* Avec une arene, les cases se resserraient d'environ 10 % pour que les cartes des
+           quatre coins ne viennent pas coller au cadre.
+           La LARGEUR garde ce retrait : c'est elle qui plafonne, le cadre est deja a 4 px
+           des bords de l'ecran. La HAUTEUR, elle, est rendue : le cadre s'ecarte desormais
+           vers le haut et vers le bas (voir .arene-cadre), il y a la place. Les cartes
+           gagnent en presence sans qu'aucun bord ne soit coupe. */
+        .table.arene .cell { width: min(13.2vw, 7.6dvh); height: min(18.1vw, 10.5dvh); }
 
         /* ---- 1. AMBIANCE : la teinte de la ligue diffusée dans la page ----
            Même image, agrandie et floutée, effacée bien avant le haut et le bas de l'écran.
@@ -2365,13 +2635,22 @@ const APP_STYLES = `
            aucun bord d'image, seulement une couleur qui s'éteint. */
         .arene-ambiance {
           content: ""; position: absolute; z-index: -3; pointer-events: none;
-          inset: -22% -14%;
+          /* Suit l'agrandissement vertical du cadre : sinon le halo colore s'eteignait
+             avant lui et on revoyait un bord d'image franc, exactement ce que cette
+             couche sert a supprimer. */
+          inset: -34% -30%;
           background-image: var(--arene);
           background-size: cover; background-position: center;
-          filter: blur(26px) saturate(1.15) brightness(0.62);
-          opacity: 0.75;
-          -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 68%, transparent 96%);
-          mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 68%, transparent 96%);
+          /* Plus flou et plus large qu'avant : le halo doit DEBORDER le cadre, pas
+             s'arreter avant lui. C'est ce debordement qui raccorde l'image a la page ;
+             tant qu'il s'eteignait en deca, il ne raccordait rien du tout. */
+          filter: blur(42px) saturate(1.2) brightness(0.6);
+          opacity: 0.82;
+          /* Le premier palier est passe de 16 % a 30 % : au-dela, le halo remontait
+             derriere la barre de score et lui mangeait son contraste. Il deborde toujours
+             autant sur les cotes et vers le bas, la ou c'est utile. */
+          -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 76%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 76%, transparent 100%);
         }
 
         /* ---- 2. CADRE : l'image nette, autour de la seule aire de jeu ----
@@ -2380,17 +2659,32 @@ const APP_STYLES = `
            ne monte plus jusqu'aux boutons de ligue, il s'éteint avant. */
         .arene-cadre {
           position: absolute; z-index: -2; pointer-events: none; overflow: hidden;
-          inset: calc(var(--arene-marge, 16) * -0.4%) calc(var(--arene-marge, 16) * -0.7%);
+          /* Vertical porte de -0,4 % a -0,75 %. Mesure : il restait 303 px libres au-dessus
+             du cadre et 173 en dessous. Un premier essai a -2,2 % a ete rejete a l'oeil, le
+             cadre avalait la barre de score et mordait sur la main ; -1,0 % mordait encore
+             le score sur iPhone 13 et la main sur SE. L'horizontal ne bouge
+             pas : a 382 px sur un ecran de 390, il ne reste que 4 px de chaque cote. */
+          inset: calc(var(--arene-marge, 16) * -0.75%) calc(var(--arene-marge, 16) * -0.7%);
           background-image: linear-gradient(180deg, rgba(20,17,28,0.16), rgba(20,17,28,0.26)), var(--arene);
           background-size: 100% 100%, 100% 100%; background-position: center;
           border-radius: 18px;
+          /* Trois couches, et il en faut trois : l'ellipse arrondit l'extinction, le
+             degrade vertical efface le haut et le bas, l'HORIZONTAL efface les cotes.
+             C'est ce dernier qui manquait : les bords gauche et droit se terminaient
+             sur une arete franche, la signature meme de l'image collee.
+             Le fondu part de 46 % du rayon au lieu de 78 %, en trois paliers : plus de
+             cassure, seulement une extinction progressive.
+             ATTENTION : trois couches demandent DEUX operations de composition. Avec une
+             seule valeur, la troisieme est ignoree en silence. */
           -webkit-mask-image:
-            radial-gradient(ellipse 100% 100% at 50% 50%, #000 78%, rgba(0,0,0,0.55) 90%, transparent 100%),
-            linear-gradient(180deg, transparent 0%, #000 14%, #000 84%, transparent 100%);
+            radial-gradient(ellipse 112% 106% at 50% 50%, #000 46%, rgba(0,0,0,0.72) 70%, rgba(0,0,0,0.28) 87%, transparent 100%),
+            linear-gradient(180deg, transparent 0%, #000 11%, #000 87%, transparent 100%),
+            linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
           mask-image:
-            radial-gradient(ellipse 100% 100% at 50% 50%, #000 78%, rgba(0,0,0,0.55) 90%, transparent 100%),
-            linear-gradient(180deg, transparent 0%, #000 14%, #000 84%, transparent 100%);
-          -webkit-mask-composite: source-in; mask-composite: intersect;
+            radial-gradient(ellipse 112% 106% at 50% 50%, #000 46%, rgba(0,0,0,0.72) 70%, rgba(0,0,0,0.28) 87%, transparent 100%),
+            linear-gradient(180deg, transparent 0%, #000 11%, #000 87%, transparent 100%),
+            linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+          -webkit-mask-composite: source-in, source-in; mask-composite: intersect, intersect;
           animation: arene-respire 7s ease-in-out infinite;
         }
         /* La lueur pulse sur le cadre lui-même. drop-shadow suit la forme réelle de l'image
@@ -2446,7 +2740,7 @@ const APP_STYLES = `
           .arene-cadre { animation: none; filter: brightness(1) saturate(1); }
           .arene-fumee { display: none; }
         }
-        /* Sélecteur d'arène du bac à sable — bloc temporaire, à retirer avant publication. */
+        /* Sélecteur d'arène du bac à sable, bloc temporaire, à retirer avant publication. */
         .arene-test { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 8px 0 2px; position: relative; z-index: 5; }
         .arene-test button {
           font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -2454,7 +2748,7 @@ const APP_STYLES = `
           padding: 5px 9px; border-radius: 6px; cursor: pointer;
         }
         .arene-test button.actif { color: #14111c; background: var(--gold); border-color: var(--gold); }
-        /* Bascule des capacités supérieures — bloc temporaire lui aussi. L'étiquette porte
+        /* Bascule des capacités supérieures, bloc temporaire lui aussi. L'étiquette porte
            le sens une seule fois, les boutons ne portent plus que le nom de l'Ordre. */
         .heraut-test { align-items: center; }
         .heraut-test-label {
@@ -2500,10 +2794,30 @@ const APP_STYLES = `
           77% { transform: translate(2px, 1px); }
           88% { transform: translate(-1px, 0); }
         }
-        .cell { position: relative; width: clamp(50px, 16vw, 66px); height: clamp(68px, 21vw, 88px); border-radius: 9px; background: rgba(255,255,255,0.025);
-          border: 1px dashed rgba(203,164,86,0.28); box-shadow: inset 0 0 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; }
-        .cell.empty.can-play { cursor: pointer; border: 1px solid var(--gold); background: rgba(203,164,86,0.06); }
-        .cell.empty.can-play:hover { background: rgba(203,164,86,0.14); }
+        /* ALVEOLE CREUSEE DANS LA PIERRE, et non case en pointilles.
+           Le pointille est le motif du "champ a remplir" : sur un plateau, l'oeil y lit un
+           formulaire. Ici on creuse.
+           La regle physique qui fait tout : une cavite recoit la lumiere par le HAUT, donc
+           son bord superieur est SOMBRE (dans l'ombre du rebord) et son bord inferieur est
+           CLAIR (il capte la lumiere). C'est l'inverse exact d'un bouton en relief, et
+           c'est ce qui distingue un creux d'une bosse. Deux ombres internes suffisent,
+           aucune image.
+           Le liseré dore n'est pas supprime : il devient un filet grave au fond, discret,
+           pour que la case jouable (qui garde un or franc) tranche enfin nettement. */
+        .cell { position: relative; width: clamp(50px, 16vw, 66px); height: clamp(68px, 21vw, 88px); border-radius: 9px;
+          background: linear-gradient(180deg, rgba(0,0,0,0.42), rgba(255,255,255,0.028) 62%, rgba(255,255,255,0.045));
+          border: 1px solid rgba(203,164,86,0.09);
+          box-shadow:
+            inset 0 3px 6px rgba(0,0,0,0.72),
+            inset 0 -1.5px 0 rgba(255,240,205,0.07),
+            inset 0 0 14px rgba(0,0,0,0.45);
+          display: flex; align-items: center; justify-content: center; }
+        /* La case ou l'on peut poser : la pierre s'allume par en dessous, comme si la
+           faille affleurait. L'ombre du creux reste, sinon la case redeviendrait plate. */
+        .cell.empty.can-play { cursor: pointer; border: 1px solid var(--gold);
+          background: linear-gradient(180deg, rgba(0,0,0,0.3), rgba(203,164,86,0.10) 65%, rgba(203,164,86,0.17));
+          box-shadow: inset 0 3px 6px rgba(0,0,0,0.55), inset 0 -2px 0 rgba(232,200,119,0.28), 0 0 12px rgba(203,164,86,0.18); }
+        .cell.empty.can-play:hover { background: linear-gradient(180deg, rgba(0,0,0,0.26), rgba(203,164,86,0.18) 65%, rgba(203,164,86,0.26)); }
         .cell.drag-target { border: 2px solid var(--gold-bright); background: rgba(203,164,86,0.16); box-shadow: 0 0 14px rgba(203,164,86,0.25); }
         .cell.cell-previewing { background: rgba(203,164,86,0.1); }
         .card.previewing { opacity: 0.72; animation: preview-pulse 1s ease-in-out infinite; }
@@ -2525,7 +2839,7 @@ const APP_STYLES = `
            de toxine : un voile, puis des gouttelettes, puis une flaque, puis un brouillard.
            ⚠️ Structure importante : le flou du gaz est porté par les pseudo-éléments du
            calque, JAMAIS par le calque lui-même. Un filter s'applique à tous les
-           descendants — le poser sur .poison-fx floutait la flaque et les bulles. */
+           descendants, le poser sur .poison-fx floutait la flaque et les bulles. */
         
         /* --- La case : la bordure vire du vert clair au jaune d'alerte --- */
         .cell.poisoned{border-style:solid;border-color:#8fc855;
@@ -2577,7 +2891,7 @@ const APP_STYLES = `
         .cell.poison-lvl-3 .poison-fx{--densite:.8;--flaque:55%}
         .cell.poison-lvl-4 .poison-fx{--densite:.97;--flaque:64%}
         
-        /* NIVEAU 1 — Voile de gaz : deux nappes floutées qui dérivent en sens inverse. */
+        /* NIVEAU 1, Voile de gaz : deux nappes floutées qui dérivent en sens inverse. */
         .poison-fx::before,.poison-fx::after{content:"";position:absolute;inset:-16%;border-radius:12px}
         .poison-fx::before{
           background:
@@ -2611,7 +2925,7 @@ const APP_STYLES = `
         .cell.poison-lvl-4 .poison-fx::after{filter:blur(9px);animation-duration:2.3s;
           background:radial-gradient(ellipse 80% 62% at 60% 70%,rgba(225,245,80,.95),rgba(160,210,45,.75) 58%,transparent 84%)}
         
-        /* NIVEAU 2 — Gouttelettes de venin le long des bords. Nettes, hors du flou. */
+        /* NIVEAU 2, Gouttelettes de venin le long des bords. Nettes, hors du flou. */
         .poison-fx i:nth-child(1){position:absolute;inset:8%;opacity:0;z-index:2;
           background-image:
             radial-gradient(circle at 1% 0%  ,rgba(215,255,120,.95) 0 2.6px,transparent 3.3px),
@@ -2635,7 +2949,7 @@ const APP_STYLES = `
           100%{transform:translateY(72px) scaleY(1.6);opacity:0}
         }
         
-        /* NIVEAU 3 — La flaque de venin. Nette, elle aussi hors du flou. */
+        /* NIVEAU 3, La flaque de venin. Nette, elle aussi hors du flou. */
         .poison-fx i:nth-child(2){position:absolute;left:6%;right:6%;bottom:0;
           height:var(--flaque);z-index:3;
           background:linear-gradient(180deg,rgba(200,250,90,.92),rgba(110,190,35,.95) 38%,rgba(45,95,15,.98));
@@ -2648,7 +2962,7 @@ const APP_STYLES = `
           50%    {border-radius:54% 46% 5px 5px / 10px 15px 5px 5px;transform:translateY(-2.5px)}
         }
         
-        /* NIVEAU 3 — Bulles de gaz qui montent DANS la flaque et crèvent EN SURFACE.
+        /* NIVEAU 3, Bulles de gaz qui montent DANS la flaque et crèvent EN SURFACE.
            Le calque est borné à la hauteur de la flaque : elles ne peuvent pas s'en échapper. */
         .poison-fx i:nth-child(3){position:absolute;left:6%;right:6%;bottom:0;
           height:var(--flaque);opacity:0;z-index:4;
@@ -2674,17 +2988,16 @@ const APP_STYLES = `
         /* ---- Réaction de la carte posée dans le venin ---- */
         .card.card-acide.card-acide{animation:carte-acide .95s ease-out}
         @keyframes carte-acide{
-          0%  {filter:brightness(2.6) saturate(.3) hue-rotate(65deg);transform:translate(0,0)}
-          9%  {filter:brightness(1.7) saturate(1.4) hue-rotate(55deg);transform:translate(-2.5px,1px) rotate(-1.4deg)}
-          16% {filter:brightness(.4) saturate(1.7) hue-rotate(45deg);transform:translate(2.5px,-1px) rotate(1.4deg)}
-          24% {filter:brightness(.45) saturate(1.6) hue-rotate(40deg);transform:translate(-2.2px,-1px) rotate(-1.2deg)}
-          33% {filter:brightness(.6) saturate(1.5) hue-rotate(34deg);transform:translate(2px,1px) rotate(1.1deg)}
-          43% {filter:brightness(.75) saturate(1.35) hue-rotate(26deg);transform:translate(-1.6px,1px) rotate(-.85deg)}
-          54% {filter:brightness(.85) saturate(1.25) hue-rotate(18deg);transform:translate(1.3px,-1px) rotate(.7deg)}
-          66% {filter:brightness(.92) saturate(1.15) hue-rotate(11deg);transform:translate(-.9px,0) rotate(-.45deg)}
-          79% {filter:brightness(.97) saturate(1.07) hue-rotate(5deg);transform:translate(.6px,0) rotate(.25deg)}
-          90% {transform:translate(-.3px,0) rotate(-.12deg)}
-          100%{filter:none;transform:none}
+          0%  {filter:brightness(2.6) saturate(.3) hue-rotate(65deg)}
+          9%  {filter:brightness(1.7) saturate(1.4) hue-rotate(55deg)}
+          16% {filter:brightness(.4) saturate(1.7) hue-rotate(45deg)}
+          24% {filter:brightness(.45) saturate(1.6) hue-rotate(40deg)}
+          33% {filter:brightness(.6) saturate(1.5) hue-rotate(34deg)}
+          43% {filter:brightness(.75) saturate(1.35) hue-rotate(26deg)}
+          54% {filter:brightness(.85) saturate(1.25) hue-rotate(18deg)}
+          66% {filter:brightness(.92) saturate(1.15) hue-rotate(11deg)}
+          79% {filter:brightness(.97) saturate(1.07) hue-rotate(5deg)}
+          100%{filter:none}
         }
         .cell.poisoned.can-play { border-color: var(--gold); }
         /* Bouffée de brume toxique quand une case vient d'être empoisonnée */
@@ -2704,12 +3017,50 @@ const APP_STYLES = `
         .card { position: relative; width: clamp(50px, 16vw, 66px); height: clamp(68px, 21vw, 88px); border-radius: 9px; display: flex; flex-direction: column;
           align-items: center; justify-content: center; font-family: 'Cinzel', serif; user-select: none;
           transform-style: preserve-3d; transition: transform .5s cubic-bezier(.4,.2,.2,1); overflow: visible; will-change: transform; }
+/* HALO DE CAMP — le plus gros gain de performance du fichier.
+           Il animait box-shadow sur CHAQUE carte du plateau. Une ombre ne peut pas etre
+           confiee au processeur graphique : le navigateur redessinait donc les 14 cartes
+           a chaque image. Mesure : 11 images par seconde, contre 57 sans lui.
+           Ici l'ombre est FIXE et posee sur un pseudo-element ; seule son opacite pulse,
+           et l'opacite est composee par le processeur graphique, sans redessin.
+           L'apparence est identique. REGLE POUR LA SUITE : en boucle, n'animer que
+           transform et opacity. */
         .card.blue:not(.hand) { background: linear-gradient(160deg, #2c4d7c, #1c3252 65%); border: 1.5px solid #7fc8ff;
           box-shadow: 0 0 3px rgba(127,200,255,0.6), 0 0 8px rgba(90,170,255,0.4), 0 0 14px rgba(70,150,255,0.25), 0 6px 14px rgba(0,0,0,0.4);
-          animation: neon-pulse-blue 2.6s ease-in-out infinite; }
+          /* Couleurs pour les retournements de capture : une carte DEVENUE bleue etait
+             rouge — le flip garde son ancienne robe jusqu'au moment ou elle est de profil,
+             puis revele la nouvelle. Sans ces variables, la couleur changeait des la mise a
+             jour du plateau, plusieurs secondes AVANT l'animation d'Onde. */
+          --flip-ancien-bg: linear-gradient(160deg, #7c332c, #4e1f1a 65%);
+          --flip-ancien-bord: #ff7a68;
+          --flip-ancien-ombre: 0 0 3px rgba(255,122,104,0.6), 0 0 8px rgba(255,90,70,0.4), 0 0 14px rgba(255,70,50,0.25), 0 6px 14px rgba(0,0,0,0.4);
+          --flip-nouveau-bg: linear-gradient(160deg, #2c4d7c, #1c3252 65%);
+          --flip-nouveau-bord: #7fc8ff; }
+        .card.blue:not(.hand)::before, .card.red:not(.hand)::before {
+          content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+          opacity: 0; will-change: opacity; z-index: 0;
+          animation: halo-respire 2.6s ease-in-out infinite;
+        }
+        .card.blue:not(.hand)::before {
+          box-shadow: 0 0 4px rgba(127,200,255,0.75), 0 0 11px rgba(90,170,255,0.55), 0 0 18px rgba(70,150,255,0.35);
+        }
+        .card.red:not(.hand)::before {
+          box-shadow: 0 0 4px rgba(255,122,104,0.75), 0 0 11px rgba(255,90,70,0.55), 0 0 18px rgba(255,70,50,0.35);
+        }
+        @keyframes halo-respire { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+        /* Pendant un retournement de capture (immediat ou en attente d'Onde), le halo
+           respirant pulse deja aux couleurs du NOUVEAU camp : il revelerait la couleur
+           avant l'animation. On le coupe le temps de la sequence. */
+        .card.flash-basic.flash-basic::before,
+        .card.flash-same.flash-same::before,
+        .card.flash-combo.flash-combo::before { animation: none; opacity: 0; }
         .card.red:not(.hand) { background: linear-gradient(160deg, #7c332c, #4e1f1a 65%); border: 1.5px solid #ff7a68;
           box-shadow: 0 0 3px rgba(255,122,104,0.6), 0 0 8px rgba(255,90,70,0.4), 0 0 14px rgba(255,70,50,0.25), 0 6px 14px rgba(0,0,0,0.4);
-          animation: neon-pulse-red 2.6s ease-in-out infinite; }
+          --flip-ancien-bg: linear-gradient(160deg, #2c4d7c, #1c3252 65%);
+          --flip-ancien-bord: #7fc8ff;
+          --flip-ancien-ombre: 0 0 3px rgba(127,200,255,0.6), 0 0 8px rgba(90,170,255,0.4), 0 0 14px rgba(70,150,255,0.25), 0 6px 14px rgba(0,0,0,0.4);
+          --flip-nouveau-bg: linear-gradient(160deg, #7c332c, #4e1f1a 65%);
+          --flip-nouveau-bord: #ff7a68; }
         .card.hand.blue { background: linear-gradient(160deg, #2c4d7c, #1c3252 65%); border: 1px solid var(--blue-bright);
           box-shadow: 0 0 0 1px rgba(111,164,230,0.15), 0 6px 14px rgba(0,0,0,0.4); }
         .card.hand.red { background: linear-gradient(160deg, #7c332c, #4e1f1a 65%); border: 1px solid var(--red-bright);
@@ -2730,17 +3081,27 @@ const APP_STYLES = `
         .card .icon { font-size: 22px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
 
         /* --- Game feel : pose de carte (zoom arrière + rebond élastique) --- */
-        .card.flash-place.flash-place { animation: card-land 1.1s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .card.flash-place.flash-place { animation: card-land 1.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
         /* Pose du bot : en plus du rebond d'atterrissage, la carte vient visiblement d'en
-           haut (où se trouve sa main) au lieu d'apparaître directement sur la case — évite
+           haut (où se trouve sa main) au lieu d'apparaître directement sur la case, évite
            l'effet "téléportation" qu'on n'a pas avec le joueur, qui glisse sa carte à l'écran.
            Le !important est nécessaire : .card.red a déjà sa propre animation en boucle (halo
            qui pulse) qui gagnerait sinon le conflit et empêcherait celle-ci de jouer. */
         .card.flash-place-slow.flash-place-slow { animation: card-land-bot 3.5s cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
+        /* La carte de l'Echo tombait de 400 px en 1,6 s : pendant tout ce temps on voyait
+           l'alveole VIDE avec une carte suspendue au-dessus. Ce n'etait pas genant tant
+           que les cases etaient de simples pointilles ; depuis qu'elles sont creusees, le
+           trou beant se voit.
+           La chute part maintenant de 150 px et se termine a 18 % (0,63 s au lieu de 1,6),
+           et la carte reste transparente au depart : elle n'apparait qu'a mi-chemin, deja
+           proche de sa case. La duree totale ne bouge pas, c'est elle qui signale ou
+           l'Echo vient de jouer. */
         @keyframes card-land-bot {
-          0%   { transform: translateY(-400px) scale(1.3); opacity: 1; box-shadow: 0 26px 40px rgba(0,0,0,0.55); }
-          46%  { transform: translateY(0) scale(0.94); opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
-          80%  { transform: translateY(0) scale(1.04); }
+          0%   { transform: translateY(-150px) scale(1.22); opacity: 0; box-shadow: 0 26px 40px rgba(0,0,0,0.55); }
+          8%   { opacity: 0.85; }
+          18%  { transform: translateY(0) scale(0.94); opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
+          30%  { transform: translateY(0) scale(1.04); }
+          40%  { transform: translateY(0) scale(1); }
           100% { transform: translateY(0) scale(1); }
         }
         @keyframes card-land {
@@ -2770,15 +3131,15 @@ const APP_STYLES = `
            A RETENIR : toute nouvelle animation posee sur .card doit ecrire dans --anim-deco
            si elle est decorative, sinon elle avalera de nouveau le retournement.
            A RETENIR AUSSI : aucun accent grave ici, APP_STYLES est une chaine template. */
-        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), flip-gold 3s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s); }
-        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), flip-resonance 3s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s); }
-        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), flip-combo 2.2s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s); }
-        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.7s ease var(--flip-delay, 0s); }
-        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.7s ease var(--flip-delay, 0s); }
-        .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.5s ease; --anim-deco: mue-self-pulse 1.5s ease; }
-        .card.flash-percee.flash-percee { animation: percee-slash 1.3s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.3s cubic-bezier(0.2, 0.8, 0.3, 1); }
-        .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.5s ease; --anim-deco: percee-thrust 1.5s ease; }
-        .card.flash-portee.flash-portee { animation: portee-impact 1.5s ease; position: relative; --anim-deco: portee-impact 1.5s ease; }
+        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), flip-gold 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
+        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), flip-resonance 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
+        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), flip-combo 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
+        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); }
+        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); }
+        .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.6s ease; --anim-deco: mue-self-pulse 1.6s ease; }
+        .card.flash-percee.flash-percee { animation: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); }
+        .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.6s ease; --anim-deco: percee-thrust 1.6s ease; }
+        .card.flash-portee.flash-portee { animation: portee-impact 1.6s ease; position: relative; --anim-deco: portee-impact 1.6s ease; }
         .card.flash-devoreuse.flash-devoreuse { animation: devoreuse-void 1.6s ease; position: relative; --anim-deco: devoreuse-void 1.6s ease; --flip-delay: 1.6s; }
         /* Croissance des Maudits : effet retardé (voir mauditBoostDelay côté JS), porté par un
            calque indépendant (.maudit-swell-fx) plutôt que par la carte elle-même, pour ne
@@ -2791,7 +3152,7 @@ const APP_STYLES = `
            L'ancienne version dilatait un simple cercle depuis le centre : joli, mais elle
            ne racontait pas l'echange et convenait a n'importe quelle capacite. Ici, sur
            CHAQUE cote qui troque, deux traits de lumiere glissent en sens inverse le long
-           de la bordure partagee et se croisent — c'est le croisement qui dit "echange".
+           de la bordure partagee et se croisent, c'est le croisement qui dit "echange".
            Tout est en transform + opacity, les deux seules proprietes qui ne forcent pas
            le navigateur a redessiner : indispensable, jusqu'a 4 cotes peuvent s'animer en
            meme temps sur la carte posee.
@@ -2804,7 +3165,7 @@ const APP_STYLES = `
            rail aux deux flux et s'allume d'abord toute seule (phase 1). */
         .eveil-edge {
           position: absolute; pointer-events: none; z-index: 6; overflow: hidden;
-          animation: eveil-bord 1.3s ease-out both;
+          animation: eveil-bord 1.6s ease-out both;
         }
         .eveil-edge-top    { top: -2px; left: 6%; right: 6%; height: 4px; }
         .eveil-edge-bottom { bottom: -2px; left: 6%; right: 6%; height: 4px; }
@@ -2869,9 +3230,9 @@ const APP_STYLES = `
         }
 
         /* La carte elle-meme : une breve respiration a l'instant de l'impact (0,9 s), pas
-           avant — c'est le moment ou les valeurs ont fini de se croiser. */
+           avant, c'est le moment ou les valeurs ont fini de se croiser. */
         .card.flash-eveil-self.flash-eveil-self,
-        .card.flash-eveil.flash-eveil { animation: eveil-impact 1.3s ease-out both; --anim-deco: eveil-impact 1.3s ease-out both; --flip-delay: 1.3s; }
+        .card.flash-eveil.flash-eveil { animation: eveil-impact 1.6s ease-out both; --anim-deco: eveil-impact 1.6s ease-out both; --flip-delay: 1.6s; }
         @keyframes eveil-impact {
           0%, 66%  { transform: scale(1); filter: brightness(1); }
           73%      { transform: scale(1.025); filter: brightness(1.35); }
@@ -2899,8 +3260,8 @@ const APP_STYLES = `
           100% { text-shadow: none; filter: brightness(1);
                  box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 6px rgba(203,164,86,0.35), 0 2px 4px rgba(0,0,0,0.5); }
         }
-        .card.flash-attraction.flash-attraction { animation: ember-flicker 1.7s ease; position: relative; overflow: visible; --anim-deco: ember-flicker 1.7s ease; }
-        .card.flash-attraction-pull.flash-attraction-pull { animation: pull-in 1.9s cubic-bezier(0.22, 1.05, 0.36, 1); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-deco: pull-in 1.9s cubic-bezier(0.22, 1.05, 0.36, 1); --flip-delay: 1.9s; }
+        .card.flash-attraction.flash-attraction { animation: ember-flicker 1.6s ease; position: relative; overflow: visible; --anim-deco: ember-flicker 1.6s ease; }
+        .card.flash-attraction-pull.flash-attraction-pull { animation: pull-in 1.6s cubic-bezier(0.22, 1.05, 0.36, 1); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-deco: pull-in 1.6s cubic-bezier(0.22, 1.05, 0.36, 1); --flip-delay: 1.6s; }
         .card.flash-attraction-pull::before {
           content: ""; position: absolute; inset: -16px; border-radius: 16px; pointer-events: none; z-index: 4;
           background:
@@ -2912,7 +3273,7 @@ const APP_STYLES = `
             radial-gradient(circle at 55% 92%, rgba(255,200,100,0.9) 0 3.5px, transparent 5.5px),
             radial-gradient(circle at 8% 45%, rgba(255,130,45,0.9) 0 3px, transparent 5px),
             radial-gradient(circle at 92% 40%, rgba(255,160,70,0.9) 0 3.5px, transparent 5.5px);
-          animation: ember-particles 2s ease-out; opacity: 0;
+          animation: ember-particles 1.6s ease-out; opacity: 0;
         }
         @keyframes ember-particles {
           0%   { opacity: 0; transform: scale(1.9) rotate(0deg); filter: blur(1px); }
@@ -2921,15 +3282,13 @@ const APP_STYLES = `
           100% { opacity: 0; transform: scale(0.25) rotate(45deg); }
         }
         .card.flash-guardian.flash-guardian { animation: guardian-shield 1.6s ease; position: relative; --anim-deco: guardian-shield 1.6s ease; }
-        .card.flash-guardian-place.flash-guardian-place { animation: guardian-raise 1.5s ease; --anim-deco: guardian-raise 1.5s ease; }
+        .card.flash-guardian-place.flash-guardian-place { animation: guardian-raise 1.6s ease; --anim-deco: guardian-raise 1.6s ease; }
         .card.flash-poison.flash-poison { animation: poison-hit 1.6s ease; position: relative; --anim-deco: poison-hit 1.6s ease; }
 
         /* Pseudo-éléments : la couche visuelle supplémentaire propre à chaque capacité */
-        .card.flash-portee::after {
-          content: ""; position: absolute; inset: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
-          pointer-events: none; border: 2px solid var(--portee);
-          animation: portee-ring 1.5s ease; z-index: 4;
-        }
+        /* Le cercle qui se dilatait sur la carte touchee par les Archers a ete retire :
+           il debordait largement de la carte et se lisait comme un halo parasite. La
+           capacite reste racontee par portee-impact sur la carte elle-meme. */
         .maudit-swell-fx::after {
           content: ""; position: absolute; inset: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
           pointer-events: none; border: 2px solid var(--red-bright);
@@ -3000,7 +3359,7 @@ const APP_STYLES = `
         /* Flèche directionnelle des Archers : entre par le bord touché, file jusqu'au centre */
         .portee-arrow {
           position: absolute; z-index: 5; pointer-events: none;
-          filter: drop-shadow(0 0 5px rgba(75,143,201,0.95)) drop-shadow(0 0 9px rgba(75,143,201,0.55));
+          filter: drop-shadow(0 0 6px rgba(120,195,255,0.95)) drop-shadow(0 0 12px rgba(90,175,255,0.75)) drop-shadow(0 0 2px rgba(20,20,30,0.9));
         }
         .arrow-from-top { top: -30px; left: 50%; transform: translateX(-50%) rotate(90deg); animation: arrow-fall-top 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
         .arrow-from-bottom { bottom: -30px; left: 50%; transform: translateX(-50%) rotate(-90deg); animation: arrow-fall-bottom 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
@@ -3034,8 +3393,9 @@ const APP_STYLES = `
         }
 
         @keyframes flip-gold {
-          0%   { transform: rotateY(0); }
-          40%  { transform: rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--gold-bright), 0 0 60px rgba(232,200,119,0.5); filter: brightness(1.6); }
+          0%   { transform: rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); box-shadow: var(--flip-ancien-ombre, none); }
+          38%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          40%  { transform: rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--gold-bright), 0 0 60px rgba(232,200,119,0.5); filter: brightness(1.6); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
           70%  { transform: rotateY(270deg) scale(1.06); filter: brightness(1.2); }
           88%  { transform: rotateY(368deg) scale(1.02); }
           100% { transform: rotateY(360deg) scale(1); filter: brightness(1); }
@@ -3043,25 +3403,27 @@ const APP_STYLES = `
         /* Résonance : petit séisme de 2px sur la carte avant qu'elle ne bascule (contact du
            rang égal, puis la carte change de camp) */
         @keyframes flip-resonance {
-          0%   { transform: translate(0, 0) rotateY(0); }
+          0%   { transform: translate(0, 0) rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); box-shadow: var(--flip-ancien-ombre, none); }
           4%   { transform: translate(-2px, 0) rotateY(0); }
           8%   { transform: translate(2px, 0) rotateY(0); }
           12%  { transform: translate(-2px, 0) rotateY(0); }
           16%  { transform: translate(0, 0) rotateY(0); }
-          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px #fff, 0 0 60px var(--gold-bright); filter: brightness(1.7); }
+          48%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px #fff, 0 0 60px var(--gold-bright); filter: brightness(1.7); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
           76%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
           90%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
           100% { transform: translate(0, 0) rotateY(360deg) scale(1); filter: brightness(1); }
         }
         @keyframes flip-combo {
-          0%   { transform: translate(0, 0) rotateY(0); }
+          0%   { transform: translate(0, 0) rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); box-shadow: var(--flip-ancien-ombre, none); }
           20%  { transform: translate(var(--knock-x, 0px), var(--knock-y, 0px)) rotateY(0); }
-          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--combo), 0 0 60px rgba(138,99,201,0.5); filter: brightness(1.6); }
+          48%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--combo), 0 0 60px rgba(138,99,201,0.5); filter: brightness(1.6); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
           76%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
           90%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
           100% { transform: translate(0, 0) rotateY(360deg) scale(1); filter: brightness(1); }
         }
-        /* Recul de 5px dans le sens du choc, avant le basculement — la direction dépend
+        /* Recul de 5px dans le sens du choc, avant le basculement, la direction dépend
            du côté qui vient d'être touché (voir comboVictimEvent.dir côté JS). */
         .card.combo-hit-from-top { --knock-x: 0px; --knock-y: 5px; }
         .card.combo-hit-from-bottom { --knock-x: 0px; --knock-y: -5px; }
@@ -3069,7 +3431,7 @@ const APP_STYLES = `
         .card.combo-hit-from-right { --knock-x: -5px; --knock-y: 0px; }
         /* Onde : la carte émettrice (qui vient de capturer et transmet le choc) clignote
            avec un drop-shadow néon violet, sans se retourner (elle a déjà basculé avant). */
-        .card.flash-combo-emit.flash-combo-emit { animation: combo-emit-glow 1.2s ease; --anim-deco: combo-emit-glow 1.2s ease; }
+        .card.flash-combo-emit.flash-combo-emit { animation: combo-emit-glow 1.6s ease; --anim-deco: combo-emit-glow 1.6s ease; }
         @keyframes combo-emit-glow {
           0%, 100% { filter: drop-shadow(0 0 0 transparent); }
           40% { filter: drop-shadow(0 0 10px var(--combo)) drop-shadow(0 0 20px var(--combo)) brightness(1.5); }
@@ -3099,10 +3461,10 @@ const APP_STYLES = `
           50% { transform: rotateX(180deg); filter: blur(2px); box-shadow: 0 0 26px var(--mue); }
           75% { filter: blur(2px); box-shadow: 0 0 22px var(--mue); }
         }
-        /* Chimères qui active Mue : un simple pouls cyan, pas de transformation — seule la cible se retourne */
+        /* Chimères qui active Mue : un simple pouls cyan, pas de transformation, seule la cible se retourne */
         @keyframes mue-self-pulse { 0%,100%{box-shadow:none} 45%{box-shadow:0 0 18px var(--mue)} }
 
-        /* Dorés — balayage de lumière dorée */
+        /* Dorés, balayage de lumière dorée */
 
         /* Piques : la victime se fait trancher, l'attaquante donne le coup (deux animations bien distinctes) */
         @keyframes percee-slash {
@@ -3148,11 +3510,11 @@ const APP_STYLES = `
           100% { transform: scaleX(0); opacity: 0; }
         }
 
-        /* Archers — impact en anneau, façon flèche qui frappe */
+        /* Archers, impact en anneau, façon flèche qui frappe */
         @keyframes portee-impact { 0%{transform:scale(0.4); opacity:0.4; filter:brightness(1)} 50%{transform:scale(1.18); opacity:1; filter:brightness(2.1)} 70%{filter:brightness(1.3)} 100%{transform:scale(1); filter:brightness(1)} }
         @keyframes portee-ring { 0%{opacity:0.9; transform:scale(1)} 100%{opacity:0; transform:scale(11)} }
 
-        /* Abysses — plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
+        /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
         @keyframes devoreuse-void { 0%,100%{transform:scale(1); filter:drop-shadow(0 0 0 var(--devour))} 40%{transform:scale(0.8); box-shadow:0 0 34px var(--devour); filter:drop-shadow(0 0 14px var(--devour))} 70%{transform:scale(1.28); filter:drop-shadow(0 0 10px var(--devour))} 88%{transform:scale(0.96)} }
         .card.flash-devoreuse .rank { animation: devour-rank 1.6s ease; }
         /* Abysses : tentacules d'ombre qui jaillissent de la carte puis se rétractent */
@@ -3174,7 +3536,7 @@ const APP_STYLES = `
         @keyframes maudit-swell { 0%,100%{transform:scale(1)} 40%{transform:scale(0.85); box-shadow:0 0 34px var(--red-bright)} 70%{transform:scale(1.22)} 88%{transform:scale(0.97)} }
         @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
 
-        /* Cendres — braises qui crépitent, flash à chaque pose */
+        /* Cendres, braises qui crépitent, flash à chaque pose */
         @keyframes ember-flicker {
           0%, 100% { transform: scale(1); filter: brightness(1); }
           20% { transform: scale(1.05) rotate(-0.4deg); filter: brightness(1.22) saturate(1.2); box-shadow: 0 0 18px var(--attract), 0 0 36px rgba(217,143,60,0.3); }
@@ -3195,12 +3557,12 @@ const APP_STYLES = `
           100% { transform: scale(1); }
         }
 
-        /* Gardiens — flash de pose (bouclier qui se lève) + onde de choc en défense */
+        /* Gardiens, flash de pose (bouclier qui se lève) + onde de choc en défense */
         @keyframes guardian-raise { 0%,100%{transform:scale(1); box-shadow:none} 40%{transform:scale(1.05); box-shadow:0 0 18px rgba(203,164,86,0.5)} }
         @keyframes guardian-shield { 0%,100%{transform:translate(0,0) scale(1)} 18%{transform:translate(0,1px) scale(0.98); box-shadow:0 0 0 3px rgba(140,185,220,0.55), 0 0 24px rgba(75,127,168,0.65)} 42%{transform:translate(0,0) scale(1.03); box-shadow:0 0 0 6px rgba(140,185,220,0.18), 0 0 14px rgba(75,127,168,0.35)} 65%{transform:scale(1)} }
         @keyframes guardian-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(10)} }
 
-        /* Pestiférés — nuage toxique bien visible, la carte vire au vert */
+        /* Pestiférés, nuage toxique bien visible, la carte vire au vert */
         @keyframes poison-hit { 0%,100%{filter:brightness(1) saturate(1)} 40%{filter:brightness(0.65) saturate(2) hue-rotate(60deg); box-shadow:0 0 26px var(--poison)} }
         @keyframes poison-cloud { 0%{opacity:0; transform:scale(0.7)} 35%{opacity:1; transform:scale(1.15)} 70%{opacity:0.7} 100%{opacity:0; transform:scale(1.35)} }
 
@@ -3221,14 +3583,14 @@ const APP_STYLES = `
           content: "?"; position: absolute; inset: 0; border-radius: 50%; z-index: 2;
           display: flex; align-items: center; justify-content: center;
           background: #0c0a12; color: #cbe1ff; pointer-events: none;
-          animation: scribe-ink-dissolve 2.1s ease forwards;
+          animation: scribe-ink-dissolve 1.6s ease forwards;
         }
         @keyframes scribe-ink-dissolve {
           0%   { opacity: 1; filter: blur(0); transform: scale(1); }
           55%  { opacity: 0.55; filter: blur(2px); transform: scale(1.25) rotate(-6deg); }
           100% { opacity: 0; filter: blur(6px); transform: scale(1.6) rotate(-12deg); }
         }
-        /* Rang modifié par une capacité (+1 Gardien) — chiffre en vert */
+        /* Rang modifié par une capacité (+1 Gardien), chiffre en vert */
         /* Vos propres Scribes : vous voyez vos rangs normalement, mais ce badge rappelle
            qu'ils sont masqués POUR L'ADVERSAIRE, et pour combien de tours encore. */
         /* Compteur de dissimulation des Scribes. Empilé verticalement (œil au-dessus du
@@ -3249,7 +3611,7 @@ const APP_STYLES = `
         /* Rang renforcé par le bouclier d'un Gardien, montré à l'aperçu sur le SEUL côté
            concerné par le combat. Le chiffre affiché est déjà la valeur augmentée : la pastille
            passe donc au bleu bouclier pour que le joueur voie que ce n'est pas le rang brut.
-           PIÈGE : ne jamais toucher la propriété transform ici — les quatre positions
+           PIÈGE : ne jamais toucher la propriété transform ici, les quatre positions
            (.rank.top, .rank.left...) s'en servent pour se centrer, et l'écraser ferait
            sauter le rang hors de la carte. */
         .rank.rank-boosted {
@@ -3263,7 +3625,7 @@ const APP_STYLES = `
           40%  { box-shadow: 0 0 14px rgba(140,185,220,1), 0 0 28px rgba(75,127,168,0.8); filter: brightness(1.7); }
           100% { box-shadow: 0 0 8px rgba(140,185,220,0.85), 0 0 16px rgba(75,127,168,0.55); filter: brightness(1); }
         }
-        /* Rang affaibli par le poison (-1) — chiffre en rouge, distinct du bonus vert */
+        /* Rang affaibli par le poison (-1), chiffre en rouge, distinct du bonus vert */
         .rank.rank-poisoned { color: var(--malus); text-shadow: 0 0 6px rgba(225,91,82,0.95), 0 0 11px rgba(225,91,82,0.6); }
         /* Résonance : les 2 rangs égaux qui se sont touchés clignotent en blanc avec un léger zoom */
         .rank.rank-resonance { animation: resonance-rank-flash 2s ease; }
@@ -3281,7 +3643,7 @@ const APP_STYLES = `
         .rank.left { left: 2px; top: 50%; transform: translateY(-50%); }
         .rank.right { right: 2px; top: 50%; transform: translateY(-50%); }
 
-        .hand-row { display: flex; gap: 7px; padding: 10px 12px; border-radius: 14px; background: var(--panel);
+        .hand-row { position: relative; display: flex; gap: 7px; padding: 10px 12px; border-radius: 14px; background: var(--panel);
           border: 1.5px solid rgba(203,164,86,0.3); box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 22px rgba(203,164,86,0.05);
           transition: border-color .25s, box-shadow .25s; flex-wrap: wrap;
           /* Le panneau epouse son contenu au lieu d'occuper d'office 320px : avec les
@@ -3291,7 +3653,28 @@ const APP_STYLES = `
              parent est un simple bloc (Azur, lui, est deja centre par son parent flex). */
           width: fit-content; margin-left: auto; margin-right: auto;
           max-width: 320px; justify-content: center; }
+        /* A QUI C'EST LE TOUR : dit par la couleur, pas par du texte.
+           Depuis le retrait de la ligne "Au tour du camp Azur", le seul indice etait un
+           cadre dore identique pour les deux camps : rien ne distinguait mon tour du sien.
+           Le panneau actif prend maintenant la couleur de SON camp et respire lentement.
+           L'or ne signale plus le tour, il redevient une simple bordure de panneau. */
         .hand-row.active { border-color: var(--gold-bright); box-shadow: 0 0 20px rgba(203,164,86,0.25), inset 0 0 22px rgba(203,164,86,0.08); }
+        /* Meme traitement : ombre fixe, seule l'opacite du calque pulse. */
+        .hand-row.active.camp-blue { border-color: var(--blue-bright);
+          box-shadow: 0 0 16px rgba(111,164,230,0.26), inset 0 0 24px rgba(111,164,230,0.08); }
+        .hand-row.active.camp-red { border-color: var(--red-bright);
+          box-shadow: 0 0 16px rgba(224,101,90,0.26), inset 0 0 24px rgba(224,101,90,0.08); }
+        .hand-row.active.camp-blue::after, .hand-row.active.camp-red::after {
+          content: ""; position: absolute; inset: -1.5px; border-radius: inherit; pointer-events: none;
+          opacity: 0; will-change: opacity;
+          animation: halo-respire 2.8s ease-in-out infinite;
+        }
+        .hand-row.active.camp-blue::after { box-shadow: 0 0 30px rgba(111,164,230,0.5), inset 0 0 26px rgba(111,164,230,0.14); }
+        .hand-row.active.camp-red::after { box-shadow: 0 0 30px rgba(224,101,90,0.5), inset 0 0 26px rgba(224,101,90,0.14); }
+        /* Le nom du camp qui ne joue pas s'efface : le contraste entre les deux se lit
+           plus vite qu'une lueur seule. */
+        .turn-label { transition: opacity .3s, filter .3s; }
+        .turn-label.en-attente { opacity: 0.38; filter: saturate(0.5); }
         .hand-row.disabled .card { opacity: 0.6; cursor: not-allowed; }
         .hand-row.compact { gap: 7px; padding: 10px 12px; max-width: 320px; }
         .hand-row.compact .card.hand { width: 66px; height: 88px; }
@@ -3300,9 +3683,9 @@ const APP_STYLES = `
 
         /* ---------- Main en éventail ---------- */
         /* Vignette d'Ordre : représente à elle seule les cartes restantes d'un Ordre dans
-           la main (dès qu'il en reste plus d'une — une seule carte s'affiche directement,
+           la main (dès qu'il en reste plus d'une, une seule carte s'affiche directement,
            voir renderHandGroups). Volontairement minimaliste : juste le portrait, rien
-           d'autre — pas de compteur, pas d'effet de pile de cartes empilées. */
+           d'autre, pas de compteur, pas d'effet de pile de cartes empilées. */
         .order-tile-wrap { position: relative; }
         .order-tile {
           width: min(13vw, 7.4dvh); height: min(13vw, 7.4dvh); min-width: 44px; min-height: 44px;
@@ -3313,7 +3696,7 @@ const APP_STYLES = `
           /* Doit rester au-dessus de .fan-backdrop (z-index 65, plein écran) : sinon, dès
              qu'UN éventail est ouvert quelque part, son fond invisible intercepte le tap
              destiné à N'IMPORTE QUELLE vignette (y compris elle-même) avant qu'il
-             n'atteigne le bouton — plus moyen de refermer avec l'animation ni de basculer
+             n'atteigne le bouton, plus moyen de refermer avec l'animation ni de basculer
              vers un autre Ordre. Repéré en testant le scénario "bascule entre vignettes". */
           z-index: 66;
         }
@@ -3328,6 +3711,16 @@ const APP_STYLES = `
         .hand-row.compact { gap: 4px; padding: 7px 8px; max-width: 340px; }
         .order-tile:active { transform: translateY(0) scale(0.94); }
         .order-tile-portrait { width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Compteur de cartes restantes, meme famille visuelle que la pastille du Heraut
+           en haut du medaillon. Pose en BAS pour ne jamais la recouvrir. */
+        .order-tile-compte {
+          position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+          min-width: 17px; padding: 0 4px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10px; line-height: 15px; font-weight: 700;
+          color: var(--bone); background: rgba(8,6,12,0.9);
+          border: 1px solid rgba(203,164,86,0.55);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.6); pointer-events: none;
+        }
         .order-tile-icon { font-size: 20px; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
         /* Éventail ouvert pour cette vignette : même halo doré que .hand-row.active,
            à l'échelle d'une seule vignette. */
@@ -3338,7 +3731,7 @@ const APP_STYLES = `
         .order-tile.tile-pending { border-color: var(--gold-bright); box-shadow: 0 0 0 2px var(--gold-bright), 0 0 14px rgba(203,164,86,0.5); animation: hint-pulse 1.4s ease-in-out infinite; }
         .order-tile-hero { position: absolute; top: -2px; right: -2px; font-size: 11px; line-height: 1; color: var(--gold-bright); text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.6); pointer-events: none; }
 
-        /* Éventail déployé : une SUPERPOSITION, jamais dans le flux — ne pousse aucun
+        /* Éventail déployé : une SUPERPOSITION, jamais dans le flux, ne pousse aucun
            autre élément et se pose PAR-DESSUS le plateau (z-index élevé) plutôt que de
            le repousser. Le fond .fan-backdrop capte un tap "à côté" pour refermer, mais
            reste totalement transparent : rien ne doit jamais visuellement masquer le
@@ -3356,7 +3749,7 @@ const APP_STYLES = `
         .card-fan.fan-haut .fan-slot { bottom: 0; transform-origin: 50% 100%; }
         .card-fan.fan-bas .fan-slot { top: 0; transform-origin: 50% 0%; }
         /* Repli : fanClosing garde le groupe monté le temps de l'animation (voir
-           toggleFan/fanCloseTimerRef) — même mécanique que justPoisoned plus haut pour
+           toggleFan/fanCloseTimerRef), même mécanique que justPoisoned plus haut pour
            la bouffée de brume empoisonnée, appliquée cette fois à l'éventail. */
         .card-fan.fan-closing .fan-slot { animation: fan-retract 0.24s ease-in forwards; }
         @keyframes fan-deploy {
@@ -3370,7 +3763,7 @@ const APP_STYLES = `
           .card-fan.fan-closing .fan-slot { animation-duration: 0.01s; }
         }
         /* Cartes dans l'éventail : plus grandes que la taille "compact" (66×88) puisque
-           les vignettes ont justement libéré la place pour les lire confortablement — le
+           les vignettes ont justement libéré la place pour les lire confortablement, le
            sélecteur à 3 classes l'emporte sur .hand-row.compact .card.hand (2 classes). */
         .card.hand.in-fan { width: clamp(64px, 19vw, 84px); height: clamp(86px, 26vw, 114px); }
 
@@ -3408,14 +3801,27 @@ const APP_STYLES = `
         /* Quitter, pendant la partie : un simple lien fantome. C'est le meme bouton qui
            devient "Nouvelle partie" a la fin ; l'or est reserve a ce role-la. L'action
            destructrice ne doit jamais etre la plus visible de l'ecran de jeu. */
-        .reset-btn.quitter-discret { background: transparent; color: var(--muted);
-          border: 1px solid rgba(148,138,163,0.35); box-shadow: none;
-          font-size: 11px; padding: 7px 16px; }
-        .reset-btn.quitter-discret:hover { color: var(--bone); border-color: rgba(238,231,216,0.5); filter: none; }
+        /* Quitter : identifie par la COULEUR, pas par la taille. Contour rouge eteint,
+           jamais rempli, l'or reste reserve a ce qui fait avancer (Nouvelle partie,
+           Continuer), le rouge a ce qui fait sortir. Petit, mais jamais fantome. */
+        .reset-btn.quitter-discret { background: rgba(168,68,60,0.07); color: #c07a72;
+          border: 1px solid rgba(168,68,60,0.45); box-shadow: none;
+          font-size: 11px; padding: 7px 15px; }
+        .reset-btn.quitter-discret .btn-icone { opacity: 0.85; }
+        /* Icones dessinees a la place des emojis : les emojis changent de dessin d'un
+           telephone a l'autre et cassent l'alignement vertical du texte. */
+        .btn-icone { width: 13px; height: 13px; flex: none; vertical-align: -1px;
+          fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .reset-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+        .reset-btn.quitter-discret:hover { color: var(--red-bright);
+          border-color: var(--red-bright); background: rgba(168,68,60,0.16); filter: none; }
         .hint-btn { background: linear-gradient(180deg, #2f4a5a, #223948); color: var(--bone); box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
 
 
-        .order-picker, .diff-picker { width: 100%; max-width: 540px; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; isolation: isolate; }
+        /* position: static et non relative : sinon ce conteneur capte l'ancrage du bouton
+           Retour, qui retombe dans le flux au lieu de se placer au-dessus du titre.
+           isolation reste : elle sert au bon empilement des vignettes d'Ordre. */
+        .order-picker, .diff-picker { width: 100%; max-width: 540px; display: flex; flex-direction: column; align-items: center; gap: 14px; position: static; isolation: isolate; }
         .order-picker h2, .diff-picker h2 { font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0; color: var(--blue-bright); }
         .order-picker h2.red-t { color: var(--red-bright); }
         .order-picker .sub { font-size: 11px; color: var(--muted); margin-top: -8px; }
@@ -3425,9 +3831,23 @@ const APP_STYLES = `
           color: var(--bone); padding: 10px 8px; margin: 6px 0;
         }
         .join-code-input:focus { outline: none; border-color: var(--gold); }
+        /* Code de partie : c'est LA donnée que le joueur doit lire puis dicter à son
+           adversaire. Il occupe donc toute la largeur disponible et se dimensionne en vw
+           pour rester énorme sur un écran de téléphone, avec un plafond sur grand écran. */
         .game-code-display {
-          font-family: 'Cinzel', serif; font-size: 32px; letter-spacing: 0.22em; color: var(--gold-bright);
-          background: var(--panel); border: 1px solid rgba(203,164,86,0.35); border-radius: 10px; padding: 12px 20px; margin: 8px 0;
+          font-family: 'Cinzel', serif; font-size: clamp(44px, 15vw, 76px); font-weight: 700;
+          letter-spacing: 0.16em; text-indent: 0.16em; line-height: 1.1; color: var(--gold-bright);
+          background: var(--panel); border: 2px solid rgba(203,164,86,0.55); border-radius: 14px;
+          padding: 18px 16px; margin: 12px 0; width: 100%; text-align: center;
+          text-shadow: 0 0 26px rgba(203,164,86,0.45); box-shadow: 0 0 0 1px rgba(203,164,86,0.18), 0 10px 30px rgba(0,0,0,0.45);
+        }
+        .code-copie { font-size: 11px; color: var(--gold-bright); margin-top: -4px; min-height: 14px; }
+        /* Rappel du code pendant le choix des Ordres : plus discret que l'écran d'attente,
+           mais toujours lisible sans plisser les yeux (l'ancienne version était en 11px). */
+        .code-rappel { font-size: 15px; color: var(--muted); margin-top: -4px; }
+        .code-rappel b {
+          font-family: 'Cinzel', serif; font-size: 24px; letter-spacing: 0.14em;
+          color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
         }
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
         .order-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; width: 100%; }
@@ -3438,7 +3858,7 @@ const APP_STYLES = `
         .order-option.picked { border-color: var(--gold-bright); box-shadow: 0 0 0 1px var(--gold-bright), 0 0 16px rgba(203,164,86,0.3); }
         .order-option.picked-blue { border-color: var(--blue-bright); box-shadow: 0 0 0 1px var(--blue-bright), 0 0 16px rgba(111,164,230,0.3); }
         .order-option.picked-red { border-color: var(--red-bright); box-shadow: 0 0 0 1px var(--red-bright), 0 0 16px rgba(224,101,90,0.3); }
-        /* Tournoi : Ordre sélectionné pour le ban — rouge + effet de cassure (verre brisé),
+        /* Tournoi : Ordre sélectionné pour le ban, rouge + effet de cassure (verre brisé),
            bien distinct du halo doré "picked" utilisé ailleurs pour "je choisis d'utiliser ça". */
         .order-option.ban-picked {
           position: relative; border-color: var(--red-bright);
@@ -3486,8 +3906,7 @@ const APP_STYLES = `
         /* Ordre "prochainement" : le vrai portrait est poussé au contraste jusqu'à la
            gravure, une aura de la couleur de l'Ordre respire derrière lui, et un
            balayage lumineux le traverse au survol pour donner un aperçu furtif.
-           PIÈGE : le filtre est posé sur l'image elle-même, jamais sur le conteneur —
-           un filter CSS déteint sur TOUS les descendants, cadenas et badge compris. */
+           PIÈGE : le filtre est posé sur l'image elle-même, jamais sur le conteneur, un filter CSS déteint sur TOUS les descendants, cadenas et badge compris. */
         .order-option.order-option-locked {
           cursor: not-allowed; position: relative;
         }
@@ -3578,17 +3997,17 @@ const APP_STYLES = `
            dans des tables JS : rien d'aleatoire a l'affichage. */
         /* La carte est placee SOUS le bandeau EMPRISE, pas en plein ecran : lui imposer
            94dvh la faisait deborder, et les fleches de navigation sortaient de l'ecran
-           (65 px sur iPhone SE) — plus moyen de changer de chapitre. On ne fixe donc plus
+           (65 px sur iPhone SE), plus moyen de changer de chapitre. On ne fixe donc plus
            de hauteur minimale ; c'est le panneau du chemin qui prend l'espace restant, et
            dvh plafonne l'ensemble pour que la barre de navigation reste toujours visible.
            Repere en mesurant la position du bas de la nav dans le navigateur. */
         /* height: 100dvh est indispensable : sans hauteur imposee, ce conteneur flex se
            contente de la taille de son contenu (mesure a 106 px) et le flex: 1 de la
-           fenetre de carte n'a rien a distribuer — elle restait a 0 px de haut, sans
+           fenetre de carte n'a rien a distribuer, elle restait a 0 px de haut, sans
            aucun rocher affiche. Diagnostique en mesurant les hauteurs dans le navigateur. */
         /* La carte remplit l'ecran. height ET max-height sont necessaires : sans hauteur
            imposee, ce conteneur flex se contente de la taille de son contenu (mesure a
-           106 px) et le flex: 1 de la fenetre n'a rien a distribuer — elle restait a 0 px,
+           106 px) et le flex: 1 de la fenetre n'a rien a distribuer, elle restait a 0 px,
            sans aucun rocher. 96dvh plutot que 100 : les fleches de navigation debordaient
            du bas de l'ecran. Diagnostique en mesurant les hauteurs dans le navigateur. */
         .story-map {
@@ -3597,7 +4016,7 @@ const APP_STYLES = `
           display: flex; flex-direction: column; padding: 8px 10px 4px;
         }
         /* Le cadre thematique : quatre lueurs interieures qui respirent doucement, une par
-           bord. Une seule boite avec 4 box-shadow inset — leger et sans image. */
+           bord. Une seule boite avec 4 box-shadow inset, leger et sans image. */
         .story-map-cadre {
           position: absolute; inset: 0; pointer-events: none; z-index: 1;
           box-shadow:
@@ -3618,7 +4037,7 @@ const APP_STYLES = `
            la derniere etape), calcule dans le JSX. Le chapitre s'echauffe a mesure qu'on
            le remonte : braises discretes au debut, embrasement complet devant le
            Seigneur de Guerre.
-           Tout est en translate/opacity uniquement — aucun blur anime, aucun box-shadow
+           Tout est en translate/opacity uniquement, aucun blur anime, aucun box-shadow
            anime : ce sont les deux seules proprietes qui ne forcent pas le navigateur a
            repeindre, condition pour rester fluide sur un iPhone SE. */
         .sm-brasier { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; border-radius: 14px; }
@@ -3679,7 +4098,10 @@ const APP_STYLES = `
           100% { transform: translateY(-46dvh) scale(1.15); opacity: 0; }
         }
 
-        .story-map-retour { position: relative; z-index: 6; align-self: flex-start; }
+        /* La carte du mode Histoire s'affiche en plein ecran : son bouton doit rester
+           DANS l'image, pas se coller a la fenetre. On annule donc le placement fixe
+           ci-dessus pour ce cas precis. */
+        .story-map-retour { position: relative !important; top: auto; left: auto; z-index: 6; align-self: flex-start; }
 
         /* L'en-tete flotte PAR-DESSUS l'image (la carte remonte dessous). Un voile sombre
            degrade le separe du decor sans le couper net, sinon le titre se perdrait dans
@@ -3696,7 +4118,7 @@ const APP_STYLES = `
         }
         .story-map-titres { text-align: center; }
         /* Titre "forge a chaud" : un degrade metal chaud dans le texte lui-meme, avec un
-           reflet qui balaie lentement — le meme principe que le titre EMPRISE de
+           reflet qui balaie lentement, le meme principe que le titre EMPRISE de
            l'accueil, decline dans la couleur du chapitre. */
         .story-map-nom {
           margin: 0; font-family: 'Cinzel', serif; letter-spacing: 3px; font-size: 26px;
@@ -3735,7 +4157,7 @@ const APP_STYLES = `
         /* Le panneau : la zone du chemin. Les cases et segments s'y positionnent en
            pourcentage (left / bottom), calcules par storyMapLayout. */
         /* La FENETRE sur la carte : elle masque ce qui deborde et capte le glissement.
-           touch-action: none est indispensable — sans lui, le navigateur mobile interprete
+           touch-action: none est indispensable, sans lui, le navigateur mobile interprete
            le geste comme un defilement de page et la carte ne suit pas le doigt. */
         /* La carte prend toute la hauteur restante entre l'en-tete et la barre de
            navigation : plafonnee a 420 px, elle laissait de larges bandes vides en haut et
@@ -3754,14 +4176,23 @@ const APP_STYLES = `
              purement lineaire laisse encore deviner une arete. Il est plus etendu en haut
              qu'en bas parce que c'est la, sous le titre, que la cassure sautait aux yeux.
              Les deux axes sont combines (mask-composite) pour adoucir aussi les coins. */
+          /* Fondu allonge. L'ancien passait de transparent a opaque en 13 % sur les cotes :
+             trop court, l'oeil lisait encore une arete verticale la ou l'image s'arrete.
+             Il est desormais etale sur 22 %, avec quatre paliers au lieu de deux, et une
+             ellipse vient adoucir les coins que deux degrades droits laissent carres.
+             ATTENTION : trois couches demandent DEUX operations de composition. Avec une
+             seule valeur, la troisieme est ignoree en silence (piege deja rencontre sur
+             les arenes de ligue). */
           -webkit-mask-image:
-            linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.5) 14%, #000 30%, #000 80%, rgba(0,0,0,0.5) 92%, transparent 100%),
-            linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, #000 13%, #000 87%, rgba(0,0,0,0.5) 95%, transparent 100%);
+            linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.3) 9%, rgba(0,0,0,0.72) 20%, #000 34%, #000 74%, rgba(0,0,0,0.6) 88%, rgba(0,0,0,0.2) 96%, transparent 100%),
+            linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.28) 5%, rgba(0,0,0,0.7) 13%, #000 22%, #000 78%, rgba(0,0,0,0.7) 87%, rgba(0,0,0,0.28) 95%, transparent 100%),
+            radial-gradient(ellipse 118% 112% at 50% 50%, #000 52%, rgba(0,0,0,0.72) 76%, rgba(0,0,0,0.25) 91%, transparent 100%);
           mask-image:
-            linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.5) 14%, #000 30%, #000 80%, rgba(0,0,0,0.5) 92%, transparent 100%),
-            linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, #000 13%, #000 87%, rgba(0,0,0,0.5) 95%, transparent 100%);
-          -webkit-mask-composite: source-in;
-          mask-composite: intersect;
+            linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.3) 9%, rgba(0,0,0,0.72) 20%, #000 34%, #000 74%, rgba(0,0,0,0.6) 88%, rgba(0,0,0,0.2) 96%, transparent 100%),
+            linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.28) 5%, rgba(0,0,0,0.7) 13%, #000 22%, #000 78%, rgba(0,0,0,0.7) 87%, rgba(0,0,0,0.28) 95%, transparent 100%),
+            radial-gradient(ellipse 118% 112% at 50% 50%, #000 52%, rgba(0,0,0,0.72) 76%, rgba(0,0,0,0.25) 91%, transparent 100%);
+          -webkit-mask-composite: source-in, source-in;
+          mask-composite: intersect, intersect;
         }
         .story-map-panneau:active { cursor: grabbing; }
         /* La SURFACE MONDE : plus grande que la fenetre, deplacee en transform. Les ilots
@@ -3802,7 +4233,7 @@ const APP_STYLES = `
         /* Etape conquise : le rocher reste tel quel dans l'image, deja incandescent. */
         /* Etape en cours : la roche est ravivee. Le halo qui deborde autour est porte par
            un pseudo-element SANS masque (::after est masque avec son parent, ::before non
-           puisqu'on le sort du cadre) — sinon le halo serait lui aussi decoupe a la forme
+           puisqu'on le sort du cadre), sinon le halo serait lui aussi decoupe a la forme
            du rocher et ne rayonnerait pas. */
         /* Etape en cours : c'est le halo separe (.sm-halo-courant) qui la signale. */
         /* Le halo autour du rocher courant : un calque separe, place juste derriere le
@@ -3830,15 +4261,18 @@ const APP_STYLES = `
         /* Le blason du Seigneur de Guerre reste visible par-dessus l'image. */
         .sm-monde-peint .sm-blason { top: -20px; }
 
-        /* Bandeaux d'etat du chapitre (verrouille / termine). Places au TIERS de la carte
-           et non tout en haut : colles sous l'en-tete, ils se confondaient avec le titre et
-           passaient inapercus. Fond bien opaque et texte clair, sinon le message se perd
-           dans la texture de l'illustration. */
+        /* Bandeaux d'etat du chapitre (verrouille / termine), au CENTRE exact de la carte.
+           Ils etaient au tiers superieur : ils flottaient dans le vide au-dessus du chemin
+           et se lisaient comme une etiquette de plus, pas comme le verdict de l'ecran.
+           ATTENTION au transform : avec top a 50 % il faut translater sur les DEUX axes,
+           sinon le bandeau descend de la moitie de sa propre hauteur.
+           Le halo sombre autour (box-shadow tres etale) le detache des rochers et des
+           traits de lumiere qu'il recouvre desormais, sans masquer le decor. */
         .story-map-verrou, .story-map-fini {
-          position: absolute; top: 30%; left: 50%; transform: translateX(-50%); z-index: 6;
-          padding: 11px 20px; border-radius: 999px; font-size: 15px; white-space: nowrap;
-          background: rgba(8,6,12,0.92); border: 1.5px solid rgba(255,255,255,0.22);
-          box-shadow: 0 6px 20px rgba(0,0,0,0.7);
+          position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 6;
+          padding: 12px 22px; border-radius: 999px; font-size: 15px; white-space: nowrap;
+          background: rgba(8,6,12,0.94); border: 1.5px solid rgba(255,255,255,0.22);
+          box-shadow: 0 6px 20px rgba(0,0,0,0.7), 0 0 44px 30px rgba(8,6,12,0.6);
         }
         .story-map-verrou { color: var(--bone); }
         .story-map-fini { color: var(--gold-bright); border-color: rgba(203,164,86,0.65); }
@@ -3846,7 +4280,7 @@ const APP_STYLES = `
         .story-map-locked .story-map-panneau > .sm-case,
         .story-map-locked .sm-coulee-bord { opacity: 0.35; filter: grayscale(0.7); }
         .story-map-locked .sm-particule { display: none; }
-        /* Chapitre verrouille : le brasier s'eteint entierement — pierre froide, aucune
+        /* Chapitre verrouille : le brasier s'eteint entierement, pierre froide, aucune
            braise. C'est ce qui distingue "pas encore accessible" de "pas encore joue". */
         .story-map-locked .sm-brasier { display: none; }
         .story-map-locked .story-map-nom { animation: none; filter: none; }
@@ -3884,7 +4318,7 @@ const APP_STYLES = `
 
         /* ====== Noeuds : des ILOTS DE ROCHE VOLCANIQUE, vus a plat ======
            Inspires de la reference : plaques de basalte aux contours irreguliers, parcourues
-           de fissures qui s'embrasent. Aucun chiffre — le foyer et le sanctuaire du
+           de fissures qui s'embrasent. Aucun chiffre, le foyer et le sanctuaire du
            Seigneur de Guerre ancrent les deux extremites du parcours.
            Trois decoupes alternees (sm-ilot-1/2/3) evitent la repetition mecanique : les
            ilots se ressemblent sans etre identiques, comme des roches brisees. */
@@ -3933,7 +4367,7 @@ const APP_STYLES = `
           50% { opacity: 1; }
         }
 
-        /* Ilot courant : le magma affleure, les fissures sont chauffees a blanc — c'est
+        /* Ilot courant : le magma affleure, les fissures sont chauffees a blanc, c'est
            lui qu'on tape. Un halo double le signale sans avoir besoin de bordure. */
         .sm-encours {
           cursor: pointer;
@@ -3961,7 +4395,7 @@ const APP_STYLES = `
         .sm-tapable:active { transform: translate(-50%, 50%) scale(0.96); }
 
         /* Le FOYER : la coulee nait sous ce premier ilot. Une flaque incandescente sous sa
-           base le signale — seul repere de depart, suffisant puisque le chemin est une
+           base le signale, seul repere de depart, suffisant puisque le chemin est une
            ligne continue sans embranchement. */
         .sm-foyer-marque {
           position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
@@ -3996,7 +4430,7 @@ const APP_STYLES = `
           opacity: 1; filter: drop-shadow(0 0 8px var(--th-lueur));
         }
 
-        /* Les meches : la matiere du theme qui s'echappe sous chaque case allumee — les
+        /* Les meches : la matiere du theme qui s'echappe sous chaque case allumee, les
            hachures du croquis. Elles heritent de la forme du theme (voir plus bas). */
         .sm-meche {
           position: absolute; bottom: -12px; transform: translateX(-50%);
@@ -4153,7 +4587,7 @@ const APP_STYLES = `
           0%, 100% { box-shadow: 0 0 12px rgba(203,164,86,0.4); }
           50% { box-shadow: 0 0 12px rgba(203,164,86,0.4), 0 0 30px rgba(203,164,86,0.9), 0 0 50px rgba(203,164,86,0.5); }
         }
-        /* Option B : révélation en deux temps — flash doré sur portrait+nom d'abord
+        /* Option B : révélation en deux temps, flash doré sur portrait+nom d'abord
            (le "quoi"), puis la description se dévoile juste après (le "pourquoi"). */
         .imposed-order-box.hero-reveal-b .imposed-order-thumb,
         .imposed-order-box.hero-reveal-b .imposed-order-label,
@@ -4176,7 +4610,7 @@ const APP_STYLES = `
 
         .chapter-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 
-        /* Tournoi : voir le bloc de rendu pour le détail — géométrie calculée en JS,
+        /* Tournoi : voir le bloc de rendu pour le détail, géométrie calculée en JS,
            traits en SVG, cartes en style inline (positions précises nécessaires). */
         .chapter-card {
           position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 14px;
@@ -4245,16 +4679,56 @@ const APP_STYLES = `
         }
         .legend-btn:hover { background: var(--gold); color: var(--bg); }
 
+        /* touch-action: none, sans lui, un doigt qui glisse SUR le voile fait defiler
+           ou bouger le plateau reste dessous. Le panneau est un cul-de-sac tactile. */
         .info-overlay {
           position: fixed; inset: 0; background: rgba(8,6,12,0.72); display: flex; align-items: center;
-          justify-content: center; z-index: 50; padding: 24px; animation: pop-in .2s ease;
+          /* z-index 90 et non 50 : les vignettes d'Ordre sont a 66 (elles doivent passer
+             au-dessus du voile de l'eventail, lui-meme a 65). A 50, elles traversaient
+             donc le panneau : en Confluence, ou chaque camp aligne huit vignettes, elles
+             recouvraient le titre et le bouton Fermer. Le panneau doit dominer TOUT. */
+          justify-content: center; z-index: 90; padding: 24px; animation: pop-in .2s ease;
+          touch-action: none; overscroll-behavior: contain;
         }
         @keyframes pop-in { from{opacity:0} to{opacity:1} }
         .info-panel {
           background: var(--panel); border: 1px solid var(--gold); border-radius: 16px; padding: 20px;
-          max-width: 340px; width: 100%; max-height: 80vh; overflow-y: auto;
+          max-width: 340px; width: 100%; max-height: 88dvh; overflow-y: auto;
           display: flex; flex-direction: column; align-items: stretch; gap: 12px;
           box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+        }
+        /* Parametres : tout doit tenir a l'ecran, aucun defilement. On serre les marges
+           et les lignes plutot que de laisser un ascenseur apparaitre. dvh et non vh :
+           sur mobile, vh compte la barre d'adresse et deborde. */
+        .info-panel.settings-panel {
+          overflow: hidden; max-height: none; padding: 22px 18px 20px; gap: 15px;
+        }
+        /* Le panneau avait grandi mais son texte restait ecrit petit : c'etait la vraie
+           raison de l'impression d'etroitesse. */
+        .info-panel.settings-panel .settings-nom { font-size: 17px; }
+        .info-panel.settings-panel .info-panel-title { font-size: 16px; letter-spacing: 0.13em; }
+        .info-panel.settings-panel .reset-btn { padding: 14px 20px; font-size: 13px; }
+        /* PIEGE : les lignes sont en content-box avec width: 100 %. Leur padding
+           horizontal s'ajoutait donc aux 100 % et elles depassaient de 25 px a droite,
+           le chevron etant coupe par le bord du panneau. border-box remet tout dedans. */
+        .info-panel.settings-panel .settings-row {
+          box-sizing: border-box; width: 100%;
+          padding: 19px 18px; margin-bottom: 0; gap: 15px; border-radius: 14px;
+        }
+        .info-panel.settings-panel .settings-desc { font-size: 12.5px; line-height: 1.45; margin-top: 5px; }
+        /* Le titre et le bouton touchaient leurs voisins : on leur donne leur propre air. */
+        .info-panel.settings-panel .info-panel-title { margin-bottom: 7px; }
+        .info-panel.settings-panel .reset-btn { margin-top: 9px; }
+        /* Ecrans courts : pas de place a donner, on garde les valeurs serrees. Le
+           correctif de debordement, lui, vaut partout (il est sur la regle de base). */
+        @media (max-height: 720px) {
+          .info-overlay { padding: 12px; }
+          .info-panel.settings-panel { padding: 14px 12px 12px; gap: 7px; }
+          .info-panel.settings-panel .settings-row { padding: 10px 12px; }
+          .info-panel.settings-panel .settings-nom { font-size: 12.5px; }
+          .info-panel.settings-panel .settings-desc { font-size: 9.5px; margin-top: 2px; }
+          .info-panel.settings-panel .info-panel-title { margin-bottom: 2px; }
+          .info-panel.settings-panel .reset-btn { margin-top: 4px; }
         }
         .info-panel-title {
           font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
@@ -4272,7 +4746,7 @@ const APP_STYLES = `
 
         /* ---------- Cérémonie de déblocage d'un Héraut (fin de chapitre) ----------
            Quatre temps : apparition sombre et floue (0-400ms), charge d'énergie avec
-           tremblement croissant (400-900ms), impact — flash blanc et bris du cadenas,
+           tremblement croissant (400-900ms), impact, flash blanc et bris du cadenas,
            le même que celui des Ordres verrouillés (900-1320ms), puis révélation du nom
            et de l'effet. Sautée entièrement quand les animations réduites sont actives :
            l'écran de récompense s'affiche alors directement. */
@@ -4377,6 +4851,115 @@ const APP_STYLES = `
         .hc-effet { font-size: 11px; color: var(--bone); margin-top: 11px; max-width: 250px; line-height: 1.5; animation: hc-monte 0.6s 1.62s ease-out both; }
         .hc-passer { position: absolute; bottom: 26px; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); animation: hc-monte 0.6s 2.1s ease-out both; }
         @keyframes hc-monte { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ============================ ECRAN DE TOURNOI ============================
+           Refonte complete : l'arbre etait en styles poses a la main dans le JSX, sans
+           identite. Tout passe ici, en classes.
+           Regle de performance respectee partout : les animations en boucle n'animent
+           que opacity ou transform. Une lueur qui pulse est un calque a ombre FIXE dont
+           seule l'opacite bouge, jamais un box-shadow anime. */
+        .tb-scene { width: 100%; overflow: hidden; margin: 12px 0 4px; display: flex; justify-content: center; }
+        .tb-arbre { position: relative; flex: 0 0 auto; transform: scale(var(--brk-echelle, 1)); transform-origin: top center; }
+        .tb-liens { position: absolute; left: 0; top: 0; z-index: 1; }
+
+        /* --- connecteurs : gris tant que le chemin n'est pas franchi --- */
+        .tb-lien { stroke: #2a221b; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+        .tb-lien-allume {
+          stroke: url(#tb-degrade); fill: none; stroke-linejoin: round; stroke-linecap: round;
+          filter: drop-shadow(0 0 4px rgba(255,170,0,0.55));
+        }
+
+        /* --- la plaque de combattant : metal sombre, contour biseaute ---
+           Le biseau tient au couple des deux ombres internes : une lumiere fine en HAUT
+           (le chant capte la lumiere) et une ombre en BAS. Sans ce couple, la plaque
+           serait un rectangle plat. */
+        .tb-plaque {
+          position: absolute; box-sizing: border-box; z-index: 2;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+          background: linear-gradient(180deg, #1b1622 0%, #120e16 55%, #0d0a12 100%);
+          border: 1px solid #3d352b; border-radius: 9px;
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.09), inset 0 -2px 4px rgba(0,0,0,0.75), 0 3px 8px rgba(0,0,0,0.55);
+          transition: filter .35s ease, border-color .35s ease;
+        }
+        /* --- l'avatar, serti dans un sceau octogonal --- */
+        .tb-sceau {
+          position: relative; width: 30px; height: 30px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+          background: linear-gradient(160deg, #4a3f2e, #241d18);
+          padding: 1.5px;
+        }
+        .tb-portrait {
+          width: 100%; height: 100%; object-fit: cover; display: block;
+          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+        }
+        /* Le joueur n'a pas de symbole : son sceau est simplement plein d'or, la ou les
+           autres portent un portrait. C'est la marque la plus simple possible, et la plus
+           lisible a 30 px. Un ecu, une croix ou tout autre dessin ne faisait qu'ajouter du
+           bruit dans un espace ou rien n'est lisible. */
+        .tb-blason {
+          display: block; width: 100%; height: 100%;
+          background: linear-gradient(160deg, #f2dda2 0%, #e8c877 45%, #b8944a 100%);
+          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+        }
+        /* Le sceau du joueur est serti dans l'or, celui des adversaires dans un bronze
+           eteint : la difference se lit avant meme d'avoir cherche le mot "Vous". */
+        .tb-vous .tb-sceau { background: linear-gradient(160deg, #e8c877, #8a6f34); padding: 2px; }
+        .tb-nom {
+          font-family: 'Cinzel', serif; font-size: 9.5px; line-height: 1.05; text-align: center;
+          color: var(--bone); padding: 0 3px; letter-spacing: 0.02em;
+        }
+        .tb-grand { border-color: rgba(203,164,86,0.5); }
+
+        /* --- la plaque du joueur : reperable au premier coup d'oeil --- */
+        .tb-vous { border-color: #e8c877; }
+        .tb-vous .tb-nom { color: var(--gold-bright); font-weight: 700; }
+        .tb-vous::after {
+          content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+          box-shadow: 0 0 15px rgba(232,200,119,0.4), 0 0 30px rgba(232,200,119,0.22);
+          opacity: 0; will-change: opacity;
+          animation: tb-lueur 2.6s ease-in-out infinite;
+        }
+        @keyframes tb-lueur { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+        /* --- adversaire elimine : la plaque s'eteint, une balafre la barre --- */
+        .tb-elimine { filter: grayscale(1) brightness(0.4); border-color: #2a2420; }
+        .tb-balafre {
+          position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit;
+        }
+        .tb-balafre::before {
+          content: ""; position: absolute; left: -12%; right: -12%; top: 50%;
+          height: 2px; transform: rotate(-24deg); transform-origin: center;
+          background: linear-gradient(90deg, transparent, #a8302a 18%, #e0554a 50%, #a8302a 82%, transparent);
+          box-shadow: 0 0 6px rgba(200,50,40,0.7);
+        }
+
+        /* --- le duel final : cadre d'arene, point d'orgue de l'ecran --- */
+        .tb-arene {
+          position: absolute; z-index: 0; border-radius: 16px; pointer-events: none;
+          background: radial-gradient(ellipse at 50% 50%, rgba(203,164,86,0.10), transparent 72%);
+          border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: 0 0 26px rgba(203,164,86,0.18), inset 0 0 22px rgba(203,164,86,0.07);
+        }
+        .tb-vs {
+          position: absolute; z-index: 3; width: 30px; text-align: center;
+          font-family: 'Cinzel', serif; font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+          color: var(--gold-bright); padding: 4px 0; border-radius: 999px;
+          background: linear-gradient(180deg, #3a2c50, #241a34);
+          border: 1px solid var(--gold); box-shadow: 0 0 10px rgba(203,164,86,0.35);
+        }
+
+        /* --- le trophee --- */
+        .tb-trophee {
+          position: absolute; top: 0; text-align: center; color: var(--gold-bright); z-index: 2;
+        }
+        .tb-coupe {
+          display: block; width: 20px; height: 20px; margin: 2px auto 3px;
+        }
+        .tb-trophee-nom {
+          font-family: 'Cinzel', serif; font-size: 8.5px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--gold); margin-top: 1px;
+        }
 `;
 
 export default function Emprise() {
@@ -4438,6 +5021,14 @@ export default function Emprise() {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
+  const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
+  const [codeCopie, setCodeCopie] = useState(false); // retour visuel après copie du code de partie
+  // Vrai pour une partie née de l'appariement (mode Classé) : c'est ce qui décide de
+  // jouer dans l'arène de sa ligue plutôt que sur le plateau nu.
+  const [partieClassee, setPartieClassee] = useState(false);
+  // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
+  // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
+  const dernierCoupDistantRef = useRef(null);
 
 
   const [board, setBoard] = useState(Array(CELLS).fill(null));
@@ -4734,7 +5325,10 @@ export default function Emprise() {
     const victoireHumaine = mode === "bot" ? winner === "blue" : mode === "online" ? winner === onlineRole : true;
     // En duel local quelqu'un d'humain gagne toujours : jamais de ceremonie de Defaite.
     const issue = victoireHumaine ? "victoire" : "defaite";
-    const t = setTimeout(() => setCeremonieFin(issue), 650);
+    // La Defaite attend 2,4 s : il faut laisser au joueur le temps de voir le coup qui
+    // l'a fait perdre avant que l'ecran se voile. La Victoire n'a pas ce besoin, on
+    // comprend immediatement qu'on a gagne : 650 ms suffisent, au-dela c'est une attente.
+    const t = setTimeout(() => setCeremonieFin(issue), issue === "defaite" ? 2400 : 650);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
@@ -4838,6 +5432,8 @@ export default function Emprise() {
     setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null); setTourneyBanPick(null);
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
+    setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
+    setPartieClassee(false); setAreneTest(null);
     setPhase("landing");
   }
 
@@ -4855,23 +5451,42 @@ export default function Emprise() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
     setOnlineError("");
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
-    const code = makeGameCode();
     const premierEnLigne = tirerPremierJoueur();
+    const nouvellePartie = {
+      status: "waiting-orders",
+      createdAt: serverTimestamp(),
+      blueUid: myUid,
+      redUid: null,
+      blueOrderKeys: null,
+      redOrderKeys: null,
+      blueHand: null,
+      redHand: null,
+      board: Array(CELLS).fill(null),
+      poisonedCells: Array(CELLS).fill(false),
+      turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
+      gameOver: false,
+    };
+    // Un code tiré au hasard peut retomber sur une partie déjà existante : on crée dans
+    // une transaction qui échoue si le document existe, et on retire un autre code —
+    // sinon un setDoc écraserait purement et simplement la partie en cours de deux
+    // autres joueurs, qui se retrouveraient plateau vide en pleine partie.
+    let code = null;
     try {
-      await setDoc(doc(db, "games", code), {
-        status: "waiting-orders",
-        createdAt: serverTimestamp(),
-        blueUid: myUid,
-        redUid: null,
-        blueOrderKeys: null,
-        redOrderKeys: null,
-        blueHand: null,
-        redHand: null,
-        board: Array(CELLS).fill(null),
-        poisonedCells: Array(CELLS).fill(false),
-        turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
-        gameOver: false,
-      });
+      for (let essai = 0; essai < 5 && !code; essai++) {
+        const candidat = makeGameCode();
+        try {
+          await runTransaction(db, async (tx) => {
+            const ref = doc(db, "games", candidat);
+            const snap = await tx.get(ref);
+            if (snap.exists()) throw new Error("code-pris");
+            tx.set(ref, nouvellePartie);
+          });
+          code = candidat;
+        } catch (e) {
+          if (e.message !== "code-pris") throw e;
+        }
+      }
+      if (!code) { setOnlineError("Impossible de trouver un code libre. Réessayez."); return; }
       setOnlineGameId(code);
       setOnlineRole("blue");
       setMode("online");
@@ -4890,12 +5505,18 @@ export default function Emprise() {
     if (!code) return;
     setOnlineError("");
     try {
+      // Lecture + prise de la place Rouge dans une seule transaction : avec un getDoc
+      // suivi d'un updateDoc, deux joueurs qui rejoignent en même temps lisent tous les
+      // deux "place libre" et s'écrasent l'un l'autre — le perdant croit jouer alors que
+      // la partie ne lui appartient plus.
       const ref = doc(db, "games", code);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) { setOnlineError("Code introuvable."); return; }
-      const data = snap.data();
-      if (data.redUid && data.redUid !== myUid) { setOnlineError("Cette partie a déjà 2 Commandants."); return; }
-      if (!data.redUid) await updateDoc(ref, { redUid: myUid });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error("introuvable");
+        const data = snap.data();
+        if (data.redUid && data.redUid !== myUid) throw new Error("complet");
+        if (!data.redUid) tx.update(ref, { redUid: myUid });
+      });
       setBoardSize(STANDARD_ROWS, STANDARD_COLS);
       setOnlineGameId(code);
       setOnlineRole("red");
@@ -4905,7 +5526,9 @@ export default function Emprise() {
       setPickerChoice([]);
       setPhase("select-blue"); // écran de sélection des Ordres, réutilisé par les deux rôles en ligne
     } catch (e) {
-      setOnlineError("Impossible de rejoindre. Vérifiez le code et votre connexion.");
+      if (e.message === "introuvable") setOnlineError("Code introuvable.");
+      else if (e.message === "complet") setOnlineError("Cette partie a déjà 2 Commandants.");
+      else setOnlineError("Impossible de rejoindre. Vérifiez le code et votre connexion.");
     }
   }
 
@@ -4935,6 +5558,24 @@ export default function Emprise() {
         setOnlineError("");
         setOnlineStatus("");
         setPhase((p) => (p === "play" ? p : "play"));
+
+        // Coup de l'adversaire : on rejoue chez nous les animations qu'il a vues (chute
+        // de la carte, captures, retournements, brume empoisonnée). Sans ça le plateau
+        // changeait d'un seul coup, sans qu'on comprenne ce qui venait de se passer.
+        // Un coup n'est animé qu'une fois (dernierCoupDistantRef) et jamais le nôtre,
+        // déjà animé localement au moment où on l'a joué.
+        const coupDistant = data.lastMove;
+        if (coupDistant && coupDistant.by && coupDistant.by !== onlineRole
+            && coupDistant.id !== dernierCoupDistantRef.current) {
+          dernierCoupDistantRef.current = coupDistant.id;
+          setDernierCoup(coupDistant.position);
+          flashEvents([{ index: coupDistant.position, kind: "place" }, ...(coupDistant.events || [])]);
+          if (coupDistant.freshPoison && coupDistant.freshPoison.length) {
+            setJustPoisoned(coupDistant.freshPoison);
+            clearTimeout(poisonTimerRef.current);
+            poisonTimerRef.current = setTimeout(() => setJustPoisoned([]), 1500);
+          }
+        }
       } else {
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
         setOnlineStatus(iAmReady ? "En attente que l'adversaire choisisse ses Ordres..." : "");
@@ -4959,11 +5600,147 @@ export default function Emprise() {
       await updateDoc(doc(db, "games", onlineGameId), field);
       setPickerChoice([]);
       setOnlineStatus("En attente que l'adversaire choisisse ses Ordres...");
-      setPhase("online-waiting");
+      // Si l'adversaire avait déjà choisi ses Ordres, l'écouteur onSnapshot a basculé en
+      // "play" PENDANT l'await ci-dessus : Firestore déclenche l'écouteur dès l'écriture
+      // locale, avant que la promesse ne se résolve. Forcer "online-waiting" ici renvoyait
+      // donc le deuxième joueur à choisir sur l'écran d'attente alors que la partie avait
+      // démarré — et définitivement si c'était son tour de jouer, puisque plus personne ne
+      // pouvait toucher au document pour le réveiller.
+      setPhase((p) => (p === "play" ? p : "online-waiting"));
     } catch (e) {
       setOnlineError("Impossible d'enregistrer vos Ordres.");
     }
   }
+
+  // ---------- Appariement automatique (matchmaking) ----------
+  // Un unique document "matchmaking/lobby" sert de salle d'attente : le premier joueur
+  // s'y inscrit, le suivant l'y trouve, crée la partie et l'y annonce. Une seule place
+  // d'attente à la fois — donc aucun index Firestore à créer, aucune file à purger, et
+  // un appariement impossible à dédoubler puisque tout passe par une transaction sur ce
+  // document unique. Ce choix tient tant que deux joueurs cherchent rarement en même
+  // temps ; avec une vraie base de joueurs, il faudra passer à une file (un document par
+  // joueur en attente + requête). C'est aussi là que l'ELO se greffera le jour venu :
+  // au lieu de prendre le premier venu, on filtrera sur une fourchette de score.
+  const ATTENTE_PERIMEE_MS = 60000; // au-delà, l'inscription est considérée abandonnée
+
+  async function chercherAdversaire() {
+    if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
+    setOnlineError("");
+    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setConfluenceActive(false);
+    setTestMode(false);
+    setPickerChoice([]);
+    setMode("online");
+    setFileAttente(true);
+    setOnlineStatus("Recherche d'un adversaire...");
+    setPhase("online-waiting");
+    try {
+      const lobbyRef = doc(db, "matchmaking", "lobby");
+      const apparie = await runTransaction(db, async (tx) => {
+        const lobbySnap = await tx.get(lobbyRef);
+        const lobby = lobbySnap.exists() ? lobbySnap.data() : {};
+        const attenteValide = !!lobby.waitingUid && lobby.waitingUid !== myUid
+          && !!lobby.waitingAt && (Date.now() - lobby.waitingAt) < ATTENTE_PERIMEE_MS;
+        if (!attenteValide) {
+          // Personne (ou une inscription abandonnée) : je prends la place et j'attends.
+          tx.set(lobbyRef, { waitingUid: myUid, waitingAt: Date.now() }, { merge: true });
+          return null;
+        }
+        // Quelqu'un attend : je crée la partie et je la lui annonce. Firestore impose que
+        // TOUS les tx.get() précèdent les tx.set(), d'où les codes candidats tirés ici.
+        let code = null;
+        for (let essai = 0; essai < 3 && !code; essai++) {
+          const candidat = makeGameCode();
+          const dejaPris = await tx.get(doc(db, "games", candidat));
+          if (!dejaPris.exists()) code = candidat;
+        }
+        if (!code) throw new Error("code-indisponible");
+        const premier = tirerPremierJoueur();
+        tx.set(doc(db, "games", code), {
+          status: "waiting-orders",
+          createdAt: serverTimestamp(),
+          blueUid: lobby.waitingUid, // celui qui attendait joue Azur
+          redUid: myUid,
+          blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
+          board: Array(CELLS).fill(null),
+          poisonedCells: Array(CELLS).fill(false),
+          turn: premier, firstPlayer: premier,
+          gameOver: false,
+          appariement: true, // partie née d'un appariement, pas d'un code partagé
+        });
+        tx.set(lobbyRef, {
+          waitingUid: null, waitingAt: null,
+          matchedUid: lobby.waitingUid, matchedGameId: code, matchedAt: Date.now(),
+        }, { merge: true });
+        return { code };
+      });
+      if (apparie) {
+        setFileAttente(false);
+        setOnlineStatus("");
+        setOnlineGameId(apparie.code);
+        setOnlineRole("red");
+        setPartieClassee(true);
+        setPhase("select-blue");
+      }
+    } catch (e) {
+      setFileAttente(false);
+      setOnlineStatus("");
+      setMode(null);
+      setOnlineError("Recherche impossible. Vérifiez votre connexion.");
+      setPhase("online-menu");
+    }
+  }
+
+  // Copie du code dans le presse-papier — confort sur téléphone, où recopier cinq
+  // lettres dans une conversation est plus pénible que sur un clavier. L'API n'existe
+  // qu'en contexte sécurisé (https ou localhost) : en cas d'échec on ne dit rien, le
+  // code reste affiché en grand juste au-dessus.
+  async function copierCode() {
+    if (!onlineGameId) return;
+    try {
+      await navigator.clipboard.writeText(onlineGameId);
+      setCodeCopie(true);
+      setTimeout(() => setCodeCopie(false), 2000);
+    } catch (e) { /* le joueur lira le code à l'écran */ }
+  }
+
+  // Libère ma place dans la salle d'attente quand j'abandonne la recherche. En cas
+  // d'échec on ne fait rien : l'inscription périmera d'elle-même au bout d'une minute.
+  async function annulerRecherche() {
+    setFileAttente(false);
+    setOnlineStatus("");
+    if (!myUid) return;
+    try {
+      const lobbyRef = doc(db, "matchmaking", "lobby");
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(lobbyRef);
+        if (snap.exists() && snap.data().waitingUid === myUid) {
+          tx.set(lobbyRef, { waitingUid: null, waitingAt: null }, { merge: true });
+        }
+      });
+    } catch (e) { /* l'inscription expirera toute seule */ }
+  }
+
+  // Tant que j'attends dans la salle, j'écoute : l'adversaire qui m'apparie y inscrit mon
+  // uid et le code de la partie qu'il vient de créer. Je la rejoins alors en Azur.
+  useEffect(() => {
+    if (!fileAttente || !myUid) return;
+    const unsub = onSnapshot(doc(db, "matchmaking", "lobby"), (snap) => {
+      if (!snap.exists()) return;
+      const lobby = snap.data();
+      if (lobby.matchedUid === myUid && lobby.matchedGameId) {
+        setFileAttente(false);
+        setOnlineStatus("");
+        setOnlineGameId(lobby.matchedGameId);
+        setOnlineRole("blue");
+        setMode("online");
+        setPickerChoice([]);
+        setPartieClassee(true);
+        setPhase("select-blue");
+      }
+    }, () => setOnlineError("Recherche interrompue. Vérifiez votre connexion."));
+    return unsub;
+  }, [fileAttente, myUid]);
 
   function withRift(action, duration = 500) {
     setTransitioning(true);
@@ -5354,8 +6131,11 @@ export default function Emprise() {
     } else if (phase === "online-menu") {
       setMode(null);
       setOnlineError("");
-      setPhase("tourney-menu");
+      setPhase("select-mode");
     } else if (phase === "online-waiting") {
+      // Recherche en cours : on libère d'abord sa place dans la salle d'attente, sinon
+      // le prochain joueur serait apparié à quelqu'un qui a quitté l'écran.
+      if (fileAttente) { annulerRecherche(); setMode(null); setPhase("select-mode"); return; }
       // Abandon avant que la partie ne démarre : le document Firestore reste (inoffensif,
       // personne ne le rejoindra sans le code), on revient juste au menu en ligne.
       setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
@@ -5387,6 +6167,11 @@ export default function Emprise() {
       }
     }
   }
+
+  // Arène affichée sur le plateau : le sélecteur temporaire prime (il sert justement à
+  // comparer les cinq rendus), sinon une partie classée se joue dans l'arène de la ligue
+  // du joueur. Partout ailleurs, plateau nu comme avant.
+  const areneActive = areneTest || (partieClassee ? getLeague(stats.trophies || 0).name : null);
 
   function flashEvents(events) {
     const map = {};
@@ -5537,11 +6322,17 @@ export default function Emprise() {
       else setTurn(nextTurn);
 
       // Partie en ligne : on pousse notre coup vers Firestore juste après l'avoir joué
-      // localement — l'adversaire le reçoit via l'écouteur onSnapshot ci-dessus. On ne
-      // synchronise que board/mains/poison/tour/fin : les animations (flashEvents) restent
-      // purement locales, l'adversaire voit le résultat directement sans les effets visuels
-      // de notre coup (limitation connue, acceptable pour une première version).
+      // localement — l'adversaire le reçoit via l'écouteur onSnapshot ci-dessus. On joint
+      // au plateau la DESCRIPTION du coup (case posée + effets + cases empoisonnées) :
+      // c'est ce qui permet à l'adversaire de rejouer les mêmes animations chez lui au
+      // lieu de voir le plateau changer d'un bloc. L'identifiant unique évite qu'une
+      // notification Firestore sans rapport ne relance les effets une seconde fois.
       if (mode === "online" && onlineGameId) {
+        // try/catch en plus du .catch : updateDoc valide ses arguments de façon SYNCHRONE
+        // et lève avant de rendre une promesse. Une donnée invalide échappait donc au
+        // .catch, remontait en erreur non capturée, et le coup se perdait sans le moindre
+        // message — le joueur voyait sa carte posée chez lui et nulle part ailleurs.
+        try {
         updateDoc(doc(db, "games", onlineGameId), {
           board: resolvedBoard.map(stripForSave),
           blueHand: nextBlueHand.map(stripForSave),
@@ -5549,7 +6340,17 @@ export default function Emprise() {
           poisonedCells: nextPoison,
           turn: nowGameOver ? turn : nextTurn,
           gameOver: nowGameOver,
+          lastMove: {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            by: owner,
+            position,
+            events: [...revealEvents, ...events].map(sansUndefined),
+            freshPoison,
+          },
         }).catch(() => setOnlineError("Coup non synchronisé, vérifiez votre connexion."));
+        } catch (e) {
+          setOnlineError("Coup non synchronisé, vérifiez votre connexion.");
+        }
       }
     }
 
@@ -5704,14 +6505,25 @@ export default function Emprise() {
               if (canDragCard(owner)) { tuileSaisieRef.current = true; startCardDrag(owner, group.cards[0].handIdx, e); }
             } : undefined}
             onClick={() => {
-              // Le navigateur envoie toujours un clic après le toucher : si un glisser
-              // vient de partir d'ici, ce clic est un fantôme — l'avaler, sinon il
-              // rouvrirait un éventail d'une seule carte par-dessus le geste.
-              if (tuileSaisieRef.current) { tuileSaisieRef.current = false; return; }
+              // Le navigateur envoie toujours un clic apres le toucher.
+              // Si le doigt a REELLEMENT glisse, la carte a deja ete jouee : ce clic est un
+              // fantome, on l'avale.
+              // S'il n'a pas bouge, c'est un simple tap : on relache l'etat de glisser
+              // amorce au toucher (sans quoi la carte resterait collee au doigt) et on
+              // ouvre l'eventail comme pour n'importe quelle vignette. Indispensable : la
+              // vignette ne montre que le portrait, c'est l'eventail qui donne les rangs.
+              // Selectionner sans les afficher revenait a choisir a l'aveugle.
+              if (tuileSaisieRef.current) {
+                const avaitGlisse = dragMovedRef.current;
+                tuileSaisieRef.current = false;
+                if (avaitGlisse) return;
+                setDrag(null);
+                setDragHoverCell(null);
+              }
               toggleFan(owner, group.ability);
             }}
             aria-expanded={isOpen}
-            aria-label={`Cartes ${group.order ? group.order.name : ""} — ${group.cards.length} en main`}
+            aria-label={`Cartes ${group.order ? group.order.name : ""}, ${group.cards.length} en main`}
           >
             {group.order && group.order.portrait ? (
               <img className="order-tile-portrait" src={group.order.portrait} alt={group.order.name} />
@@ -5719,6 +6531,11 @@ export default function Emprise() {
               <span className="order-tile-icon">{group.order ? group.order.icon : "?"}</span>
             )}
             {group.cards.some((c) => c.card.heroActive) && <span className="order-tile-hero" title="Héraut actif">★</span>}
+            {/* Combien de cartes restent dans cet Ordre. Masque a 1 : le medaillon seul
+                le dit deja, et un "1" sur chaque vignette ferait du bruit pour rien. */}
+            {group.cards.length > 1 && (
+              <span className="order-tile-compte" aria-hidden="true">{group.cards.length}</span>
+            )}
           </button>
           {(isOpen || isClosing) && (
             <>
@@ -6150,7 +6967,7 @@ export default function Emprise() {
                     <div className="rules-section">
                       <div className="rules-h">Ordres les plus joués</div>
                       {topOrders.map((e, i) => (
-                        <div key={i} className="rules-p">{i + 1}. {e.order.name} — {e.count} fois</div>
+                        <div key={i} className="rules-p">{i + 1}. {e.order.name}, {e.count} fois</div>
                       ))}
                     </div>
                   )}
@@ -6181,7 +6998,9 @@ export default function Emprise() {
           explore au doigt. */}
       {phase !== "landing" && phase !== "play" && phase !== "tutorial" && phase !== "chapters" && (
         <>
-          <div className="eyebrow">Pacte Azur vs Horde Écarlate</div>
+          {/* Le bandeau des deux camps ne se justifie qu'au moment ou l'on compose sa
+              main : partout ailleurs il repete une evidence et mange de la hauteur. */}
+          {(phase === "select-blue" || phase === "select-red") && <div className="eyebrow">Pacte Azur vs Horde Écarlate</div>}
           <h1 className="title">EMPRISE</h1>
         </>
       )}
@@ -6256,14 +7075,14 @@ export default function Emprise() {
               <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
               <div className="diff-text">
                 <div className="name">Mode Histoire</div>
-                <div className="desc">8 chapitres solo, un par Ordre — battez le Seigneur de Guerre pour débloquer son Héraut</div>
+                <div className="desc">8 chapitres solo, un par Ordre, battez le Seigneur de Guerre pour débloquer son Héraut</div>
               </div>
             </div>
             <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceBot} onKeyDown={KEY_ACTIVATE(chooseConfluenceBot)}>
               <img className="diff-thumb" src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
               <div className="diff-text">
                 <div className="name">Confluence (contre un Écho)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun) — même main pour les deux</div>
+                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même main pour les deux</div>
               </div>
             </div>
             <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-menu")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-menu"))}>
@@ -6286,7 +7105,23 @@ export default function Emprise() {
               <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
               <div className="diff-text">
                 <div className="name">Confluence (2 Commandants)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone — même main pour les deux</div>
+                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone, même main pour les deux</div>
+              </div>
+            </div>
+
+            <div className="diff-section-label">En ligne</div>
+            <div className="diff-option" role="button" tabIndex={0} onClick={chercherAdversaire} onKeyDown={KEY_ACTIVATE(chercherAdversaire)}>
+              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "scribes")?.portrait} alt="" />
+              <div className="diff-text">
+                <div className="name">Classé</div>
+                <div className="desc">Appariement automatique : vous êtes mis en duel avec le premier Commandant disponible</div>
+              </div>
+            </div>
+            <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
+              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+              <div className="diff-text">
+                <div className="name">Jouer avec un ami</div>
+                <div className="desc">Chacun sur son appareil, à distance, avec un code de partie à partager</div>
               </div>
             </div>
 
@@ -6593,7 +7428,7 @@ export default function Emprise() {
         return (
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
-            <h2>Chapitre {chapterMeta.chapterNumber} — {chapterMeta.order.name}</h2>
+            <h2>Chapitre {chapterMeta.chapterNumber} · {chapterMeta.order.name}</h2>
             <div className="sub">Partie {gameIndex} / {chapterMeta.numGames} · niveau {diffLabel}</div>
             <div className="imposed-order-box">
               <img className="imposed-order-thumb" src={chapterMeta.order.portrait} alt="" />
@@ -6648,20 +7483,15 @@ export default function Emprise() {
                 <div className="desc">Contre des Échos, difficulté croissante à chaque tour. Une victoire = un Ordre banni pour le suivant</div>
               </div>
             </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "scribes")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Affrontement en ligne</div>
-                <div className="desc">Défiez un ami à distance, chacun sur son appareil, via un code de partie</div>
-              </div>
-            </div>
           </div>
         </div>
       )}
 
       {phase === "tourney-bracket" && (() => {
-        // Géométrie précise, calculée une fois (identique au composant validé) :
-        const CW = 62, CH = 46, PAIR_GAP = 10, MATCH_GAP = 28, ZONE_GAP = 22, TROPHY_H = 54, STROKE = 2;
+        // Geometrie en PIXELS, et c'est voulu : un arbre de tournoi est une geometrie,
+        // pas un flux. Les liaisons doivent tomber au pixel sur le centre des plaques ;
+        // en Flexbox il faudrait recalculer chaque trait a la main.
+        const CW = 60, CH = 78, PAIR_GAP = 16, MATCH_GAP = 46, ZONE_GAP = 22, TROPHY_H = 62, STROKE = 3;
         const qfY = [0, CH + PAIR_GAP, 2 * CH + PAIR_GAP + MATCH_GAP, 3 * CH + 2 * PAIR_GAP + MATCH_GAP];
         const m1 = (qfY[0] + CH / 2 + qfY[1] + CH / 2) / 2;
         const m2 = (qfY[2] + CH / 2 + qfY[3] + CH / 2) / 2;
@@ -6675,40 +7505,59 @@ export default function Emprise() {
         const boardW = xQF_R + CW;
         const centerX = (xFinal_L + CW + xFinal_R) / 2;
 
-        // Bracket entièrement décoratif au-delà de "Vous" : EMPRISE ne simule pas les
-        // autres matchs, les vainqueurs des autres paires sont fixés à l'avance pour
-        // que l'arbre ait un aspect complet.
-        const P = { you: { name: "Vous", you: true } };
-        ["maudits", "poison", "devoreuse", "scribes", "mue", "percee", "guardian"].forEach((k, i) => { P["c" + (i + 1)] = { name: `Concurrent ${i + 1}`, key: k }; });
+        // Un adversaire porte le nom de ce qu'il commande, pas un numero. Fixes et lies a
+        // la cle de l'Ordre : le meme adversaire garde son nom d'une partie a l'autre.
+        const NOMS_TOURNOI = {
+          maudits: "Le Ressac", poison: "La Vermine", devoreuse: "L'Abysse",
+          scribes: "Le Copiste", mue: "La Mue", percee: "La Lance", guardian: "Le Rempart",
+        };
+        // Combien de tours le joueur a-t-il deja franchis. L'arbre s'allume d'autant.
+        const franchis = tourney.active ? tourney.round : 0;
+        // Le joueur porte le portrait des Dores. Les formes abstraites essayees avant
+        // (croix, ecu, octogone plein) ne racontaient rien : dans un arbre ou chaque
+        // adversaire montre un visage, une forme geometrique se lit comme une case vide.
+        // Le sceau reste serti d'or, ce qui distingue la plaque sans un mot.
+        const P = { you: { name: "Vous", you: true, key: "eveil" } };
+        ["maudits", "poison", "devoreuse", "scribes", "mue", "percee", "guardian"].forEach((k, i) => {
+          P["c" + (i + 1)] = { name: NOMS_TOURNOI[k], key: k };
+        });
+        // battu au tour n : quart = 0, demi = 1, finale = 2
+        const battu = (p, tour) => !p.you && franchis > tour;
         const leftQF = [P.you, P.c1, P.c2, P.c3];
         const rightQF = [P.c4, P.c5, P.c6, P.c7];
         const leftSF = [P.you, P.c2];
         const rightSF = [P.c4, P.c6];
 
-        const Slot = ({ x, y, p, big }) => {
+        const Slot = ({ x, y, p, big, tour }) => {
           const order = p.key ? ORDERS.find((o) => o.key === p.key) : null;
-          const sz = big ? 22 : 18;
+          const elimine = battu(p, tour);
           return (
-            <div style={{
-              position: "absolute", left: x, top: y, width: CW, height: CH,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
-              background: "var(--panel)", border: `1px solid ${p.you ? "var(--gold-bright)" : "rgba(203,164,86,0.2)"}`,
-              borderRadius: 10, boxShadow: p.you ? "0 0 0 1px var(--gold-bright), 0 0 8px rgba(203,164,86,0.35)" : "none",
-              boxSizing: "border-box", zIndex: 2,
-            }}>
-              {order ? (
-                <img src={order.portrait} alt="" style={{ width: sz, height: sz, borderRadius: "50%", objectFit: "cover", border: "1px solid rgba(203,164,86,0.3)" }} />
-              ) : (
-                <div style={{ width: sz, height: sz, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: sz - 8, background: "rgba(203,164,86,0.12)", border: "1px solid var(--gold-bright)" }}>⚔️</div>
-              )}
-              <div style={{ fontSize: 8, color: p.you ? "var(--gold-bright)" : "var(--muted)", fontWeight: p.you ? 700 : 400, lineHeight: 1 }}>{p.name}</div>
+            <div
+              className={`tb-plaque ${p.you ? "tb-vous" : ""} ${big ? "tb-grand" : ""} ${elimine ? "tb-elimine" : ""}`}
+              style={{ left: x, top: y, width: CW, height: CH }}
+            >
+              <span className="tb-sceau">
+                {order
+                  ? <img src={order.portrait} alt="" className="tb-portrait" />
+                  : <span className="tb-blason" aria-hidden="true" />}
+              </span>
+              <span className="tb-nom">{p.name}</span>
+              {elimine && <span className="tb-balafre" aria-hidden="true" />}
             </div>
           );
         };
-        const Brace = ({ sourceX, y1, y2, joinX, targetX }) => {
+
+        // Deux traces superposes : le gris (toujours la) et le dore (seulement si le
+        // chemin a ete franchi). Le dore est dessine par-dessus.
+        const Brace = ({ sourceX, y1, y2, joinX, targetX, allume }) => {
           const midY = (y1 + y2) / 2;
           const d = `M ${sourceX} ${y1} L ${joinX} ${y1} L ${joinX} ${y2} L ${sourceX} ${y2} M ${joinX} ${midY} L ${targetX} ${midY}`;
-          return <path d={d} stroke="var(--gold)" strokeWidth={STROKE} fill="none" strokeLinejoin="round" strokeLinecap="round" />;
+          return (
+            <>
+              <path d={d} className="tb-lien" strokeWidth={STROKE} />
+              {allume && <path d={d} className="tb-lien-allume" strokeWidth={STROKE} />}
+            </>
+          );
         };
 
         const qfEdgeL = xQF_L + CW, sfEdgeL_in = xSF_L, sfEdgeL_out = xSF_L + CW, finalEdgeL = xFinal_L;
@@ -6718,50 +7567,74 @@ export default function Emprise() {
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
             <h2>Tournoi</h2>
-            <div className="sub">8 concurrents, 3 tours, difficulté croissante. Votre chemin vers le trophée :</div>
-            {/* Le bracket a une geometrie FIXE en pixels (460 px de large) : sur mobile il
-                debordait de l'ecran et les concurrents de droite etaient coupes. On le met
-                a l'echelle en bloc (transform: scale) plutot que de recalculer ses
-                dimensions : l'arbre garde exactement ses proportions et ses traits restent
-                nets. Le conteneur exterieur reprend la hauteur reduite pour ne pas laisser
-                un grand vide sous l'arbre. */}
-            <div style={{ width: "100%", overflow: "hidden", margin: "10px 0", display: "flex", justifyContent: "center" }}>
-              <div style={{
-                position: "relative", width: boardW, height: boardH, flex: "0 0 auto",
-                transform: `scale(var(--brk-echelle, 1))`, transformOrigin: "top center",
-              }}
-              ref={(el) => {
-                if (!el || !el.parentElement) return;
-                const dispo = el.parentElement.clientWidth;
-                const e = Math.min(1, dispo / boardW);
-                el.style.setProperty("--brk-echelle", e);
-                el.parentElement.style.height = `${boardH * e}px`;
-              }}
+            <div className="sub">Huit commandants, trois tours, un seul champion.</div>
+            <div className="tb-scene">
+              <div
+                className="tb-arbre"
+                style={{ width: boardW, height: boardH }}
+                ref={(el) => {
+                  // L'echelle tient compte de la largeur ET de la hauteur libres, et
+                  // l'agrandissement est autorise : sur ordinateur et tablette l'arbre
+                  // grandit au lieu de rester minuscule, sur telephone il se reduit sans
+                  // jamais deborder. C'est toujours la plus petite des deux qui gagne.
+                  if (!el || !el.parentElement) return;
+                  const dispo = el.parentElement.clientWidth;
+                  const haut = el.parentElement.getBoundingClientRect().top;
+                  const libre = Math.max(180, window.innerHeight - haut - 118);
+                  const e = Math.max(0.5, Math.min(1.9, dispo / boardW, libre / boardH));
+                  el.style.setProperty("--brk-echelle", e);
+                  el.parentElement.style.height = `${boardH * e}px`;
+                }}
               >
-              <div style={{ position: "absolute", left: centerX - 28, top: 0, width: 56, textAlign: "center", fontSize: 30, color: "var(--gold-bright)", textShadow: "0 0 16px rgba(203,164,86,0.6)" }}>
-                🏆
-                <div style={{ fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'Cinzel', serif" }}>Champion</div>
+                <div className="tb-trophee" style={{ left: centerX - 30, width: 60 }}>
+                  {/* Coupe simplifiee a l'extreme : une vasque et un pied en silhouette
+                      pleine, deux anses en trait fin, rien d'autre. Une coupe avec des
+                      reliefs ou des anses pleines redevenait un griffonnage a cette
+                      taille ; ramenee a 2 formes + 2 traits, elle se lit aussi vite que
+                      le losange qu'elle remplace. */}
+                  <svg className="tb-coupe" viewBox="0 0 24 24" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="tb-or" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#f2dda2" />
+                        <stop offset="45%" stopColor="#e8c877" />
+                        <stop offset="100%" stopColor="#b8944a" />
+                      </linearGradient>
+                    </defs>
+                    <path fill="url(#tb-or)" d="M8 4 H16 V10.5 C16 12.5 14.2 14 12 14 C9.8 14 8 12.5 8 10.5 Z" />
+                    <path fill="url(#tb-or)" d="M11 14 H13 V17 H15.5 V19 H8.5 V17 H11 Z" />
+                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M8 5.5 C5.5 5.5 4.5 7 5.2 9 C5.8 10.6 7.2 11.2 8 11" />
+                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M16 5.5 C18.5 5.5 19.5 7 18.8 9 C18.2 10.6 16.8 11.2 16 11" />
+                  </svg>
+                  <div className="tb-trophee-nom">Champion</div>
+                </div>
+                {/* Cadre d'arene autour du duel central : le point d'orgue de l'ecran. */}
+                <div
+                  className="tb-arene"
+                  style={{ left: xFinal_L - 13, top: shift(finalY) - 13, width: CW * 2 + 26, height: CH + 26 }}
+                  aria-hidden="true"
+                />
+                <svg className="tb-liens" style={{ width: boardW, height: boardH }}>
+                  <defs>
+                    <linearGradient id="tb-degrade" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#e8c877" />
+                      <stop offset="100%" stopColor="#ffaa00" />
+                    </linearGradient>
+                  </defs>
+                  <Brace sourceX={qfEdgeL} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} allume={franchis >= 1} />
+                  <Brace sourceX={qfEdgeL} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} allume={franchis >= 1} />
+                  <Brace sourceX={sfEdgeL_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeL_out + ZONE_GAP / 2} targetX={finalEdgeL} allume={franchis >= 2} />
+                  <Brace sourceX={qfEdgeR} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} allume={franchis >= 1} />
+                  <Brace sourceX={qfEdgeR} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} allume={franchis >= 1} />
+                  <Brace sourceX={sfEdgeR_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeR_out - ZONE_GAP / 2} targetX={finalEdgeR} allume={franchis >= 2} />
+                </svg>
+                {leftQF.map((p, i) => <Slot key={"ql" + i} x={xQF_L} y={shift(qfY[i])} p={p} tour={0} />)}
+                {leftSF.map((p, i) => <Slot key={"sl" + i} x={xSF_L} y={shift(sfY[i])} p={p} tour={1} />)}
+                {rightQF.map((p, i) => <Slot key={"qr" + i} x={xQF_R} y={shift(qfY[i])} p={p} tour={0} />)}
+                {rightSF.map((p, i) => <Slot key={"sr" + i} x={xSF_R} y={shift(sfY[i])} p={p} tour={1} />)}
+                <Slot x={xFinal_L} y={shift(finalY)} p={P.you} big tour={2} />
+                <Slot x={xFinal_R} y={shift(finalY)} p={P.c4} big tour={2} />
+                <div className="tb-vs" style={{ left: centerX - 15, top: shift(finalCenter) - 11 }}>VS</div>
               </div>
-              <svg style={{ position: "absolute", left: 0, top: 0, width: boardW, height: boardH, zIndex: 1 }}>
-                <Brace sourceX={qfEdgeL} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} />
-                <Brace sourceX={qfEdgeL} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} />
-                <Brace sourceX={sfEdgeL_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeL_out + ZONE_GAP / 2} targetX={finalEdgeL} />
-                <Brace sourceX={qfEdgeR} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} />
-                <Brace sourceX={qfEdgeR} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} />
-                <Brace sourceX={sfEdgeR_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeR_out - ZONE_GAP / 2} targetX={finalEdgeR} />
-              </svg>
-              {leftQF.map((p, i) => <Slot key={"ql" + i} x={xQF_L} y={shift(qfY[i])} p={p} />)}
-              {leftSF.map((p, i) => <Slot key={"sl" + i} x={xSF_L} y={shift(sfY[i])} p={p} />)}
-              {rightQF.map((p, i) => <Slot key={"qr" + i} x={xQF_R} y={shift(qfY[i])} p={p} />)}
-              {rightSF.map((p, i) => <Slot key={"sr" + i} x={xSF_R} y={shift(sfY[i])} p={p} />)}
-              <Slot x={xFinal_L} y={shift(finalY)} p={P.you} big />
-              <Slot x={xFinal_R} y={shift(finalY)} p={P.c4} big />
-              <div style={{
-                position: "absolute", left: centerX - 12, top: shift(finalCenter) - 8, width: 24, textAlign: "center",
-                background: "linear-gradient(180deg, #3a2c50, #241a34)", border: "1px solid var(--gold)", color: "var(--gold-bright)",
-                fontSize: 7, fontWeight: 700, padding: "3px 0", borderRadius: 999, zIndex: 2,
-              }}>VS</div>
-            </div>
             </div>
             <button className="reset-btn" onClick={startTourney}>Commencer le tournoi</button>
           </div>
@@ -6790,11 +7663,16 @@ export default function Emprise() {
       {phase === "online-waiting" && (
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>Partie en ligne</h2>
-          {onlineRole === "blue" && onlineGameId && (
+          <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
+          {fileAttente && (
+            <div className="sub">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
+          )}
+          {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
               <div className="sub">Partagez ce code avec votre adversaire :</div>
               <div className="game-code-display">{onlineGameId}</div>
+              <button className="landing-link" onClick={copierCode}>Copier le code</button>
+              <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
             </>
           )}
           <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>
@@ -6809,11 +7687,11 @@ export default function Emprise() {
             {mode === "online"
               ? (onlineRole === "blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres")
               : tourney.active
-              ? `${TOURNEY_ROUNDS[tourney.round].label} — Choisissez vos 2 Ordres`
+              ? `${TOURNEY_ROUNDS[tourney.round].label} · Choisissez vos 2 Ordres`
               : phase === "select-blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres"}
           </h2>
           {mode === "online" && onlineGameId && (
-            <div className="sub">Code de partie : <b>{onlineGameId}</b></div>
+            <div className="code-rappel">Code de partie :<b>{onlineGameId}</b></div>
           )}
           <div className="sub">
             {pickerChoice.length}/2 sélectionnées · 4 cartes de chaque Ordre
@@ -6979,7 +7857,7 @@ export default function Emprise() {
 
       {phase === "tourney-eliminated" && (
         <div className="diff-picker">
-          <h2>Éliminé — {TOURNEY_ROUNDS[tourney.round].label}</h2>
+          <h2>Éliminé · {TOURNEY_ROUNDS[tourney.round].label}</h2>
           <div className="sub">L'Écho l'emporte cette fois. Le tournoi s'arrête ici pour vous.</div>
           <button className="reset-btn" onClick={reset}>Retour au menu</button>
         </div>
@@ -6988,7 +7866,7 @@ export default function Emprise() {
       {phase === "tourney-champion" && (
         <div className="diff-picker">
           <h2>🏆 Vous remportez le tournoi !</h2>
-          <div className="sub">Quart de finale, demi-finale, finale — les 3 tours passés, bravo.</div>
+          <div className="sub">Quart de finale, demi-finale, finale : les 3 tours passés, bravo.</div>
           <button className="reset-btn" onClick={reset}>Retour au menu</button>
         </div>
       )}
@@ -7094,20 +7972,20 @@ export default function Emprise() {
               ? mode === "bot" ? (winner === "blue" ? "Victoire ! Vous l'emportez." : "L'Écho remporte la partie.")
                 : mode === "online" ? (winner === onlineRole ? "Victoire ! Vous l'emportez." : "Défaite cette fois.")
                 : `Victoire du camp ${winner === "blue" ? "Azur" : "Écarlate"} !`
-              : mode === "bot" && turn === "red" ? "L'Écho médite..."
               : mode === "online" && turn !== onlineRole ? "En attente de l'adversaire..."
               : drag ? "Relâchez sur une case en surbrillance pour poser la carte."
               : selected ? "Cliquez sur une case du plateau pour poser la carte."
-              : `Au tour du camp ${turn === "blue" ? "Azur" : "Écarlate"}, cliquez ou glissez une carte.`}
+              : mode === "local" ? `Au camp ${turn === "blue" ? "Azur" : "Écarlate"} de jouer.`
+              : ""}
           </div>
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
           <div>
-            <div className="turn-label red-t">
+            <div className={`turn-label red-t ${turn !== "red" || gameOver ? "en-attente" : ""}`}>
               Écarlate{mode === "bot" ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : ""}{mode === "online" ? (onlineRole === "red" ? " (Vous)" : " (Adversaire)") : ""}
             </div>
             {redHand.length > 0 && (
-              <div className={`hand-row ${turn === "red" && !gameOver ? "active" : ""} ${turn !== "red" ? "disabled" : ""} ${redHand.length > 4 ? "compact" : ""}`}>
+              <div className={`hand-row camp-red ${turn === "red" && !gameOver ? "active" : ""} ${turn !== "red" ? "disabled" : ""} ${redHand.length > 4 ? "compact" : ""}`}>
                 {renderHandGroups("red")}
               </div>
             )}
@@ -7116,7 +7994,7 @@ export default function Emprise() {
           {isHumanTurn && turn === "red" && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           {/* ═══ TEMPORAIRE — sélecteur d'arène, à retirer avant publication ═══ */}
-          {(testMode || mode === "bot") && (
+          {(testMode || mode === "bot" || mode === "online") && (
             <div className="arene-test">
               <button className={!areneTest ? "actif" : ""} onClick={() => setAreneTest(null)}>Aucune</button>
               {Object.keys(ARENES).map((nom) => (
@@ -7182,13 +8060,13 @@ export default function Emprise() {
             );
           })()}
           <div
-            className={`table ${areneTest ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""}`}
+            className={`table ${areneActive ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""}`}
             style={{
               "--board-cols": COLS,
-              ...(areneTest ? { "--arene": `url(${ARENES[areneTest].img})`, "--arene-marge": ARENES[areneTest].marge, "--arene-braise": ARENES[areneTest].braise } : {}),
+              ...(areneActive ? { "--arene": `url(${ARENES[areneActive].img})`, "--arene-marge": ARENES[areneActive].marge, "--arene-braise": ARENES[areneActive].braise } : {}),
             }}
           >
-            {areneTest && (
+            {areneActive && (
               <>
                 {/* Ambiance : la même image, très agrandie, floutée et fondue jusqu'à
                     disparaître avant l'interface du haut et la main du bas. Elle porte la
@@ -7197,17 +8075,17 @@ export default function Emprise() {
                 {/* Cadre : l'image nette, cantonnée au pourtour de l'aire de jeu. Il ne
                     déborde plus vers l'interface — l'ambiance fait la transition. */}
                 <div className="arene-cadre" aria-hidden="true">
-                  {(ARENE_GEMMES[areneTest]?.pts || []).map(([x, y], i) => (
+                  {(ARENE_GEMMES[areneActive]?.pts || []).map(([x, y], i) => (
                     <span key={`c${i}`} className="arene-gemme" style={{
                       left: `${x}%`, top: `${y}%`,
-                      "--gemme": ARENE_GEMMES[areneTest].teinte,
+                      "--gemme": ARENE_GEMMES[areneActive].teinte,
                       animationDelay: `${i * 0.9}s`,
                     }} />
                   ))}
-                  {(ARENE_GEMMES[areneTest]?.mid || []).map(([x, y], i) => (
+                  {(ARENE_GEMMES[areneActive]?.mid || []).map(([x, y], i) => (
                     <span key={`m${i}`} className="arene-gemme mid" style={{
                       left: `${x}%`, top: `${y}%`,
-                      "--gemme": ARENE_GEMMES[areneTest].teinte,
+                      "--gemme": ARENE_GEMMES[areneActive].teinte,
                       animationDelay: `${0.45 + i * 0.9}s`,
                     }} />
                   ))}
@@ -7304,11 +8182,11 @@ export default function Emprise() {
 
           <div>
             {blueHand.length > 0 && (
-              <div className={`hand-row ${turn === "blue" && !gameOver ? "active" : ""} ${turn !== "blue" ? "disabled" : ""} ${blueHand.length > 4 ? "compact" : ""}`}>
+              <div className={`hand-row camp-blue ${turn === "blue" && !gameOver ? "active" : ""} ${turn !== "blue" ? "disabled" : ""} ${blueHand.length > 4 ? "compact" : ""}`}>
                 {renderHandGroups("blue")}
               </div>
             )}
-            <div className="turn-label blue-t">Azur{mode === "bot" ? " (Vous)" : ""}{mode === "online" ? (onlineRole === "blue" ? " (Vous)" : " (Adversaire)") : ""}{tourney.active ? ` — ${TOURNEY_ROUNDS[tourney.round].label}` : ""}</div>
+            <div className={`turn-label blue-t ${turn !== "blue" || gameOver ? "en-attente" : ""}`}>Azur{mode === "bot" ? " (Vous)" : ""}{mode === "online" ? (onlineRole === "blue" ? " (Vous)" : " (Adversaire)") : ""}{tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}</div>
           </div>
 
           {drag && draggedCard && !liveDragPreviewBoard && (
@@ -7319,7 +8197,10 @@ export default function Emprise() {
 
           <div className="action-row">
             {mode !== "online" && (mode !== "bot" || allowUndo) && (
-              <button className="reset-btn undo-btn" onClick={undo} disabled={history.length === 0 || !!drag}>↩ Annuler</button>
+              <button className="reset-btn undo-btn" onClick={undo} disabled={history.length === 0 || !!drag}>
+                <svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
+                Annuler
+              </button>
             )}
             {mode === "bot" && allowHint && (
               <button className="reset-btn hint-btn" onClick={toggleHint} disabled={gameOver || turn !== "blue"}>
@@ -7330,7 +8211,7 @@ export default function Emprise() {
               className={`reset-btn ${gameOver ? "" : "quitter-discret"}`}
               onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : reset)) : () => setConfirmQuit(true)}
             >
-              {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : "Nouvelle partie")) : "⏏ Quitter"}
+              {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
             </button>
           </div>
 
@@ -7385,7 +8266,7 @@ export default function Emprise() {
             </div>
             <div className="cer-recap" onClick={(e) => e.stopPropagation()}>
               <div className="cer-score">
-                <span className="cer-sb">{blueScore}</span><span className="cer-sep">—</span><span className="cer-sr">{redScore}</span>
+                <span className="cer-sb">{blueScore}</span><span className="cer-sep">·</span><span className="cer-sr">{redScore}</span>
               </div>
               <div className="bdf-piste cer-piste">
                 <div className="bdf-cote bdf-azur" style={{ width: `${(blueScore / (blueScore + redScore)) * 100}%` }} />
@@ -7414,7 +8295,7 @@ export default function Emprise() {
           </div>
           <div className="defeat-recap" onClick={(e) => e.stopPropagation()}>
             <div className="cer-score">
-              <span className="cer-sb">{blueScore}</span><span className="cer-sep">—</span><span className="cer-sr">{redScore}</span>
+              <span className="cer-sb">{blueScore}</span><span className="cer-sep">·</span><span className="cer-sr">{redScore}</span>
             </div>
             <div className="bdf-piste cer-piste">
               <div className="bdf-cote bdf-azur" style={{ width: `${(blueScore / (blueScore + redScore)) * 100}%` }} />

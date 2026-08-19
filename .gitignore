@@ -1,0 +1,6 @@
+# Configuration locale de l'outil de développement
+.claude/
+
+# Sauvegardes de travail
+*.avant-*
+*.bak

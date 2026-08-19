@@ -1,0 +1,21 @@
+# Dépendances installées par npm : se réinstallent avec "npm install",
+# des dizaines de milliers de fichiers qui n'ont rien à faire dans l'historique.
+node_modules
+
+# Résultat de "npm run build" : régénéré à chaque fois.
+dist
+
+# Clés Firebase : ne doivent jamais partir sur internet.
+# ".env" ET "env" — le second est un doublon présent dans le dossier, et
+# sans cette ligne il serait publié alors que .env, lui, serait protégé.
+.env
+env
+.env.local
+
+# Sauvegardes de travail (App.jsx.avant-fusion-…, App.jsx.avant-v32-…)
+*.avant-*
+*.bak
+
+# Fichiers système
+.DS_Store
+Thumbs.db
