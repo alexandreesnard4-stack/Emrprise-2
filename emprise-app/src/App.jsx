@@ -5357,6 +5357,9 @@ export default function Emprise() {
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
+  // Appariements déjà consommés par cet appareil : garde synchrone contre une seconde
+  // lecture du même champ (l'écouteur se déclenche à chaque écriture du document).
+  const matchsConsommesRef = useRef(new Set());
   const [codeCopie, setCodeCopie] = useState(false); // retour visuel après copie du code de partie
   // Vrai pour une partie née de l'appariement (mode Classé) : c'est ce qui décide de
   // jouer dans l'arène de sa ligue plutôt que sur le plateau nu.
@@ -6547,7 +6550,15 @@ export default function Emprise() {
           && !!lobby.waitingAt && (Date.now() - lobby.waitingAt) < ATTENTE_PERIMEE_MS;
         if (!attenteValide) {
           // Personne (ou une inscription abandonnée) : je prends la place et j'attends.
-          tx.set(lobbyRef, { waitingUid: myUid, waitingAt: Date.now() }, { merge: true });
+          // On efface AU PASSAGE un appariement qui m'était adressé : ces champs n'étaient
+          // jamais nettoyés une fois consommés, si bien qu'en revenant en file je me
+          // faisais aussitôt renvoyer dans la partie précédente, souvent déjà terminée —
+          // impossible de lancer une nouvelle partie classée.
+          const monAncienMatch = lobby.matchedUid === myUid;
+          tx.set(lobbyRef, {
+            waitingUid: myUid, waitingAt: Date.now(),
+            ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
+          }, { merge: true });
           return null;
         }
         // Quelqu'un attend : je crée la partie et je la lui annonce. Firestore impose que
@@ -6813,6 +6824,21 @@ export default function Emprise() {
     } catch (e) { /* le joueur lira le code à l'écran */ }
   }
 
+  // Efface l'annonce d'appariement une fois qu'elle a été prise, pour qu'elle ne soit
+  // jamais rejouée. Conditionnée au code exact : si un nouvel appariement a déjà été
+  // annoncé entre-temps, on n'y touche pas.
+  async function libererAppariement(code) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "matchmaking", "lobby");
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        if (snap.data().matchedGameId !== code) return;
+        tx.set(ref, { matchedUid: null, matchedGameId: null, matchedAt: null }, { merge: true });
+      });
+    } catch (e) { /* la garde de fraicheur suffit a empecher un rejeu */ }
+  }
+
   // Libère ma place dans la salle d'attente quand j'abandonne la recherche. En cas
   // d'échec on ne fait rien : l'inscription périmera d'elle-même au bout d'une minute.
   async function annulerRecherche() {
@@ -6823,9 +6849,13 @@ export default function Emprise() {
       const lobbyRef = doc(db, "matchmaking", "lobby");
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(lobbyRef);
-        if (snap.exists() && snap.data().waitingUid === myUid) {
-          tx.set(lobbyRef, { waitingUid: null, waitingAt: null }, { merge: true });
-        }
+        if (!snap.exists()) return;
+        const d = snap.data();
+        const maj = {};
+        if (d.waitingUid === myUid) { maj.waitingUid = null; maj.waitingAt = null; }
+        // Une annonce qui m'était adressée n'a plus lieu d'être si je quitte la file.
+        if (d.matchedUid === myUid) { maj.matchedUid = null; maj.matchedGameId = null; maj.matchedAt = null; }
+        if (Object.keys(maj).length) tx.set(lobbyRef, maj, { merge: true });
       });
     } catch (e) { /* l'inscription expirera toute seule */ }
   }
@@ -6837,10 +6867,20 @@ export default function Emprise() {
     const unsub = onSnapshot(doc(db, "matchmaking", "lobby"), (snap) => {
       if (!snap.exists()) return;
       const lobby = snap.data();
-      if (lobby.matchedUid === myUid && lobby.matchedGameId) {
+      // Un appariement ne vaut que s'il vient d'être annoncé (quelques secondes) et
+      // qu'on ne l'a pas déjà pris. Sans ces deux gardes, un champ resté en place
+      // relançait indéfiniment la même vieille partie.
+      const frais = !!lobby.matchedAt && (Date.now() - lobby.matchedAt) < ATTENTE_PERIMEE_MS;
+      if (lobby.matchedUid === myUid && lobby.matchedGameId && frais
+          && !matchsConsommesRef.current.has(lobby.matchedGameId)) {
+        const code = lobby.matchedGameId;
+        matchsConsommesRef.current.add(code);
+        // Effacement du champ pour que personne ne le relise : en arrière-plan, l'entrée
+        // en partie ne doit pas attendre le réseau.
+        libererAppariement(code);
         setFileAttente(false);
         setOnlineStatus("");
-        setOnlineGameId(lobby.matchedGameId);
+        setOnlineGameId(code);
         setOnlineRole("blue");
         setMode("online");
         setPickerChoice([]);
