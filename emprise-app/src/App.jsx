@@ -6910,7 +6910,9 @@ export default function Emprise() {
     setMode(m);
     setTestMode(false);
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
-    setPhase(m === "bot" ? "select-difficulty" : "select-blue");
+    // Le duel local passe d'abord par ses options de partie (rotation de l'écran) ;
+    // l'Écho garde son parcours difficulté puis assistance.
+    setPhase(m === "bot" ? "select-difficulty" : "select-assist");
   }
 
   function chooseConfluenceBot() {
@@ -7118,7 +7120,8 @@ export default function Emprise() {
       setConfluenceActive(false);
       setPhase("landing");
     } else if (phase === "select-assist") {
-      setPhase("select-difficulty");
+      if (mode === "local") { setMode(null); setPhase("landing"); }
+      else setPhase("select-difficulty");
     } else if (phase === "online-menu") {
       setMode(null);
       setOnlineError("");
@@ -8099,13 +8102,6 @@ export default function Emprise() {
                     <div className="settings-desc">Raccourcit les effets de capacité et saute les cérémonies.</div>
                   </div>
                   <div className={`settings-bascule ${reducedMotion ? "on" : ""}`} aria-hidden="true"><span /></div>
-                </div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={toggleRotationLocale} onKeyDown={KEY_ACTIVATE(toggleRotationLocale)}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Rotation en duel local</div>
-                    <div className="settings-desc">À deux sur le même appareil, l'écran pivote vers le joueur dont c'est le tour.</div>
-                  </div>
-                  <div className={`settings-bascule ${rotationLocale ? "on" : ""}`} aria-hidden="true"><span /></div>
                 </div>
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
               </div>
@@ -9253,8 +9249,19 @@ export default function Emprise() {
       {phase === "select-assist" && (
         <div className="diff-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>Options d'assistance</h2>
-          <div className="sub">Réglages valables pour cette partie contre l'Écho uniquement.</div>
+          <h2>{mode === "local" ? "Options de la partie" : "Options d'assistance"}</h2>
+          <div className="sub">{mode === "local" ? "Réglages du duel à deux sur cet appareil." : "Réglages valables pour cette partie contre l'Écho uniquement."}</div>
+          {mode === "local" ? (
+            <div className="assist-grid">
+              <label className={`assist-option ${rotationLocale ? "checked" : ""}`}>
+                <input type="checkbox" checked={rotationLocale} onChange={toggleRotationLocale} />
+                <div className="assist-text">
+                  <div className="name">Rotation de l'écran</div>
+                  <div className="desc">L'écran pivote vers le joueur dont c'est le tour, pour se passer l'appareil sans le retourner.</div>
+                </div>
+              </label>
+            </div>
+          ) : (
           <div className="assist-grid">
             <label className={`assist-option ${allowUndo ? "checked" : ""}`}>
               <input type="checkbox" checked={allowUndo} onChange={(e) => setAllowUndo(e.target.checked)} />
@@ -9271,6 +9278,7 @@ export default function Emprise() {
               </div>
             </label>
           </div>
+          )}
           <button className="reset-btn" onClick={confirmAssistOptions}>Continuer</button>
         </div>
       )}
