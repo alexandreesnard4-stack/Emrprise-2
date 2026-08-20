@@ -2249,6 +2249,26 @@ const APP_STYLES = `
           text-transform: uppercase; color: var(--bone); margin: 0;
         }
         .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
+        .hub-jouer-classe {
+          width: 100%; max-width: 340px; box-sizing: border-box;
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          margin-top: 6px; padding: 14px 18px 12px;
+          background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
+          border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
+          box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
+          transition: filter .2s, transform .15s;
+        }
+        .hub-jouer-classe:hover { filter: brightness(1.06); }
+        .hub-jouer-classe:active { transform: scale(0.98); }
+        .hub-jouer-classe svg { width: 22px; height: 22px; fill: #241d10; }
+        .hub-jouer-classe-titre {
+          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 800;
+          letter-spacing: 0.2em; text-transform: uppercase; color: #241d10;
+        }
+        .hub-jouer-classe-sous {
+          font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
+        }
+        .hub-jouer-modes { margin-top: 8px; }
         .hub-ordres-grille { margin-top: 4px; }
         .hub-ordre-fiche { cursor: default; }
         .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
@@ -5181,7 +5201,7 @@ const APP_STYLES = `
 `;
 
 export default function Emprise() {
-  const [phase, setPhase] = useState("landing"); // landing -> select-mode -> (bot: select-difficulty -> select-assist -> select-blue -> preview | confluence-bot: select-difficulty -> select-assist -> confluence-draft -> preview | local: select-blue -> select-red | confluence-local: confluence-draft) -> play
+  const [phase, setPhase] = useState("landing"); // landing (hub) -> (bot: select-difficulty -> select-assist -> select-blue -> preview | confluence-bot: select-difficulty -> select-assist -> confluence-draft -> preview | local: select-blue -> select-red | confluence-local: confluence-draft) -> play
   const [mode, setMode] = useState(null); // "bot" | "local"
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   // Draft Confluence : un pool COMMUN aux deux joueurs. Chacun choisit un Ordre à son tour
@@ -6718,9 +6738,8 @@ export default function Emprise() {
     }, duration);
   }
 
-  function startNewGameAnimated() {
-    withRift(() => setPhase("select-mode"), 850);
-  }
+  // (L'ancien bouton "Nouvelle partie" ouvrait un ecran de choix de Voie ; le hub
+  // presente ces choix directement sur la page Jouer.)
 
   function loadTutStep(i) {
     const step = TUTORIAL_STEPS[i];
@@ -6749,13 +6768,13 @@ export default function Emprise() {
 
   function nextTutorialStep() {
     const next = tut.stepIdx + 1;
-    if (next >= TUTORIAL_STEPS.length) { setPhase("select-mode"); return; }
+    if (next >= TUTORIAL_STEPS.length) { setPhase("landing"); return; }
     setTut((t) => ({ ...t, stepIdx: next }));
     loadTutStep(next);
   }
 
   function skipTutorial() {
-    setPhase("select-mode");
+    setPhase("landing");
   }
 
   // 3 tours, difficulté croissante. On réutilise les mêmes clés que DIFFICULTIES.
@@ -7089,29 +7108,25 @@ export default function Emprise() {
       else { setTournoiOnlineId(null); setTournoiData(null); }
       setPhase("tourney-online-menu");
     } else if (phase === "tourney-menu") {
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "chapter-pick-order") {
       setPhase("chapters");
     } else if (phase === "chapters") {
-      setPhase("select-mode");
-    } else if (phase === "select-mode") {
-      setMode(null);
-      setConfluenceActive(false);
       setPhase("landing");
     } else if (phase === "select-difficulty") {
       setMode(null);
       setConfluenceActive(false);
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "select-assist") {
       setPhase("select-difficulty");
     } else if (phase === "online-menu") {
       setMode(null);
       setOnlineError("");
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "online-waiting") {
       // Recherche en cours : on libère d'abord sa place dans la salle d'attente, sinon
       // le prochain joueur serait apparié à quelqu'un qui a quitté l'écran.
-      if (fileAttente) { annulerRecherche(); setMode(null); setPartieClassee(false); setPhase("select-mode"); return; }
+      if (fileAttente) { annulerRecherche(); setMode(null); setPartieClassee(false); setPhase("landing"); return; }
       // Match de tournoi : revenir en arrière avant le début NE vaut PAS abandon — le
       // match reste en attente dans l'arbre et se rejoue via "Jouer votre duel". Sans ça,
       // un simple tap sur Retour pendant le choix des Ordres éliminait du tournoi, sans
@@ -7123,8 +7138,8 @@ export default function Emprise() {
       if (mode === "online") {
         if (tournoiOnlineId) { setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setPhase("tourney-online"); return; }
         abandonnerAvantDebut();
-      } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("select-mode"); }
-      else setPhase(mode === "bot" ? "select-assist" : "select-mode");
+      } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("landing"); }
+      else setPhase(mode === "bot" ? "select-assist" : "landing");
     } else if (phase === "select-red") {
       // Bleu rechoisit ses 2 Ordres : on repart de sa sélection.
       setPickerChoice([]);
@@ -7132,7 +7147,7 @@ export default function Emprise() {
     } else if (phase === "confluence-draft") {
       // Abandon du draft en cours : on le vide entièrement (un draft partiel n'a pas de sens).
       setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
-      setPhase(mode === "bot" ? "select-assist" : "select-mode");
+      setPhase(mode === "bot" ? "select-assist" : "landing");
     } else if (phase === "preview") {
       if (confluenceActive) {
         // Le draft précédent est terminé : revenir signifie le relancer à zéro.
@@ -7887,7 +7902,8 @@ export default function Emprise() {
                 <h1 className="landing-title">EMPRISE</h1>
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
                 <div className="league-badge">Le multijoueur arrive prochainement</div>
-                <button className="landing-cta" onClick={startNewGameAnimated}>Nouvelle partie</button>
+
+                {/* Parties a reprendre : toujours au-dessus de tout, un adversaire attend. */}
                 {repriseEnLigne && (
                   <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
                     Reprendre la partie en ligne
@@ -7901,6 +7917,81 @@ export default function Emprise() {
                 {hasSavedGame && (
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
+
+                {/* Bouton principal : le duel Classé, l'action phare du hub. */}
+                <button className="hub-jouer-classe" onClick={chercherAdversaire}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+                  </svg>
+                  <span className="hub-jouer-classe-titre">Classé</span>
+                  <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
+                </button>
+
+                <div className="diff-grid hub-jouer-modes">
+                  <div className="diff-section-label">Contre un Écho</div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("bot")} onKeyDown={KEY_ACTIVATE(() => chooseMode("bot"))}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Contre un Écho</div>
+                      <div className="desc">Solo, 4 niveaux de difficulté</div>
+                    </div>
+                  </div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("chapters")} onKeyDown={KEY_ACTIVATE(() => setPhase("chapters"))}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Mode Histoire</div>
+                      <div className="desc">8 chapitres solo, un par Ordre, battez le Seigneur de Guerre pour débloquer son Héraut</div>
+                    </div>
+                  </div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceBot} onKeyDown={KEY_ACTIVATE(chooseConfluenceBot)}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Confluence (contre un Écho)</div>
+                      <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même main pour les deux</div>
+                    </div>
+                  </div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-menu")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-menu"))}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Tournoi (8 Commandants)</div>
+                      <div className="desc">Contre des Échos, difficulté croissante à chaque tour. Une victoire = un Ordre banni pour le suivant</div>
+                    </div>
+                  </div>
+
+                  <div className="diff-section-label">Contre un Commandant</div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("local")} onKeyDown={KEY_ACTIVATE(() => chooseMode("local"))}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">2 Commandants (même appareil)</div>
+                      <div className="desc">Chacun son tour, sur le même téléphone</div>
+                    </div>
+                  </div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceLocal} onKeyDown={KEY_ACTIVATE(chooseConfluenceLocal)}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Confluence (2 Commandants)</div>
+                      <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone, même main pour les deux</div>
+                    </div>
+                  </div>
+
+                  <div className="diff-section-label">En ligne</div>
+                  <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Jouer avec un ami</div>
+                      <div className="desc">Chacun sur son appareil, à distance, avec un code de partie à partager</div>
+                    </div>
+                  </div>
+
+                  <div className="diff-section-label">Bac à sable</div>
+                  <div className="diff-option test-option" role="button" tabIndex={0} onClick={chooseTestMode} onKeyDown={KEY_ACTIVATE(chooseTestMode)}>
+                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
+                    <div className="diff-text">
+                      <div className="name">Mode test</div>
+                      <div className="desc">Bac à sable : les 2 camps, tous les Ordres, sans minuteur, capacités de base</div>
+                    </div>
+                  </div>
+                </div>
               </section>
             )}
             {hubPage === "ordres" && (
@@ -8208,84 +8299,6 @@ export default function Emprise() {
         </div>
       )}
 
-      {phase === "select-mode" && (
-        <div className="order-picker">
-          <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>Choisissez votre Voie</h2>
-          <div className="diff-grid">
-            <div className="diff-section-label">Contre un Écho</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("bot")} onKeyDown={KEY_ACTIVATE(() => chooseMode("bot"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Contre un Écho</div>
-                <div className="desc">Solo, 4 niveaux de difficulté</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("chapters")} onKeyDown={KEY_ACTIVATE(() => setPhase("chapters"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Mode Histoire</div>
-                <div className="desc">8 chapitres solo, un par Ordre, battez le Seigneur de Guerre pour débloquer son Héraut</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceBot} onKeyDown={KEY_ACTIVATE(chooseConfluenceBot)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Confluence (contre un Écho)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même main pour les deux</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-menu")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-menu"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Tournoi (8 Commandants)</div>
-                <div className="desc">Contre des Échos, difficulté croissante à chaque tour. Une victoire = un Ordre banni pour le suivant</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">Contre un Commandant</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("local")} onKeyDown={KEY_ACTIVATE(() => chooseMode("local"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">2 Commandants (même appareil)</div>
-                <div className="desc">Chacun son tour, sur le même téléphone</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceLocal} onKeyDown={KEY_ACTIVATE(chooseConfluenceLocal)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Confluence (2 Commandants)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone, même main pour les deux</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">En ligne</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chercherAdversaire} onKeyDown={KEY_ACTIVATE(chercherAdversaire)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "scribes")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Classé</div>
-                <div className="desc">Appariement automatique : vous êtes mis en duel avec le premier Commandant disponible</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Jouer avec un ami</div>
-                <div className="desc">Chacun sur son appareil, à distance, avec un code de partie à partager</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">Bac à sable</div>
-            <div className="diff-option test-option" role="button" tabIndex={0} onClick={chooseTestMode} onKeyDown={KEY_ACTIVATE(chooseTestMode)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Mode test</div>
-                <div className="desc">Bac à sable : les 2 camps, tous les Ordres, sans minuteur, capacités de base</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {phase === "chapters" && (() => {
         const chapter = STORY_CHAPTERS[storyMapIndex];
