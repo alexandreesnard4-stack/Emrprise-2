@@ -2420,42 +2420,96 @@ const APP_STYLES = `
         }
         .hub-ordre-fiche { cursor: default; }
         .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
+        /* ---------- Barre de navigation : socle de pierre et metal ----------
+           Le rendu vise une barre d'interface de jeu, pas une barre d'onglets de site :
+           un socle sombre borde d'un liseré clair en haut (l'arete captant la lumiere),
+           des icones en metal dore avec ombre portee, et une hierarchie franche entre
+           l'onglet actif, encadre et lumineux, et les autres, assombris. */
         .hub-nav {
+          position: relative;
           width: 100%; box-sizing: border-box; flex: none;
           display: flex; align-items: flex-end; justify-content: space-around;
-          padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
-          background: linear-gradient(180deg, rgba(14,11,20,0.65), rgba(10,8,15,0.97) 40%);
-          border-top: 1px solid rgba(203,164,86,0.22);
+          padding: 8px 8px calc(9px + env(safe-area-inset-bottom, 0px));
+          background:
+            linear-gradient(180deg, rgba(46,37,62,0.55) 0%, rgba(18,14,26,0.97) 42%, rgba(9,7,14,1) 100%);
+          border-top: 1px solid rgba(203,164,86,0.32);
+          box-shadow: 0 -6px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,240,205,0.09);
         }
+        /* Le <defs> du degrade ne doit rien occuper dans la mise en page. */
+        .hub-nav-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
         .hub-onglet {
-          flex: 1; max-width: 150px;
-          display: flex; flex-direction: column; align-items: center; gap: 3px;
-          padding: 8px 6px; background: transparent; border: none; cursor: pointer;
-          color: var(--muted); border-radius: 12px;
-          transition: color .2s, transform .2s;
+          flex: 1; max-width: 150px; position: relative;
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          padding: 8px 6px; background: transparent; cursor: pointer;
+          border: 1px solid transparent; border-radius: 13px;
+          color: var(--muted);
+          transition: color .22s, transform .18s, background .22s, border-color .22s;
         }
-        .hub-onglet svg { width: 21px; height: 21px; fill: currentColor; }
+        .hub-onglet svg { width: 23px; height: 23px; }
+        /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
+           du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
+        .hub-onglet svg path {
+          fill: url(#or-metal); stroke: url(#or-metal);
+          stroke-width: 0.9; stroke-linejoin: round; paint-order: stroke fill;
+        }
+        .hub-onglet svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          transition: filter .22s, opacity .22s;
+        }
+        /* Onglets au repos : memes icones, mais eteintes et en retrait. */
+        .hub-onglet:not(.actif) svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.35) brightness(0.62);
+          opacity: 0.8;
+        }
         .hub-onglet span {
           font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
-          letter-spacing: 0.1em; text-transform: uppercase;
+          letter-spacing: 0.11em; text-transform: uppercase;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.9);
         }
-        .hub-onglet.actif { color: var(--gold-bright); }
-        /* Onglet central : plus grand et legerement sureleve, comme l'onglet
-           de bataille de Clash Royale, mais dans la sobriete du jeu. */
+        /* Onglet actif : cadre dore net, fond legerement eclaire, icone qui rayonne. */
+        .hub-onglet.actif {
+          color: var(--gold-bright);
+          background: linear-gradient(180deg, rgba(232,200,119,0.13), rgba(232,200,119,0.03));
+          border-color: rgba(232,200,119,0.65);
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.16), 0 3px 10px rgba(0,0,0,0.4);
+        }
+        .hub-onglet.actif svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.6));
+        }
+        /* Onglet central : plus grand et sureleve, comme l'onglet de bataille de Clash
+           Royale, mais dans la sobriete du jeu. Socle en relief, arete claire en haut. */
         .hub-onglet-central {
-          transform: translateY(-9px);
-          background: linear-gradient(180deg, #241d31, #171221);
-          border: 1px solid rgba(203,164,86,0.4);
-          box-shadow: 0 6px 16px rgba(0,0,0,0.45);
-          padding: 11px 10px 9px;
+          transform: translateY(-10px);
+          background: linear-gradient(180deg, #2c2340, #171221 70%);
+          border: 1px solid rgba(203,164,86,0.5);
+          box-shadow:
+            0 8px 18px rgba(0,0,0,0.55),
+            inset 0 1px 0 rgba(255,240,205,0.14),
+            inset 0 -2px 6px rgba(0,0,0,0.5);
+          padding: 12px 12px 10px;
         }
-        .hub-onglet-central svg { width: 26px; height: 26px; }
+        .hub-onglet-central svg { width: 28px; height: 28px; }
         .hub-onglet-central span { font-size: 11px; }
         .hub-onglet-central.actif {
           border-color: var(--gold-bright);
-          background: linear-gradient(180deg, #2b2340, #1a1426);
+          background: linear-gradient(180deg, #3a2f52, #1d1730 72%);
+          box-shadow:
+            0 8px 20px rgba(0,0,0,0.6),
+            inset 0 1px 0 rgba(255,240,205,0.24),
+            0 0 16px rgba(232,200,119,0.28);
         }
-        .hub-onglet-central:active { transform: translateY(-7px) scale(0.97); }
+        /* Lueur qui respire autour de l'onglet central actif. Un calque a ombre FIXE
+           dont seule l'opacite varie : jamais de box-shadow anime en boucle. */
+        .hub-onglet-central.actif::after {
+          content: ""; position: absolute; inset: -2px; border-radius: inherit;
+          pointer-events: none; opacity: 0; will-change: opacity;
+          box-shadow: 0 0 22px rgba(232,200,119,0.55);
+          animation: halo-respire 3.2s ease-in-out infinite;
+        }
+        .hub-onglet-central:active { transform: translateY(-8px) scale(0.97); }
+        @media (prefers-reduced-motion: reduce) {
+          .hub-onglet-central.actif::after { animation: none; opacity: 0.5; }
+        }
         /* La sequence d'entree existante revele aussi le hub : memes etapes que
            l'ancien bouton Nouvelle partie. */
         .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
@@ -8364,13 +8418,24 @@ export default function Emprise() {
 
           {/* ---------- Navigation basse : Boutique, Jouer (central), Ordres ---------- */}
           <nav className="hub-nav" aria-label="Navigation du hub">
+            {/* Degrade metallique partage par les trois icones. Un seul <defs> pour tout
+                le hub : les tracés y font référence par identifiant. */}
+            <svg className="hub-nav-defs" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="or-metal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f2dfae" />
+                  <stop offset="38%" stopColor="#e8c877" />
+                  <stop offset="100%" stopColor="#b89742" />
+                </linearGradient>
+              </defs>
+            </svg>
             <button
               className={`hub-onglet ${hubPage === "boutique" ? "actif" : ""}`}
               onClick={() => allerPageHub("boutique")}
               aria-current={hubPage === "boutique" ? "page" : undefined}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 8l1.5-4h11L19 8v12H5V8zm2.3-2l-.75 2h10.9l-.75-2H7.3zM7 10v8h10v-8H7z" />
+                <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
               </svg>
               <span>Boutique</span>
             </button>
@@ -8390,7 +8455,7 @@ export default function Emprise() {
               aria-current={hubPage === "ordres" ? "page" : undefined}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 2.2L6 6.4V11c0 4 2.5 7.5 6 8.9 3.5-1.4 6-4.9 6-8.9V6.4l-6-2.2z" />
+                <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
               </svg>
               <span>Ordres</span>
             </button>
