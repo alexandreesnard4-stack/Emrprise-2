@@ -4274,9 +4274,23 @@ const APP_STYLES = `
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
         /* Rotation du duel local : tout l'écran pivote vers le joueur dont c'est le tour.
            La transition donne le geste de tourner physiquement le plateau. */
-        .emprise-root.ecran-jeu { transition: transform 0.65s ease-in-out; }
-        .emprise-root.vue-tournee { transform: rotate(180deg); }
+        /* Rotation du duel local : INSTANTANEE, et c'est voulu. Transition comme
+           animation restaient gelees a leur point de depart dans certains
+           environnements (constate : la valeur calculee ne bougeait jamais, ecran
+           jamais tourne). L'etat est donc porte uniquement par le style inline pose
+           par React : aucun mecanisme temporel, aucun environnement ne peut le geler. */
         /* Trophées d'un joueur en partie Classée : une puce discrète dans l'étiquette. */
+        /* Puce de trophees en Classe : a gauche, a hauteur de la rangee d'Ordres. */
+        .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        .trophees-flottant {
+          position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 3px 8px 3px 6px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          color: var(--gold-bright); background: rgba(8,6,12,0.8);
+          border: 1px solid rgba(203,164,86,0.4);
+        }
+        .trophees-flottant svg { width: 12px; height: 12px; fill: var(--gold-bright); }
         .trophees-chip {
           margin-left: 7px; padding: 1px 7px 1px 8px; border-radius: 999px;
           font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
@@ -5555,6 +5569,8 @@ export default function Emprise() {
   // Vrai pour une partie née de l'appariement (mode Classé) : c'est ce qui décide de
   // jouer dans l'arène de sa ligue plutôt que sur le plateau nu.
   const [partieClassee, setPartieClassee] = useState(false);
+  // Trophees des deux camps, lus depuis le document de la partie classee.
+  const [trophesPartie, setTrophesPartie] = useState(null);
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
@@ -5578,6 +5594,7 @@ export default function Emprise() {
   const [attentePreMatch, setAttentePreMatch] = useState(0);
   const [tempsOrdres, setTempsOrdres] = useState(ORDRES_SECONDS);
   const ordresAutoRef = useRef(false); // l'echeance ne doit confirmer qu'une seule fois
+  const autoForfaitRef = useRef(false); // le forfait pour inactivite ne s'ecrit qu'une fois
   const preForfaitEcritRef = useRef(false);
   const forfaitEcritRef = useRef(false); // un seul constat de forfait par tour d'attente
   // Messages en direct pendant une partie en ligne.
@@ -5946,7 +5963,8 @@ export default function Emprise() {
   const campHaut = mode === "online" && onlineRole === "red" ? "blue" : "red";
   const campBas = campHaut === "red" ? "blue" : "red";
   // Rotation du duel local : l'écran entier pivote pendant le tour d'Écarlate.
-  const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play" && turn === "red" && !gameOver;
+  const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play"
+    && turn === "red" && !gameOver && !infoAbility && !confirmQuit;
 
   // Étiquette d'un camp — texte identique à l'ancienne version, plus les trophées en
   // Classé (0 pour l'instant : les profils ne sont pas encore synchronisés côté serveur,
@@ -5959,12 +5977,26 @@ export default function Emprise() {
         {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
         {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
         {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
-        {mode === "online" && partieClassee && (
-          // Mes trophées sont connus localement ; ceux de l'adversaire ne le seront
-          // qu'avec de vrais profils synchronisés — 0 d'ici là.
-          <span className="trophees-chip">{onlineRole === camp ? (stats.trophies || 0) : 0} <span className="trophees-icone" aria-hidden="true">🏆</span></span>
-        )}
+
       </div>
+    );
+  }
+
+  // Puce de trophees d'un camp en partie Classee, ancree a GAUCHE de sa rangee
+  // d'Ordres. Les valeurs viennent du document de la partie : les deux ecrans
+  // affichent les memes chiffres, quel que soit le camp qu'ils jouent.
+  function pucesTrophees(camp) {
+    if (mode !== "online" || !partieClassee) return null;
+    const valeur = trophesPartie && typeof trophesPartie[camp] === "number"
+      ? trophesPartie[camp]
+      : (onlineRole === camp ? (stats.trophies || 0) : 0);
+    return (
+      <span className="trophees-flottant" title="Trophées">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+        </svg>
+        {valeur}
+      </span>
     );
   }
 
@@ -6112,7 +6144,7 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null);
+    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null);
     setVainqueurForce(null); setFinMotif(null); setAttenteAdv(0); forfaitEcritRef.current = false;
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
@@ -6154,7 +6186,9 @@ export default function Emprise() {
   // Aucune donnée de jeu ici : Firestore fait foi, on ne stocke que de quoi s'y rebrancher.
   useEffect(() => {
     if (mode !== "online" || !onlineGameId || !onlineRole) return;
-    if (gameOver) { oublierPartieEnLigne(); return; }
+    // Pas de reprise en Classe : quitter un duel classe vaut abandon (le forfait s'en
+    // charge), le proposer a la reprise laissait croire qu'on pouvait revenir sans frais.
+    if (gameOver || partieClassee) { oublierPartieEnLigne(); return; }
     try {
       localStorage.setItem(CLE_PARTIE_EN_LIGNE, JSON.stringify({
         gameId: onlineGameId, role: onlineRole, classee: partieClassee, uid: myUid,
@@ -6640,6 +6674,7 @@ export default function Emprise() {
         setBoard(data.board.map(hydrateFromSave));
         setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
+        setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -6773,6 +6808,9 @@ export default function Emprise() {
           const monAncienMatch = lobby.matchedUid === myUid;
           tx.set(lobbyRef, {
             waitingUid: myUid, waitingAt: Date.now(),
+            // Mes trophees voyagent avec l'inscription : celui qui creera la partie les
+            // recopiera dans le document, et les DEUX ecrans afficheront les memes chiffres.
+            waitingTrophees: stats.trophies || 0,
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
           return null;
@@ -6798,6 +6836,12 @@ export default function Emprise() {
           turn: premier, firstPlayer: premier,
           gameOver: false,
           appariement: true, // partie née d'un appariement, pas d'un code partagé
+          // Trophees des deux camps au moment de l'appariement : la seule source que les
+          // deux ecrans peuvent lire a l'identique. Avant, chaque client affichait ses
+          // propres trophees pour lui et 0 pour l'autre, et les deux ecrans se
+          // contredisaient sur le meme joueur.
+          blueTrophees: lobby.waitingTrophees || 0,
+          redTrophees: stats.trophies || 0,
         });
         tx.set(lobbyRef, {
           waitingUid: null, waitingAt: null,
@@ -7754,7 +7798,7 @@ export default function Emprise() {
   function undo() {
     if (history.length === 0 || drag) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
-    if (mode === "bot" && !allowUndo) return; // "Repentir" désactivé pour cette partie
+    if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
     const stack = history.slice();
     let target = stack.pop();
     if (mode === "bot" && target.owner === "red" && stack.length) {
@@ -7778,9 +7822,15 @@ export default function Emprise() {
   // l'IA "Seigneur de Guerre" (la plus forte déjà codée), appliquée à sa propre
   // main plutôt qu'à celle du bot. Un second clic masque l'augure sans le perdre.
   function toggleHint() {
-    if (!allowHint || mode !== "bot" || gameOver || turn !== "blue") return;
+    if (!allowHint || gameOver || mode === "online") return;
+    if (mode === "bot" && turn !== "blue") return; // contre l'Écho, l'augure ne sert que le joueur
     if (hint) { setHint(null); setFanOpen(null); return; }
-    const move = botChooseMove(board, blueHand, redHand, "blue", "red", "expert", poisonedCells);
+    // En duel local, l'augure éclaire le joueur dont c'est le tour, quel que soit son camp.
+    const joueur = mode === "local" ? turn : "blue";
+    const adverse = joueur === "blue" ? "red" : "blue";
+    const mainJoueur = joueur === "blue" ? blueHand : redHand;
+    const mainAdverse = joueur === "blue" ? redHand : blueHand;
+    const move = botChooseMove(board, mainJoueur, mainAdverse, joueur, adverse, "expert", poisonedCells);
     if (move) {
       setHint({ cardIdx: move.cardIdx, cellIdx: move.cellIdx });
       // La carte suggérée peut être repliée dans un éventail fermé : on force son
@@ -7788,8 +7838,8 @@ export default function Emprise() {
       // suite, sans quoi le joueur ne verrait jamais l'indice tant qu'il n'a pas
       // lui-même tapé la vignette de son Ordre. Sans effet si le groupe n'a qu'une
       // carte (déjà affichée directement, pas de vignette pour elle).
-      const suggestedCard = blueHand[move.cardIdx];
-      if (suggestedCard) setFanOpen({ owner: "blue", ability: suggestedCard.ability });
+      const suggestedCard = mainJoueur[move.cardIdx];
+      if (suggestedCard) setFanOpen({ owner: joueur, ability: suggestedCard.ability });
     }
   }
 
@@ -8139,6 +8189,7 @@ export default function Emprise() {
 
   useEffect(() => {
     setTimeLeft(TURN_SECONDS);
+    autoForfaitRef.current = false;
   }, [turn, phase]);
 
   // Garde-fou d'inactivité en ligne : le minuteur de l'adversaire tourne sur SON appareil.
@@ -8216,12 +8267,26 @@ export default function Emprise() {
 
   useEffect(() => {
     if (!isHumanTurn || testMode) return; // pas de minuteur en mode test
-    if (timeLeft <= 0) {
-      // Temps écoulé : un coup aléatoire est joué automatiquement pour ce joueur
+    if (timeLeft <= 0 && mode !== "online") {
+      // Hors ligne : temps écoulé, un coup aléatoire est joué automatiquement — les
+      // joueurs sont dans la même pièce, la partie ne doit jamais rester figée.
       const hand = turn === "blue" ? blueHand : redHand;
       const opponentHand = turn === "blue" ? redHand : blueHand;
       const move = botChooseMove(board, hand, opponentHand, turn, turn === "blue" ? "red" : "blue", "debutant", poisonedCells);
       if (move) placeCardAt(turn, move.cardIdx, move.cellIdx);
+      return;
+    }
+    // En ligne, AUCUN coup automatique : ne pas jouer est un choix qui se paie. Le
+    // décompte continue sous zéro pendant l'équivalent d'un second tour, affiché au
+    // joueur ; au bout de 2 tours complets sans jouer, son propre client constate le
+    // forfait (transaction, seulement si c'est toujours son tour). Le garde-fou de
+    // l'adversaire reste en secours si cet appareil a disparu.
+    if (mode === "online" && timeLeft <= -TURN_SECONDS) {
+      if (!autoForfaitRef.current) {
+        autoForfaitRef.current = true;
+        deposerAbandon(onlineGameId, onlineRole, "forfait", (d) => d.turn === onlineRole)
+          .then((fait) => { if (!fait) autoForfaitRef.current = false; });
+      }
       return;
     }
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
@@ -8249,7 +8314,10 @@ export default function Emprise() {
 
 
   return (
-    <div className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${vueTournee ? "vue-tournee" : ""}`}>
+    <div
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${vueTournee ? "vue-tournee" : ""}`}
+      style={vueTournee ? { transform: "rotate(180deg)" } : undefined}
+    >
       <style>{APP_STYLES}</style>
 
       {phase === "landing" && (
@@ -9720,6 +9788,20 @@ export default function Emprise() {
           <div className="sub">{mode === "local" ? "Réglages du duel à deux sur cet appareil." : "Réglages valables pour cette partie contre l'Écho uniquement."}</div>
           {mode === "local" ? (
             <div className="assist-grid">
+              <label className={`assist-option ${allowUndo ? "checked" : ""}`}>
+                <input type="checkbox" checked={allowUndo} onChange={(e) => setAllowUndo(e.target.checked)} />
+                <div className="assist-text">
+                  <div className="name">Repentir</div>
+                  <div className="desc">Autorise à annuler le dernier coup joué (bouton "Annuler").</div>
+                </div>
+              </label>
+              <label className={`assist-option ${allowHint ? "checked" : ""}`}>
+                <input type="checkbox" checked={allowHint} onChange={(e) => setAllowHint(e.target.checked)} />
+                <div className="assist-text">
+                  <div className="name">Augure</div>
+                  <div className="desc">Un bouton révèle le meilleur coup du joueur dont c'est le tour.</div>
+                </div>
+              </label>
               <label className={`assist-option ${rotationLocale ? "checked" : ""}`}>
                 <input type="checkbox" checked={rotationLocale} onChange={toggleRotationLocale} />
                 <div className="assist-text">
@@ -9813,6 +9895,8 @@ export default function Emprise() {
                 ? (attenteAdv > TURN_SECONDS
                   ? `L'adversaire ne répond plus — victoire dans ${Math.max(1, FORFAIT_APRES_S - attenteAdv)}s...`
                   : "En attente de l'adversaire...")
+              : mode === "online" && turn === onlineRole && timeLeft <= 0
+                ? `Temps écoulé : jouez un coup, forfait dans ${Math.max(1, TURN_SECONDS + timeLeft)}s...`
               : drag ? "Relâchez sur une case en surbrillance pour poser la carte."
               : selected ? "Cliquez sur une case du plateau pour poser la carte."
               : mode === "local" ? `Au camp ${turn === "blue" ? "Azur" : "Écarlate"} de jouer.`
@@ -9820,7 +9904,8 @@ export default function Emprise() {
           </div>
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
-          <div>
+          <div className="zone-main">
+            {pucesTrophees(campHaut)}
             {labelCamp(campHaut)}
             {mainCamp(campHaut)}
           </div>
@@ -10015,6 +10100,7 @@ export default function Emprise() {
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           <div>
+            {pucesTrophees(campBas)}
             {mainCamp(campBas)}
             {labelCamp(campBas)}
           </div>
@@ -10085,14 +10171,14 @@ export default function Emprise() {
           )}
 
           <div className="action-row">
-            {mode !== "online" && (mode !== "bot" || allowUndo) && (
+            {mode !== "online" && (testMode || allowUndo) && (
               <button className="reset-btn undo-btn" onClick={undo} disabled={history.length === 0 || !!drag}>
                 <svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
                 Annuler
               </button>
             )}
-            {mode === "bot" && allowHint && (
-              <button className="reset-btn hint-btn" onClick={toggleHint} disabled={gameOver || turn !== "blue"}>
+            {(mode === "bot" || mode === "local") && allowHint && (
+              <button className="reset-btn hint-btn" onClick={toggleHint} disabled={gameOver || (mode === "bot" && turn !== "blue")}>
                 🔮 {hint ? "Masquer l'augure" : "Augure"}
               </button>
             )}
