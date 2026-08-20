@@ -764,7 +764,10 @@ function lireHistorique() {
   try {
     const brut = localStorage.getItem("emprise-historique");
     const liste = brut ? JSON.parse(brut) : [];
-    return Array.isArray(liste) ? liste.slice(0, HISTORIQUE_MAX) : [];
+    if (!Array.isArray(liste)) return [];
+    // Classé uniquement pour l'instant. Le filtre sert aussi de nettoyage : les entrees
+    // enregistrees avant cette regle, qui n'ont pas le marqueur, sont ecartees.
+    return liste.filter((e) => e && e.classee).slice(0, HISTORIQUE_MAX);
   } catch (e) { return []; }
 }
 function ecrireHistorique(entree) {
@@ -5864,27 +5867,17 @@ export default function Emprise() {
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
       recordGameStats(winner, orderKeys, trophyGain).then(setStats);
-      // Historique : une ligne par partie terminée, hors bac à sable.
-      if (!testMode) {
-        const modeLabel = mode === "online"
-          ? (tournoiOnlineId ? "Tournoi en ligne" : partieClassee ? "Classé" : "Entre amis")
-          : mode === "local"
-          ? (confluenceActive ? "Confluence (à 2)" : "2 Commandants")
-          : tourney.active
-          ? "Tournoi (Échos)"
-          : storyChapterKey
-          ? "Mode Histoire"
-          : confluenceActive
-          ? "Confluence (Écho)"
-          : "Contre un Écho";
+      // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
+      // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
+      // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
+      if (partieClassee && onlineRole && !testMode) {
         setHistorique(ecrireHistorique({
           t: Date.now(),
-          modeLabel,
+          classee: true,
           sb: blueScore, sr: redScore,
           vainqueur: winner,
-          // Mon camp : bleu partout où un humain seul joue bleu ; en ligne, mon rôle ;
-          // en duel local, personne — les deux joueurs sont humains.
-          camp: mode === "online" ? onlineRole : mode === "local" ? null : "blue",
+          camp: onlineRole,
+          trophees: trophyGain,
           motif: finMotif || null,
         }));
       }
@@ -8100,8 +8093,8 @@ export default function Emprise() {
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
-              aria-label="Dernières parties"
-              title="Dernières parties"
+              aria-label="Dernières parties classées"
+              title="Dernières parties classées"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.2l3.5 2.1-1 1.7L11 13.5V7h2z" />
@@ -8277,11 +8270,11 @@ export default function Emprise() {
           {activeModal === "historique" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="info-panel-title">Dernières parties</div>
+                <div className="info-panel-title">Dernières parties classées</div>
                 {historique.length === 0 && (
                   <div className="histo-vide" role="status">
-                    <p>Aucune partie terminée pour le moment.</p>
-                    <p className="histo-vide-sous">Vos 3 dernières parties apparaîtront ici.</p>
+                    <p>Aucune partie classée terminée pour le moment.</p>
+                    <p className="histo-vide-sous">Vos 3 dernières parties classées apparaîtront ici. Les autres modes ne sont pas comptés.</p>
                   </div>
                 )}
                 {historique.map((h, i) => {
@@ -8297,7 +8290,13 @@ export default function Emprise() {
                         {h.motif === "forfait" && <span className="histo-motif"> (forfait)</span>}
                       </div>
                       <div className="histo-detail">
-                        <span className="histo-mode">{h.modeLabel}</span>
+                        {/* Toutes les lignes etant classees, le nom du mode n'apprendrait
+                            rien : la variation de trophees, elle, est l'enjeu du mode. */}
+                        <span className="histo-mode">
+                          {typeof h.trophees === "number" && h.trophees !== 0
+                            ? `${h.trophees > 0 ? "+" : ""}${h.trophees} trophées`
+                            : "Classé"}
+                        </span>
                         <span className="histo-score"><b className="histo-sb">{h.sb}</b> &middot; <b className="histo-sr">{h.sr}</b></span>
                         <span className="histo-quand">{ilYa(h.t)}</span>
                       </div>
