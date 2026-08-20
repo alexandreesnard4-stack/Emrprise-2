@@ -715,6 +715,35 @@ const STORY_BRAISES_COTES = [
   { cote: "d", bas: 88, taille: 6, duree: "5.8s", retard: "2s" },
 ];
 
+// ---------- Historique des parties ----------
+// Les 3 dernières parties terminées, la plus récente en premier. Volontairement
+// minuscule (3 entrées, quelques champs) : un vrai journal viendra avec les profils.
+const HISTORIQUE_MAX = 3;
+function lireHistorique() {
+  try {
+    const brut = localStorage.getItem("emprise-historique");
+    const liste = brut ? JSON.parse(brut) : [];
+    return Array.isArray(liste) ? liste.slice(0, HISTORIQUE_MAX) : [];
+  } catch (e) { return []; }
+}
+function ecrireHistorique(entree) {
+  const liste = [entree, ...lireHistorique()].slice(0, HISTORIQUE_MAX);
+  try { localStorage.setItem("emprise-historique", JSON.stringify(liste)); } catch (e) { /* non persisté */ }
+  return liste;
+}
+// "il y a 5 min" plutôt qu'une date brute : sur 3 parties récentes, la fraîcheur
+// relative se lit mieux qu'un horodatage.
+function ilYa(t) {
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "à l'instant";
+  const min = Math.floor(s / 60);
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const j = Math.floor(h / 24);
+  return j === 1 ? "hier" : `il y a ${j} jours`;
+}
+
 let memoryStats = null; // repli en mémoire si aucun stockage durable n'est disponible
 
 async function readStatsRaw() {
@@ -2202,6 +2231,31 @@ const APP_STYLES = `
         .hub-trophees-nombre {
           font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
         }
+        .hub-haut-boutons { display: flex; gap: 8px; flex: none; }
+        .histo-vide { text-align: center; padding: 14px 6px 6px; color: var(--muted); font-size: 12.5px; }
+        .histo-vide p { margin: 0 0 4px; }
+        .histo-vide-sous { font-size: 11px; }
+        .histo-ligne {
+          width: 100%; box-sizing: border-box; text-align: left;
+          padding: 9px 11px; border-radius: 10px; margin-bottom: 7px;
+          background: rgba(8,6,12,0.55); border: 1px solid rgba(203,164,86,0.16);
+        }
+        .histo-resultat {
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
+          letter-spacing: 0.08em; color: var(--bone);
+        }
+        .histo-resultat.gagnee { color: var(--gold-bright); }
+        .histo-resultat.perdue { color: var(--red-bright); }
+        .histo-motif { font-family: 'Spectral', Georgia, serif; font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+        .histo-detail {
+          display: flex; align-items: baseline; gap: 10px; margin-top: 3px;
+          font-size: 11px; color: var(--muted);
+        }
+        .histo-mode { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .histo-score b { font-family: 'Cinzel', serif; font-size: 12px; }
+        .histo-sb { color: var(--blue-bright); }
+        .histo-sr { color: var(--red-bright); }
+        .histo-quand { flex: none; }
         .hub-rouage {
           width: 36px; height: 36px; flex: none;
           display: flex; align-items: center; justify-content: center;
@@ -5447,6 +5501,7 @@ export default function Emprise() {
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
+  const [historique, setHistorique] = useState(() => lireHistorique());
   const [hubSens, setHubSens] = useState("droite");
   const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
   function allerPageHub(page) {
@@ -5744,6 +5799,30 @@ export default function Emprise() {
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
       recordGameStats(winner, orderKeys, trophyGain).then(setStats);
+      // Historique : une ligne par partie terminée, hors bac à sable.
+      if (!testMode) {
+        const modeLabel = mode === "online"
+          ? (tournoiOnlineId ? "Tournoi en ligne" : partieClassee ? "Classé" : "Entre amis")
+          : mode === "local"
+          ? (confluenceActive ? "Confluence (à 2)" : "2 Commandants")
+          : tourney.active
+          ? "Tournoi (Échos)"
+          : storyChapterKey
+          ? "Mode Histoire"
+          : confluenceActive
+          ? "Confluence (Écho)"
+          : "Contre un Écho";
+        setHistorique(ecrireHistorique({
+          t: Date.now(),
+          modeLabel,
+          sb: blueScore, sr: redScore,
+          vainqueur: winner,
+          // Mon camp : bleu partout où un humain seul joue bleu ; en ligne, mon rôle ;
+          // en duel local, personne — les deux joueurs sont humains.
+          camp: mode === "online" ? onlineRole : mode === "local" ? null : "blue",
+          motif: finMotif || null,
+        }));
+      }
       // Mode Histoire : une victoire fait avancer la progression du chapitre en cours.
       // Si c'était la dernière partie (Seigneur de Guerre), le chapitre est marqué
       // terminé et le Héraut débloqué, plutôt qu'une simple victoire de plus.
@@ -7915,6 +7994,17 @@ export default function Emprise() {
                 <span className="hub-trophees-nombre">0</span>
               </span>
             </div>
+            <span className="hub-haut-boutons">
+            <button
+              className="hub-rouage hub-horloge"
+              onClick={() => setActiveModal("historique")}
+              aria-label="Dernières parties"
+              title="Dernières parties"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.2l3.5 2.1-1 1.7L11 13.5V7h2z" />
+              </svg>
+            </button>
             <button
               className="hub-rouage"
               onClick={() => setActiveModal("settings")}
@@ -7926,6 +8016,7 @@ export default function Emprise() {
                 <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
               </svg>
             </button>
+            </span>
           </header>
 
           {/* ---------- Pages du hub ---------- */}
@@ -8080,6 +8171,41 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+
+          {activeModal === "historique" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Dernières parties</div>
+                {historique.length === 0 && (
+                  <div className="histo-vide" role="status">
+                    <p>Aucune partie terminée pour le moment.</p>
+                    <p className="histo-vide-sous">Vos 3 dernières parties apparaîtront ici.</p>
+                  </div>
+                )}
+                {historique.map((h, i) => {
+                  const resultat = h.camp
+                    ? (h.vainqueur === h.camp ? "Victoire" : "Défaite")
+                    : (h.vainqueur === "blue" ? "Azur l'emporte" : "Écarlate l'emporte");
+                  const gagnee = h.camp ? h.vainqueur === h.camp : null;
+                  return (
+                    <div key={h.t + "-" + i} className="histo-ligne">
+                      <div className={`histo-resultat ${gagnee === true ? "gagnee" : gagnee === false ? "perdue" : ""}`}>
+                        {resultat}
+                        {h.motif === "abandon" && <span className="histo-motif"> (abandon)</span>}
+                        {h.motif === "forfait" && <span className="histo-motif"> (forfait)</span>}
+                      </div>
+                      <div className="histo-detail">
+                        <span className="histo-mode">{h.modeLabel}</span>
+                        <span className="histo-score"><b className="histo-sb">{h.sb}</b> &middot; <b className="histo-sr">{h.sr}</b></span>
+                        <span className="histo-quand">{ilYa(h.t)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
 
           {activeModal === "settings" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
