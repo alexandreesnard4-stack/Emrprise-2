@@ -2171,6 +2171,137 @@ const APP_STYLES = `
           margin: -14px 0 20px; background: rgba(203,164,86,0.08);
         }
 
+        /* ==================== HUB D'ACCUEIL ====================
+           Structure de hub mobile (bandeau haut, pages, navigation basse) posee
+           PAR-DESSUS l'ecran d'accueil existant : le fond, le heros et la sequence
+           d'entree (intro-eN) sont conserves tels quels. */
+        .landing.hub {
+          justify-content: flex-start; text-align: center;
+          padding: 0; gap: 0;
+        }
+        .hub-haut {
+          width: 100%; box-sizing: border-box;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+          background: linear-gradient(180deg, rgba(10,8,15,0.92), rgba(10,8,15,0.55) 75%, transparent);
+          flex: none;
+        }
+        .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .hub-pseudo {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.12em; color: var(--bone);
+          text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .hub-trophees {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 3px 9px 3px 6px; border-radius: 999px;
+          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+        }
+        .hub-icone-coupe { width: 14px; height: 14px; fill: var(--gold-bright); }
+        .hub-trophees-nombre {
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
+        }
+        .hub-rouage {
+          width: 36px; height: 36px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
+          border-radius: 10px; cursor: pointer; padding: 0;
+          transition: border-color .2s, transform .35s ease;
+        }
+        .hub-rouage svg { width: 19px; height: 19px; fill: rgba(203,164,86,0.75); }
+        .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
+        .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
+        .hub-pages {
+          flex: 1; width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          display: flex; flex-direction: column; align-items: center;
+        }
+        .hub-page {
+          width: 100%; max-width: 540px; box-sizing: border-box;
+          padding: 8px 18px 18px;
+          display: flex; flex-direction: column; align-items: center; gap: 12px;
+          animation: hub-page-entre 0.28s ease-out both;
+        }
+        /* Glissement d'entree : transform et opacity uniquement, en une seule passe. */
+        .hub-glisse-droite { --hub-depart: 26px; }
+        .hub-glisse-gauche { --hub-depart: -26px; }
+        @keyframes hub-page-entre {
+          from { opacity: 0; transform: translateX(var(--hub-depart, 26px)); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .hub-page-titre {
+          font-family: 'Cinzel', serif; font-size: 17px; letter-spacing: 0.14em;
+          text-transform: uppercase; color: var(--gold-bright); margin: 6px 0 0;
+        }
+        .hub-page-sous { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
+        .hub-boutique-vide {
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          margin: auto 0; padding: 46px 20px;
+        }
+        .hub-boutique-icone { width: 44px; height: 44px; fill: rgba(203,164,86,0.45); }
+        .hub-boutique-titre {
+          font-family: 'Cinzel', serif; font-size: 18px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--gold-bright); margin: 4px 0 0;
+        }
+        .hub-boutique-texte {
+          font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.2em;
+          text-transform: uppercase; color: var(--bone); margin: 0;
+        }
+        .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
+        .hub-ordres-grille { margin-top: 4px; }
+        .hub-ordre-fiche { cursor: default; }
+        .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
+        .hub-nav {
+          width: 100%; box-sizing: border-box; flex: none;
+          display: flex; align-items: flex-end; justify-content: space-around;
+          padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+          background: linear-gradient(180deg, rgba(14,11,20,0.65), rgba(10,8,15,0.97) 40%);
+          border-top: 1px solid rgba(203,164,86,0.22);
+        }
+        .hub-onglet {
+          flex: 1; max-width: 150px;
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
+          padding: 8px 6px; background: transparent; border: none; cursor: pointer;
+          color: var(--muted); border-radius: 12px;
+          transition: color .2s, transform .2s;
+        }
+        .hub-onglet svg { width: 21px; height: 21px; fill: currentColor; }
+        .hub-onglet span {
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        .hub-onglet.actif { color: var(--gold-bright); }
+        /* Onglet central : plus grand et legerement sureleve, comme l'onglet
+           de bataille de Clash Royale, mais dans la sobriete du jeu. */
+        .hub-onglet-central {
+          transform: translateY(-9px);
+          background: linear-gradient(180deg, #241d31, #171221);
+          border: 1px solid rgba(203,164,86,0.4);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+          padding: 11px 10px 9px;
+        }
+        .hub-onglet-central svg { width: 26px; height: 26px; }
+        .hub-onglet-central span { font-size: 11px; }
+        .hub-onglet-central.actif {
+          border-color: var(--gold-bright);
+          background: linear-gradient(180deg, #2b2340, #1a1426);
+        }
+        .hub-onglet-central:active { transform: translateY(-7px) scale(0.97); }
+        /* La sequence d'entree existante revele aussi le hub : memes etapes que
+           l'ancien bouton Nouvelle partie. */
+        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
+        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
+        .landing.intro-e0 .hub-pages, .landing.intro-e1 .hub-pages { opacity: 0; }
+        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
+        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
+        .landing.intro-e2 .hub-pages, .landing.intro-e3 .hub-pages {
+          opacity: 1; transition: opacity .55s ease;
+        }
+        .landing.intro-e2 .hub-pages { transition-delay: .48s; }
+        .landing.intro-e2 .hub-haut { transition-delay: .6s; }
+        .landing.intro-e2 .hub-nav { transition-delay: .6s; }
+
         .landing-cta {
           font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 14px; text-transform: uppercase;
           color: #2a2413; background: linear-gradient(180deg, #cba456, #8f7238); border: none;
@@ -5249,7 +5380,17 @@ export default function Emprise() {
       return next;
     });
   }
-  const [activeModal, setActiveModal] = useState(null); // null | "stats" | "rules" | "story" | "settings" — un seul panneau ouvert à la fois
+  const [activeModal, setActiveModal] = useState(null);
+  // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
+  // changement d'onglet, pour orienter le glissement d'entrée de la page.
+  const [hubPage, setHubPage] = useState("jouer");
+  const [hubSens, setHubSens] = useState("droite");
+  const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
+  function allerPageHub(page) {
+    if (page === hubPage) return;
+    setHubSens(HUB_ORDRE_PAGES.indexOf(page) > HUB_ORDRE_PAGES.indexOf(hubPage) ? "droite" : "gauche");
+    setHubPage(page);
+  } // null | "stats" | "rules" | "story" | "settings" — un seul panneau ouvert à la fois
   // ---------- Séquence d'entrée de l'écran d'accueil ----------
   // Trois temps : noir total, puis l'illustration des Abysses monte du noir en fondu,
   // puis le titre / sous-titre / bouton glissent vers le haut. Tout est porté par des
@@ -5598,6 +5739,7 @@ export default function Emprise() {
   function reset() {
     clearSavedGame();
     oublierPartieEnLigne();
+    setHubPage("jouer"); // quitter une partie ramene toujours a la page Jouer du hub
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
@@ -7693,47 +7835,145 @@ export default function Emprise() {
       <style>{APP_STYLES}</style>
 
       {phase === "landing" && (
-        <div className={`landing intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
+        <div className={`landing hub intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
               apparaître l'illustration. Retiré du DOM une fois l'intro finie. */}
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
           <img className="landing-hero" src={ORDERS.find((l) => l.key === "devoreuse")?.portrait} alt="" />
 
-          <button
-            className="landing-gear"
-            onClick={() => setActiveModal("settings")}
-            aria-label="Paramètres"
-            title="Paramètres"
-          >⚙</button>
-
-          <div className="landing-emblem">
-            <span className="landing-line-single" />
-          </div>
-          <h1 className="landing-title">EMPRISE</h1>
-          <p className="landing-subtitle">Un duel de cartes stratégique</p>
-          <div className="league-badge">
-            {HEROES_LEAGUES_ENABLED ? `🏆 ${getLeague(stats.trophies || 0).name} · ${stats.trophies || 0} trophées` : "Le multijoueur arrive prochainement"}
-          </div>
-
-          <button className="landing-cta" onClick={startNewGameAnimated}>⚔ Nouvelle partie</button>
-          {repriseEnLigne && (
-            <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
-              Reprendre la partie en ligne
+          {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
+          <header className="hub-haut">
+            <div className="hub-joueur">
+              {/* TODO : remplacer le pseudo en dur par un vrai profil joueur. */}
+              <span className="hub-pseudo">CARNAGE</span>
+              <span className="hub-trophees" title="Trophées">
+                <svg className="hub-icone-coupe" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+                </svg>
+                {/* TODO : brancher sur stats.trophies quand les profils seront synchronisés. */}
+                <span className="hub-trophees-nombre">0</span>
+              </span>
+            </div>
+            <button
+              className="hub-rouage"
+              onClick={() => setActiveModal("settings")}
+              aria-label="Réglages"
+              title="Réglages"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
+                <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
+              </svg>
             </button>
-          )}
-          {!repriseEnLigne && repriseTournoi && (
-            <button className="landing-link reprise-en-ligne" onClick={reprendreTournoiEnLigne}>
-              Reprendre le tournoi en ligne
+          </header>
+
+          {/* ---------- Pages du hub ---------- */}
+          <main className="hub-pages">
+            {hubPage === "boutique" && (
+              <section key="boutique" className={`hub-page hub-glisse-${hubSens}`} aria-label="Boutique">
+                <div className="hub-boutique-vide" role="status">
+                  <svg className="hub-boutique-icone" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 8l1.5-4h11L19 8v12H5V8zm2.3-2l-.75 2h10.9l-.75-2H7.3zM7 10v8h10v-8H7zm3 2h4v2h-4v-2z" />
+                  </svg>
+                  <h2 className="hub-boutique-titre">Boutique</h2>
+                  <p className="hub-boutique-texte">Prochainement.</p>
+                  <p className="hub-boutique-sous">Les marchands de la Faille préparent leurs étals.</p>
+                </div>
+              </section>
+            )}
+            {hubPage === "jouer" && (
+              <section key="jouer" className={`hub-page hub-glisse-${hubSens}`} aria-label="Jouer">
+                <div className="landing-emblem"><span className="landing-line-single" /></div>
+                <h1 className="landing-title">EMPRISE</h1>
+                <p className="landing-subtitle">Un duel de cartes stratégique</p>
+                <div className="league-badge">Le multijoueur arrive prochainement</div>
+                <button className="landing-cta" onClick={startNewGameAnimated}>Nouvelle partie</button>
+                {repriseEnLigne && (
+                  <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
+                    Reprendre la partie en ligne
+                  </button>
+                )}
+                {!repriseEnLigne && repriseTournoi && (
+                  <button className="landing-link reprise-en-ligne" onClick={reprendreTournoiEnLigne}>
+                    Reprendre le tournoi en ligne
+                  </button>
+                )}
+                {hasSavedGame && (
+                  <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
+                )}
+              </section>
+            )}
+            {hubPage === "ordres" && (
+              <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
+                <h2 className="hub-page-titre">Les Ordres</h2>
+                <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
+                <div className="order-grid hub-ordres-grille">
+                  {ORDERS.map((order) => {
+                    const bientot = !isOrderAvailable(order);
+                    return (
+                      <div key={order.key} className={`order-option hub-ordre-fiche ${bientot ? "order-option-locked" : ""}`}>
+                        {order.portrait ? (
+                          bientot ? (
+                            <ComingSoonThumb order={order} />
+                          ) : (
+                            <div className="order-thumb-wrap">
+                              <img className="thumb" src={order.portrait} alt={order.name} />
+                            </div>
+                          )
+                        ) : (
+                          <div className="icon-frame">{order.icon}</div>
+                        )}
+                        <div className="info">
+                          <span className="name">{order.name}</span>
+                          <span className="desc">{bientot ? <CountdownLabel order={order} /> : order.desc}</span>
+                        </div>
+                        {bientot && <span className="coming-soon-badge">Bientôt disponible</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+          </main>
+
+          {/* ---------- Navigation basse : Boutique, Jouer (central), Ordres ---------- */}
+          <nav className="hub-nav" aria-label="Navigation du hub">
+            <button
+              className={`hub-onglet ${hubPage === "boutique" ? "actif" : ""}`}
+              onClick={() => allerPageHub("boutique")}
+              aria-current={hubPage === "boutique" ? "page" : undefined}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 8l1.5-4h11L19 8v12H5V8zm2.3-2l-.75 2h10.9l-.75-2H7.3zM7 10v8h10v-8H7z" />
+              </svg>
+              <span>Boutique</span>
             </button>
-          )}
-          {hasSavedGame && (
-            <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
-          )}
+            <button
+              className={`hub-onglet hub-onglet-central ${hubPage === "jouer" ? "actif" : ""}`}
+              onClick={() => allerPageHub("jouer")}
+              aria-current={hubPage === "jouer" ? "page" : undefined}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
+              </svg>
+              <span>Jouer</span>
+            </button>
+            <button
+              className={`hub-onglet ${hubPage === "ordres" ? "actif" : ""}`}
+              onClick={() => allerPageHub("ordres")}
+              aria-current={hubPage === "ordres" ? "page" : undefined}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 2.2L6 6.4V11c0 4 2.5 7.5 6 8.9 3.5-1.4 6-4.9 6-8.9V6.4l-6-2.2z" />
+              </svg>
+              <span>Ordres</span>
+            </button>
+          </nav>
 
           {activeModal === "settings" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="info-panel-title">Paramètres</div>
+                <div className="info-panel-title">Réglages</div>
                 <div className="settings-row" role="button" tabIndex={0} onClick={() => { setActiveModal(null); startTutorial(); }} onKeyDown={KEY_ACTIVATE(() => { setActiveModal(null); startTutorial(); })}>
                   <div className="settings-texte">
                     <div className="settings-nom">Tutoriel</div>
