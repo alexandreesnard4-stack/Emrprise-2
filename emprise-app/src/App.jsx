@@ -151,7 +151,10 @@ function RecitsAttente({ actif }) {
   const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
   useEffect(() => {
     if (!actif) return;
-    const t = setInterval(() => setI((n) => (n + 1) % RECITS_ATTENTE.length), 7000);
+    // 13 secondes : le temps de lire une phrase de trois lignes sans se sentir presse,
+    // et de la relire si le regard etait ailleurs. A 7 secondes, le texte partait avant
+    // d'avoir ete lu.
+    const t = setInterval(() => setI((n) => (n + 1) % RECITS_ATTENTE.length), 13000);
     return () => clearInterval(t);
   }, [actif]);
   if (!actif) return null;
@@ -4170,7 +4173,7 @@ const APP_STYLES = `
         }
         .recit-texte {
           margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--bone);
-          animation: recit-parait 0.55s ease-out both;
+          animation: recit-parait 0.7s ease-out both;
         }
         @keyframes recit-parait {
           from { opacity: 0; transform: translateY(6px); }
