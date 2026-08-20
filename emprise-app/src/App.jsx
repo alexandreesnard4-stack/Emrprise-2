@@ -2213,16 +2213,25 @@ const APP_STYLES = `
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
         .hub-pages {
-          flex: 1; width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden;
-          -webkit-overflow-scrolling: touch;
+          flex: 1; width: 100%; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; align-items: center;
         }
+        /* Filet de securite sur les ecrans tres bas : mieux vaut un defilement
+           que du contenu inatteignable. */
+        @media (max-height: 600px) {
+          .hub-pages { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        }
         .hub-page {
-          width: 100%; max-width: 540px; box-sizing: border-box;
-          padding: 8px 18px 18px;
-          display: flex; flex-direction: column; align-items: center; gap: 12px;
+          width: 100%; max-width: 540px; box-sizing: border-box; height: 100%;
+          padding: 4px 18px 10px;
+          display: flex; flex-direction: column; align-items: center; gap: 9px;
           animation: hub-page-entre 0.28s ease-out both;
         }
+        /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
+        .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
+        .landing.hub .landing-emblem { margin: 0; }
+        .landing.hub .landing-subtitle { margin: 0; }
+        .landing.hub .league-badge { margin: 0 0 2px; }
         /* Glissement d'entree : transform et opacity uniquement, en une seule passe. */
         .hub-glisse-droite { --hub-depart: 26px; }
         .hub-glisse-gauche { --hub-depart: -26px; }
@@ -2250,9 +2259,9 @@ const APP_STYLES = `
         }
         .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
         .hub-jouer-classe {
-          width: 100%; max-width: 340px; box-sizing: border-box;
-          display: flex; flex-direction: column; align-items: center; gap: 2px;
-          margin-top: 6px; padding: 14px 18px 12px;
+          width: 100%; max-width: 290px; box-sizing: border-box;
+          display: flex; flex-direction: column; align-items: center; gap: 1px;
+          margin-top: 4px; padding: 10px 16px 8px;
           background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
           border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
           box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
@@ -2260,16 +2269,50 @@ const APP_STYLES = `
         }
         .hub-jouer-classe:hover { filter: brightness(1.06); }
         .hub-jouer-classe:active { transform: scale(0.98); }
-        .hub-jouer-classe svg { width: 22px; height: 22px; fill: #241d10; }
+        .hub-jouer-classe svg { width: 18px; height: 18px; fill: #241d10; }
         .hub-jouer-classe-titre {
-          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 800;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 800;
           letter-spacing: 0.2em; text-transform: uppercase; color: #241d10;
         }
         .hub-jouer-classe-sous {
           font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
         }
-        .hub-jouer-modes { margin-top: 8px; }
-        .hub-ordres-grille { margin-top: 4px; }
+        .hub-modes-grille {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+          width: 100%; max-width: 400px; margin-top: 4px;
+        }
+        .hub-mode-tuile {
+          display: flex; align-items: center; gap: 9px;
+          padding: 8px 10px; min-height: 46px; box-sizing: border-box;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.2);
+          border-radius: 11px; cursor: pointer; color: var(--bone); text-align: left;
+          transition: border-color .2s, transform .15s;
+        }
+        .hub-mode-tuile:hover { border-color: var(--gold); }
+        .hub-mode-tuile:active { transform: scale(0.97); }
+        .hub-mode-tuile img {
+          width: 30px; height: 30px; border-radius: 8px; object-fit: cover; flex: none;
+          border: 1px solid rgba(203,164,86,0.3);
+        }
+        .hub-mode-tuile span {
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.04em; line-height: 1.3;
+        }
+        .hub-mode-tuile.test { opacity: 0.72; }
+        /* Carrousel des Ordres : defilement horizontal aimante, hauteur contenue. */
+        .hub-ordres-carrousel {
+          display: flex; gap: 12px; width: 100%; min-height: 0; flex: 1;
+          overflow-x: auto; overflow-y: hidden;
+          scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+          padding: 6px 20% 10px; box-sizing: border-box; align-items: center;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche {
+          flex: 0 0 62%; max-width: 230px; scroll-snap-align: center;
+        }
+        .hub-carrousel-indice {
+          font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+          color: var(--muted); flex: none; padding-bottom: 2px;
+        }
         .hub-ordre-fiche { cursor: default; }
         .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
         .hub-nav {
@@ -7930,70 +7973,42 @@ export default function Emprise() {
                   <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
                 </button>
 
-                <div className="diff-grid hub-jouer-modes">
-                  <div className="diff-section-label">Contre un Écho</div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("bot")} onKeyDown={KEY_ACTIVATE(() => chooseMode("bot"))}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Contre un Écho</div>
-                      <div className="desc">Solo, 4 niveaux de difficulté</div>
-                    </div>
-                  </div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("chapters")} onKeyDown={KEY_ACTIVATE(() => setPhase("chapters"))}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Mode Histoire</div>
-                      <div className="desc">8 chapitres solo, un par Ordre, battez le Seigneur de Guerre pour débloquer son Héraut</div>
-                    </div>
-                  </div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceBot} onKeyDown={KEY_ACTIVATE(chooseConfluenceBot)}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Confluence (contre un Écho)</div>
-                      <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même main pour les deux</div>
-                    </div>
-                  </div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-menu")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-menu"))}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Tournoi (8 Commandants)</div>
-                      <div className="desc">Contre des Échos, difficulté croissante à chaque tour. Une victoire = un Ordre banni pour le suivant</div>
-                    </div>
-                  </div>
-
-                  <div className="diff-section-label">Contre un Commandant</div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("local")} onKeyDown={KEY_ACTIVATE(() => chooseMode("local"))}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">2 Commandants (même appareil)</div>
-                      <div className="desc">Chacun son tour, sur le même téléphone</div>
-                    </div>
-                  </div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceLocal} onKeyDown={KEY_ACTIVATE(chooseConfluenceLocal)}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Confluence (2 Commandants)</div>
-                      <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone, même main pour les deux</div>
-                    </div>
-                  </div>
-
-                  <div className="diff-section-label">En ligne</div>
-                  <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Jouer avec un ami</div>
-                      <div className="desc">Chacun sur son appareil, à distance, avec un code de partie à partager</div>
-                    </div>
-                  </div>
-
-                  <div className="diff-section-label">Bac à sable</div>
-                  <div className="diff-option test-option" role="button" tabIndex={0} onClick={chooseTestMode} onKeyDown={KEY_ACTIVATE(chooseTestMode)}>
-                    <img className="diff-thumb" src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-                    <div className="diff-text">
-                      <div className="name">Mode test</div>
-                      <div className="desc">Bac à sable : les 2 camps, tous les Ordres, sans minuteur, capacités de base</div>
-                    </div>
-                  </div>
+                {/* Tuiles compactes : tout tient a l'ecran, aucun defilement vertical.
+                    La description complete de chaque mode reste portee par aria-label
+                    et title ; les ecrans suivants (difficulte, draft...) la detaillent. */}
+                <div className="hub-modes-grille">
+                  <button className="hub-mode-tuile" onClick={() => chooseMode("bot")} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
+                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
+                    <span>Contre un Écho</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => setPhase("chapters")} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>Mode Histoire</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={chooseConfluenceBot} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
+                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
+                    <span>Confluence (Écho)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => setPhase("tourney-menu")} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
+                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
+                    <span>Tournoi</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => chooseMode("local")} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>2 Commandants</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={chooseConfluenceLocal} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Confluence (à 2)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Jouer avec un ami</span>
+                  </button>
+                  <button className="hub-mode-tuile test" onClick={chooseTestMode} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
+                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
+                    <span>Mode test</span>
+                  </button>
                 </div>
               </section>
             )}
@@ -8001,7 +8016,8 @@ export default function Emprise() {
               <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
                 <h2 className="hub-page-titre">Les Ordres</h2>
                 <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
-                <div className="order-grid hub-ordres-grille">
+                {/* Carrousel : le seul geste du hub est le gauche-droite. */}
+                <div className="hub-ordres-carrousel">
                   {ORDERS.map((order) => {
                     const bientot = !isOrderAvailable(order);
                     return (
@@ -8026,6 +8042,7 @@ export default function Emprise() {
                     );
                   })}
                 </div>
+                <div className="hub-carrousel-indice" aria-hidden="true">&lsaquo; faites glisser &rsaquo;</div>
               </section>
             )}
           </main>
