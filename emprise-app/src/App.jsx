@@ -145,6 +145,25 @@ function CountdownLabel({ order }) {
 // Le jour de la sortie, il suffit de passer status à AVAILABLE : le teaser, le
 // cadenas et le compte à rebours disparaissent d'eux-mêmes, le portrait
 // s'affiche en clair. Aucune image à remplacer.
+// Fait defiler les textes d'attente. Une seule animation, sur opacity et transform,
+// relancee a chaque changement par la cle React : rien ne tourne en boucle.
+function RecitsAttente({ actif }) {
+  const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
+  useEffect(() => {
+    if (!actif) return;
+    const t = setInterval(() => setI((n) => (n + 1) % RECITS_ATTENTE.length), 7000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif) return null;
+  const recit = RECITS_ATTENTE[i];
+  return (
+    <div className="recit-attente" role="status" aria-live="polite">
+      <div className="recit-genre">{recit.genre === "histoire" ? "L'Histoire" : "Astuce"}</div>
+      <p key={i} className="recit-texte">{recit.texte}</p>
+    </div>
+  );
+}
+
 function ComingSoonThumb({ order }) {
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef(null);
@@ -713,6 +732,28 @@ const STORY_BRAISES_COTES = [
   { cote: "d", bas: 48, taille: 5, duree: "7.1s", retard: "1.2s" },
   { cote: "d", bas: 68, taille: 7, duree: "6.1s", retard: "3.6s" },
   { cote: "d", bas: 88, taille: 6, duree: "5.8s", retard: "2s" },
+];
+
+// ---------- Textes affiches pendant les temps d'attente ----------
+// Deux registres qui alternent : l'Histoire du monde, et des conseils de jeu tires
+// des regles reelles. Ils occupent les secondes ou le joueur ne peut rien faire :
+// recherche d'un adversaire, ou attente de ses Ordres.
+// Ordre volontairement fixe (pas de tirage au sort) : deux joueurs qui attendent
+// cote a cote voient la meme chose, et la relecture reste coherente d'une partie
+// a l'autre. Le point de depart, lui, tourne a chaque attente.
+const RECITS_ATTENTE = [
+  { genre: "histoire", texte: "Le ciel se déchira sans avertissement. La Faille aspira la réalité et recracha des flots de magie brute, bouleversant les dix Ordres à jamais." },
+  { genre: "astuce", texte: "Un rang supérieur à celui qui lui fait face capture la carte adverse. Comparez toujours le côté qui touche, jamais la carte entière." },
+  { genre: "histoire", texte: "Le Pacte Azur veut contenir la Faille. La Horde Écarlate veut y puiser. Aucun des deux camps ne cédera avant le prochain Rite." },
+  { genre: "astuce", texte: "Deux rangs identiques parmi vos voisines déclenchent la Résonance : toutes les ennemies concernées tombent d'un coup, même les plus fortes." },
+  { genre: "histoire", texte: "Les Ordres ne jurent fidélité à aucune bannière fixe, seulement au vainqueur du Rite. C'est pourquoi un Commandant invoque les deux Ordres de son choix." },
+  { genre: "astuce", texte: "Une carte capturée sert aussitôt son nouveau camp : sa capacité se déclenche pour vous. C'est l'Onde, et elle peut renverser un plateau entier." },
+  { genre: "histoire", texte: "Les Maudits portent une malédiction antique : chaque capture subie les rend plus redoutables. Les retourner deux fois est rarement une bonne idée." },
+  { genre: "astuce", texte: "Les coins ne présentent que deux côtés attaquables. Vos cartes aux rangs faibles y survivent bien plus longtemps qu'au centre." },
+  { genre: "histoire", texte: "Les Scribes gardaient leurs secrets jusqu'au dernier instant. Leurs rangs restent cachés en main, puis un tour encore après la pose." },
+  { genre: "astuce", texte: "Azur part avec un point d'avance pour compenser le fait de jouer en premier. Une égalité de cartes sur le plateau lui donne donc la victoire." },
+  { genre: "histoire", texte: "Les Abysses sont remontées des tréfonds océaniques. Chaque Abysse en jeu renforce toutes les autres : elles ne chassent jamais seules." },
+  { genre: "astuce", texte: "Gardez une carte forte pour le dernier tour. La dernière pose ne peut plus être punie, c'est souvent elle qui décide de la partie." },
 ];
 
 // ---------- Historique des parties ----------
@@ -4104,6 +4145,27 @@ const APP_STYLES = `
           text-shadow: 0 0 26px rgba(203,164,86,0.45); box-shadow: 0 0 0 1px rgba(203,164,86,0.18), 0 10px 30px rgba(0,0,0,0.45);
         }
         .code-copie { font-size: 11px; color: var(--gold-bright); margin-top: -4px; min-height: 14px; }
+        /* Textes d'attente : un encart discret, hauteur reservee pour que le bloc ne
+           saute pas d'une phrase a l'autre. */
+        .recit-attente {
+          width: 100%; max-width: 340px; box-sizing: border-box;
+          margin-top: 16px; padding: 13px 16px 14px;
+          background: rgba(8,6,12,0.5); border: 1px solid rgba(203,164,86,0.18);
+          border-radius: 12px; text-align: center; min-height: 96px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+        }
+        .recit-genre {
+          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold);
+        }
+        .recit-texte {
+          margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--bone);
+          animation: recit-parait 0.55s ease-out both;
+        }
+        @keyframes recit-parait {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         /* Rappel du code pendant le choix des Ordres : plus discret que l'écran d'attente,
            mais toujours lisible sans plisser les yeux (l'ancienne version était en 11px). */
         .code-rappel { font-size: 15px; color: var(--muted); margin-top: -4px; }
@@ -9214,6 +9276,10 @@ export default function Emprise() {
             </>
           )}
           <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>
+          {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
+              Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
+              detourner l'attention d'une information qui, elle, demande une decision. */}
+          <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />
           {attentePreMatch > TURN_SECONDS && (
             <div className="sub">{`L'adversaire ne se présente pas — victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
           )}
@@ -9231,7 +9297,10 @@ export default function Emprise() {
               ? `${TOURNEY_ROUNDS[tourney.round].label} · Choisissez vos 2 Ordres`
               : phase === "select-blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres"}
           </h2>
-          {mode === "online" && onlineGameId && (
+          {/* Le code n'a de sens qu'entre amis : en Classé l'appariement est automatique,
+              en tournoi c'est l'arbre qui decide. L'afficher ailleurs laissait croire
+              qu'il fallait le transmettre a quelqu'un. */}
+          {mode === "online" && onlineGameId && !partieClassee && !tournoiOnlineId && (
             <div className="code-rappel">Code de partie :<b>{onlineGameId}</b></div>
           )}
           <div className="sub">
