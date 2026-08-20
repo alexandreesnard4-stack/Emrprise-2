@@ -2471,8 +2471,11 @@ const APP_STYLES = `
         .hub-onglet svg { width: 23px; height: 23px; }
         /* Icones fournies en image : memes traitements de relief et de hierarchie que
            les traces SVG de secours. */
+        /* cover et non contain : les illustrations fournies sont paysage avec de
+           larges marges sombres, le recadrage central isole l'icone elle-meme. */
         .hub-onglet-img {
-          width: 32px; height: 32px; object-fit: contain; border-radius: 9px;
+          width: 32px; height: 32px; object-fit: cover; border-radius: 9px;
+          border: 1px solid rgba(203,164,86,0.35);
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
           transition: filter .22s, opacity .22s;
         }
@@ -8572,7 +8575,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("boutique")}
               aria-current={hubPage === "boutique" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/boutique.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/boutique.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
               </svg>
@@ -8583,7 +8586,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("jouer")}
               aria-current={hubPage === "jouer" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/jouer.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/jouer.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
               </svg>
@@ -8594,7 +8597,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("ordres")}
               aria-current={hubPage === "ordres" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/ordres.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/ordres.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
               </svg>
