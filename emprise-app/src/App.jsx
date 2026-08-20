@@ -2364,19 +2364,26 @@ const APP_STYLES = `
         }
         .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
         .hub-jouer-classe {
-          width: 100%; max-width: 290px; box-sizing: border-box;
+          width: 100%; max-width: 240px; box-sizing: border-box;
           display: flex; flex-direction: column; align-items: center; gap: 1px;
-          margin-top: 4px; padding: 10px 16px 8px;
+          margin-top: 4px; padding: 8px 14px 7px;
           background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
           border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
           box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
           transition: filter .2s, transform .15s;
         }
         .hub-jouer-classe:hover { filter: brightness(1.06); }
-        .hub-jouer-classe:active { transform: scale(0.98); }
-        .hub-jouer-classe svg { width: 18px; height: 18px; fill: #241d10; }
+        /* Appui : le bouton s'enfonce, l'ombre exterieure rentre, une ombre interne
+           apparait. La sensation d'entrer DANS le bouton. */
+        .hub-jouer-classe:active {
+          transform: scale(0.93);
+          box-shadow: 0 3px 8px rgba(0,0,0,0.45), inset 0 3px 8px rgba(60,40,10,0.45);
+          filter: brightness(0.96);
+        }
+        .hub-jouer-classe { transition: filter .15s, transform .12s ease-in, box-shadow .12s; }
+        .hub-jouer-classe svg { width: 16px; height: 16px; fill: #241d10; }
         .hub-jouer-classe-titre {
-          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 800;
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 800;
           letter-spacing: 0.2em; text-transform: uppercase; color: #241d10;
         }
         .hub-jouer-classe-sous {
@@ -2404,15 +2411,31 @@ const APP_STYLES = `
           letter-spacing: 0.04em; line-height: 1.3;
         }
         .hub-mode-tuile.test { opacity: 0.72; }
-        /* Carrousel des Ordres : defilement horizontal aimante, hauteur contenue. */
+        /* Liste des Ordres : 4 fiches visibles, glissement VERTICAL aimante. Chaque
+           fiche est une rangee (vignette a gauche, texte a droite) pour que quatre
+           tiennent a l'ecran sans rien ecraser. */
         .hub-ordres-carrousel {
-          display: flex; gap: 12px; width: 100%; min-height: 0; flex: 1;
-          overflow-x: auto; overflow-y: hidden;
-          scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
-          padding: 6px 20% 10px; box-sizing: border-box; align-items: center;
+          display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px;
+          min-height: 0; flex: 1;
+          overflow-y: auto; overflow-x: hidden;
+          scroll-snap-type: y proximity; -webkit-overflow-scrolling: touch;
+          padding: 4px 4px 10px; box-sizing: border-box;
         }
         .hub-ordres-carrousel .hub-ordre-fiche {
-          flex: 0 0 62%; max-width: 230px; scroll-snap-align: center;
+          flex: 0 0 calc(25% - 6px); min-height: 68px; width: 100%;
+          scroll-snap-align: start; box-sizing: border-box;
+          flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .order-thumb-wrap,
+        .hub-ordres-carrousel .hub-ordre-fiche .teaser-wrap {
+          width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .thumb {
+          width: 100%; height: 100%; object-fit: cover;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
+        .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
         .hub-carrousel-indice {
           font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
@@ -2446,6 +2469,21 @@ const APP_STYLES = `
           transition: color .22s, transform .18s, background .22s, border-color .22s;
         }
         .hub-onglet svg { width: 23px; height: 23px; }
+        /* Icones fournies en image : memes traitements de relief et de hierarchie que
+           les traces SVG de secours. */
+        .hub-onglet-img {
+          width: 32px; height: 32px; object-fit: contain; border-radius: 9px;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          transition: filter .22s, opacity .22s;
+        }
+        .hub-onglet:not(.actif) .hub-onglet-img {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.4) brightness(0.62);
+          opacity: 0.85;
+        }
+        .hub-onglet.actif .hub-onglet-img {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.55));
+        }
+        .hub-onglet-central .hub-onglet-img { width: 42px; height: 42px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
@@ -2808,8 +2846,8 @@ const APP_STYLES = `
           100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
         }
         .defeat-title {
-          font-family: 'Cinzel', 'Georgia', serif; font-weight: 700;
-          font-size: clamp(2.2rem, 8vw, 3.6rem); letter-spacing: 0.3em; text-indent: 0.3em;
+          font-family: 'Cinzel', 'Georgia', serif; font-weight: 600;
+          font-size: clamp(1.9rem, 6.6vw, 3rem); letter-spacing: 0.3em; text-indent: 0.3em;
           color: #8b0000; text-transform: uppercase; margin: 0;
           text-shadow: 0 0 20px rgba(139, 0, 0, 0.8), 0 4px 10px rgba(0, 0, 0, 0.9), 0 0 2px #ff3333;
         }
@@ -3213,6 +3251,9 @@ const APP_STYLES = `
           background:rgba(90,150,45,.10);
           box-shadow:inset 0 0 12px rgba(90,150,45,.35)}
         .cell.poisoned.can-play{border-color:var(--gold)}
+        /* Pendant le survol d'une carte en glisser : la case montre l'apercu de pose,
+           les pastilles de dose se retirent pour ne pas se superposer a la carte. */
+        .cell.poisoned.drag-target::after{display:none}
         /* --- Compteur de dose : 1 à 4 pastilles, au CENTRE de la case.
            Centrées volontairement : en haut elles recouvriraient le rang supérieur de la
            carte pendant l'aperçu de pose, et en bas la flaque les avalerait à partir du
@@ -4211,11 +4252,26 @@ const APP_STYLES = `
         .code-copie { font-size: 11px; color: var(--gold-bright); margin-top: -4px; min-height: 14px; }
         /* Textes d'attente : un encart discret, hauteur reservee pour que le bloc ne
            saute pas d'une phrase a l'autre. */
+        /* L'Ordre en vedette pendant la recherche d'adversaire. */
+        .attente-ordre {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          margin-top: 10px; width: 100%; max-width: 250px;
+        }
+        .attente-ordre img {
+          width: min(58vw, 210px); aspect-ratio: 3 / 4; object-fit: cover;
+          border-radius: 14px; border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+        }
+        .attente-ordre-nom {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
+          margin-top: 6px;
+        }
+        .attente-ordre-desc { font-size: 11px; color: var(--muted); text-align: center; }
+        .attente-message { margin-top: 8px; }
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
-          /* Repousse vers le bas de l'ecran : la bande laissee libre au-dessus est
-             reservee a l'illustration qui viendra habiller l'attente. */
-          margin-top: clamp(34px, 16vh, 130px);
+          margin-top: 12px;
           padding: 13px 16px 14px;
           background: rgba(8,6,12,0.5); border: 1px solid rgba(203,164,86,0.18);
           border-radius: 12px; text-align: center; min-height: 96px;
@@ -4238,13 +4294,15 @@ const APP_STYLES = `
         /* Minuteur du choix des Ordres : ancre en haut a droite de l'ecran, en vis-a-vis
            du bouton Retour place en haut a gauche. */
         .ordres-minuteur {
-          position: absolute; top: 18px; right: 14px; z-index: 40;
-          display: flex; align-items: center; gap: 6px;
-          padding: 5px 11px 5px 8px; border-radius: 999px;
-          background: rgba(8,6,12,0.8); border: 1px solid rgba(203,164,86,0.4);
+          position: absolute; top: 16px; right: 14px; z-index: 40;
+          display: flex; align-items: center; gap: 7px;
+          padding: 7px 13px 7px 10px; border-radius: 999px;
+          background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
         .ordres-sablier {
-          width: 14px; height: 14px; fill: var(--gold-bright);
+          width: 19px; height: 19px; fill: var(--gold-bright);
+          filter: drop-shadow(0 0 4px rgba(232,200,119,0.55));
           animation: sablier-tourne 2.4s linear infinite;
         }
         /* Seul transform est anime : le sablier tourne sans rien recalculer. */
@@ -4253,7 +4311,7 @@ const APP_STYLES = `
           to { transform: rotate(360deg); }
         }
         .ordres-temps {
-          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.06em; color: var(--gold-bright);
           font-variant-numeric: tabular-nums;
         }
@@ -4323,8 +4381,15 @@ const APP_STYLES = `
         .chat-bouton svg { width: 20px; height: 20px; fill: var(--bone); }
         /* Affichage direct coupe : le bouton reste la, en retrait, pour qu'on sache
            que les messages arrivent toujours. */
-        .chat-bouton.directs-coupes { opacity: 0.55; }
+        .chat-bouton.directs-coupes { opacity: 0.8; }
         .chat-bouton.directs-coupes svg { fill: var(--muted); }
+        /* Barre rouge en diagonale : l'affichage direct est coupe, et ca se voit. */
+        .chat-bouton.directs-coupes::after {
+          content: ""; position: absolute; left: 6px; right: 6px; top: 50%;
+          height: 3px; margin-top: -1.5px; border-radius: 2px;
+          background: var(--red-bright); transform: rotate(-45deg);
+          box-shadow: 0 0 5px rgba(224,101,90,0.7);
+        }
         .chat-bulle-directe {
           position: fixed; right: 10px; bottom: 132px; z-index: 61;
           width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
@@ -4510,9 +4575,10 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
           padding: 4px 10px; border-radius: 999px; white-space: nowrap; z-index: 5;
         }
+        .lock-chip svg { width: 17px; height: 17px; }
         .lock-chip {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4;
-          width: 46px; height: 46px; border-radius: 50%;
+          width: 32px; height: 32px; border-radius: 50%;
           background: rgba(20,17,28,0.32);
           backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
           display: flex; align-items: center; justify-content: center;
@@ -5562,6 +5628,9 @@ export default function Emprise() {
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
+  // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
+  // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
+  const [ordreAttente, setOrdreAttente] = useState(null);
   // Appariements déjà consommés par cet appareil : garde synchrone contre une seconde
   // lecture du même champ (l'écouteur se déclenche à chaque écriture du document).
   const matchsConsommesRef = useRef(new Set());
@@ -6790,6 +6859,7 @@ export default function Emprise() {
     setPickerChoice([]);
     setMode("online");
     setFileAttente(true);
+    setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
     try {
@@ -7004,7 +7074,7 @@ export default function Emprise() {
     if (!revancheDisponible || !onlineGameId) return null;
     const mien = !!(revancheVotes && revancheVotes[onlineRole]);
     const sien = !!(revancheVotes && revancheVotes[onlineRole === "blue" ? "red" : "blue"]);
-    if (mien) return <div className="revanche-attente" key="rv">Revanche proposée — en attente de l'adversaire...</div>;
+    if (mien) return <div className="revanche-attente" key="rv">Revanche proposée, en attente de l'adversaire...</div>;
     return (
       <button key="rv" className={`reset-btn revanche-btn ${sien ? "revanche-invite" : ""}`} onClick={demanderRevanche}>
         {sien ? "⚔ Accepter la revanche" : "Revanche"}
@@ -8479,7 +8549,7 @@ export default function Emprise() {
                     );
                   })}
                 </div>
-                <div className="hub-carrousel-indice" aria-hidden="true">&lsaquo; faites glisser &rsaquo;</div>
+                <div className="hub-carrousel-indice" aria-hidden="true">faites glisser vers le bas</div>
               </section>
             )}
           </main>
@@ -8502,7 +8572,8 @@ export default function Emprise() {
               onClick={() => allerPageHub("boutique")}
               aria-current={hubPage === "boutique" ? "page" : undefined}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <img className="hub-onglet-img" src="/nav/boutique.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
               </svg>
               <span>Boutique</span>
@@ -8512,7 +8583,8 @@ export default function Emprise() {
               onClick={() => allerPageHub("jouer")}
               aria-current={hubPage === "jouer" ? "page" : undefined}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <img className="hub-onglet-img" src="/nav/jouer.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
               </svg>
               <span>Jouer</span>
@@ -8522,7 +8594,8 @@ export default function Emprise() {
               onClick={() => allerPageHub("ordres")}
               aria-current={hubPage === "ordres" ? "page" : undefined}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <img className="hub-onglet-img" src="/nav/ordres.png" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
               </svg>
               <span>Ordres</span>
@@ -9145,7 +9218,7 @@ export default function Emprise() {
               <img className="diff-thumb" src={ORDERS.find((o) => o.key === "percee")?.portrait} alt="" />
               <div className="diff-text">
                 <div className="name">Tournoi en ligne</div>
-                <div className="desc">Huit vrais Commandants, un code à partager — l'arbre se remplit à mesure qu'ils arrivent</div>
+                <div className="desc">Huit vrais Commandants, un code à partager : l'arbre se remplit à mesure qu'ils arrivent</div>
               </div>
             </div>
             <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-bracket")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-bracket"))}>
@@ -9163,7 +9236,7 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Tournoi en ligne</h2>
-          <div className="sub">Huit Commandants, trois tours — créez un tournoi et partagez son code, ou rejoignez avec celui d'un ami.</div>
+          <div className="sub">Huit Commandants, trois tours. Créez un tournoi et partagez son code, ou rejoignez avec celui d'un ami.</div>
           <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
           <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
           <input
@@ -9264,7 +9337,7 @@ export default function Emprise() {
             <h2>Tournoi en ligne</h2>
             {statut === "waiting" && (
               <>
-                <div className="sub">Partagez ce code — le tournoi démarre dès que les 8 sièges sont pris.</div>
+                <div className="sub">Partagez ce code : le tournoi démarre dès que les 8 sièges sont pris.</div>
                 <div className="code-tournoi">{tournoiOnlineId}</div>
                 <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
               </>
@@ -9272,7 +9345,7 @@ export default function Emprise() {
             {statut === "running" && (
               <div className="sub">
                 {monMatch
-                  ? "Votre duel est prêt — les autres se jouent en parallèle."
+                  ? "Votre duel est prêt, les autres se jouent en parallèle."
                   : suisElimine
                   ? "Vous êtes éliminé. Vous pouvez suivre la fin du tournoi, ou revenir plus tard."
                   : "Duel gagné ! En attente des autres résultats..."}
@@ -9525,8 +9598,17 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
+          {/* Un Ordre en vedette occupe le haut de l'attente ; les messages descendent
+              en dessous, comme demande. */}
+          {fileAttente && ordreAttente && (
+            <div className="attente-ordre">
+              <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+              <div className="attente-ordre-nom">{ordreAttente.name}</div>
+              <div className="attente-ordre-desc">{ordreAttente.desc}</div>
+            </div>
+          )}
           {fileAttente && (
-            <div className="sub">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
+            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
@@ -9542,7 +9624,7 @@ export default function Emprise() {
               detourner l'attention d'une information qui, elle, demande une decision. */}
           <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />
           {attentePreMatch > TURN_SECONDS && (
-            <div className="sub">{`L'adversaire ne se présente pas — victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
+            <div className="sub">{`L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
           )}
           {onlineError && <div className="online-error">{onlineError}</div>}
         </div>
@@ -9893,7 +9975,7 @@ export default function Emprise() {
                 : `Victoire du camp ${winner === "blue" ? "Azur" : "Écarlate"} !`
               : mode === "online" && turn !== onlineRole
                 ? (attenteAdv > TURN_SECONDS
-                  ? `L'adversaire ne répond plus — victoire dans ${Math.max(1, FORFAIT_APRES_S - attenteAdv)}s...`
+                  ? `L'adversaire ne répond plus : victoire dans ${Math.max(1, FORFAIT_APRES_S - attenteAdv)}s...`
                   : "En attente de l'adversaire...")
               : mode === "online" && turn === onlineRole && timeLeft <= 0
                 ? `Temps écoulé : jouez un coup, forfait dans ${Math.max(1, TURN_SECONDS + timeLeft)}s...`
