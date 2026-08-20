@@ -194,6 +194,10 @@ function ComingSoonThumb({ order }) {
 }
 
 const TURN_SECONDS = 105; // durée du minuteur par tour (1 min 45)
+// Minuteur du choix des Ordres, en ligne uniquement : sans lui, un joueur qui pose son
+// telephone bloque l'autre sur un ecran d'attente. A l'echeance, la selection en cours
+// est confirmee ; si elle est incomplete, deux Ordres sont tires au sort.
+const ORDRES_SECONDS = 60;
 // Passé de 60 à 105 s avec la main en éventail : les cartes ne sont plus toutes visibles
 // d'un coup, il faut déployer chaque Ordre pour lire ses rangs avant de choisir. Une
 // minute ne suffisait plus pour comparer sereinement.
@@ -4152,7 +4156,10 @@ const APP_STYLES = `
            saute pas d'une phrase a l'autre. */
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
-          margin-top: 16px; padding: 13px 16px 14px;
+          /* Repousse vers le bas de l'ecran : la bande laissee libre au-dessus est
+             reservee a l'illustration qui viendra habiller l'attente. */
+          margin-top: clamp(34px, 16vh, 130px);
+          padding: 13px 16px 14px;
           background: rgba(8,6,12,0.5); border: 1px solid rgba(203,164,86,0.18);
           border-radius: 12px; text-align: center; min-height: 96px;
           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
@@ -4171,6 +4178,37 @@ const APP_STYLES = `
         }
         /* Rappel du code pendant le choix des Ordres : plus discret que l'écran d'attente,
            mais toujours lisible sans plisser les yeux (l'ancienne version était en 11px). */
+        /* Minuteur du choix des Ordres : ancre en haut a droite de l'ecran, en vis-a-vis
+           du bouton Retour place en haut a gauche. */
+        .ordres-minuteur {
+          position: absolute; top: 18px; right: 14px; z-index: 40;
+          display: flex; align-items: center; gap: 6px;
+          padding: 5px 11px 5px 8px; border-radius: 999px;
+          background: rgba(8,6,12,0.8); border: 1px solid rgba(203,164,86,0.4);
+        }
+        .ordres-sablier {
+          width: 14px; height: 14px; fill: var(--gold-bright);
+          animation: sablier-tourne 2.4s linear infinite;
+        }
+        /* Seul transform est anime : le sablier tourne sans rien recalculer. */
+        @keyframes sablier-tourne {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .ordres-temps {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          letter-spacing: 0.06em; color: var(--gold-bright);
+          font-variant-numeric: tabular-nums;
+        }
+        .ordres-minuteur.urgent { border-color: var(--red-bright); }
+        .ordres-minuteur.urgent .ordres-temps,
+        .ordres-minuteur.urgent .ordres-sablier { color: var(--red-bright); fill: var(--red-bright); }
+        .ordres-adversaire {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-size: 11.5px; color: var(--muted); margin-top: -2px;
+        }
+        .ordres-adversaire svg { width: 13px; height: 13px; fill: var(--bonus); }
+        .ordres-adversaire.pret { color: var(--bonus); }
         .code-rappel { font-size: 15px; color: var(--muted); margin-top: -4px; }
         .code-rappel b {
           font-family: 'Cinzel', serif; font-size: 24px; letter-spacing: 0.14em;
@@ -4210,6 +4248,37 @@ const APP_STYLES = `
           background: var(--panel); color: var(--bone);
           border: 1px solid rgba(203,164,86,0.45); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
           cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .chat-bouton svg { width: 20px; height: 20px; fill: var(--bone); }
+        /* Affichage direct coupe : le bouton reste la, en retrait, pour qu'on sache
+           que les messages arrivent toujours. */
+        .chat-bouton.directs-coupes { opacity: 0.55; }
+        .chat-bouton.directs-coupes svg { fill: var(--muted); }
+        .chat-bulle-directe {
+          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
+          padding: 9px 12px; border-radius: 12px; cursor: pointer;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.4);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+          font-size: 12.5px; line-height: 1.45; color: var(--bone);
+          animation: chat-bulle-parait 0.32s ease-out both;
+        }
+        .chat-bulle-directe.de-moi { border-color: rgba(111,164,230,0.5); }
+        .chat-bulle-directe.de-lui { border-color: rgba(224,101,90,0.5); }
+        .chat-bulle-auteur {
+          display: block; font-family: 'Cinzel', serif; font-size: 9.5px;
+          letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+        }
+        @keyframes chat-bulle-parait {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-bulle-avis {
+          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          padding: 7px 12px; border-radius: 999px;
+          background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.35);
+          font-size: 11px; letter-spacing: 0.06em; color: var(--gold-bright);
+          animation: chat-bulle-parait 0.28s ease-out both;
         }
         .chat-badge {
           position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px;
@@ -5450,6 +5519,8 @@ export default function Emprise() {
   const [advPresent, setAdvPresent] = useState(false);
   const [advPret, setAdvPret] = useState(false);
   const [attentePreMatch, setAttentePreMatch] = useState(0);
+  const [tempsOrdres, setTempsOrdres] = useState(ORDRES_SECONDS);
+  const ordresAutoRef = useRef(false); // l'echeance ne doit confirmer qu'une seule fois
   const preForfaitEcritRef = useRef(false);
   const forfaitEcritRef = useRef(false); // un seul constat de forfait par tour d'attente
   // Messages en direct pendant une partie en ligne.
@@ -5459,11 +5530,32 @@ export default function Emprise() {
   const [chatNonLus, setChatNonLus] = useState(0);
   const chatVusRef = useRef(0); // combien de messages étaient déjà affichés/comptés
   const chatOuvertRef = useRef(false); // miroir de chatOuvert lisible depuis l'écouteur Firestore
+  const messagesDirectsRef = useRef(true); // miroir du reglage, meme raison
   const chatDernierEnvoiRef = useRef(0); // anti-rafale : 1 message par seconde
   const chatListeRef = useRef(null); // la liste déroulante du panneau, pour l'autoscroll
   // Partie dont le compteur de messages vus est le référentiel : au changement de partie
   // (reprise, revanche, match suivant), l'historique existant ne doit pas gonfler le badge.
   const chatGameIdRef = useRef(null);
+  // Bulle qui montre le dernier message sans ouvrir le panneau, et reglage qui
+  // l'active ou la coupe (double-clic). Persiste d'une partie a l'autre.
+  const [messageBulle, setMessageBulle] = useState(null);
+  const [messagesDirects, setMessagesDirects] = useState(() => {
+    try { return localStorage.getItem("emprise-messages-directs") !== "0"; } catch (e) { return true; }
+  });
+  const [bulleAvis, setBulleAvis] = useState("");
+  const bulleTimerRef = useRef(null);
+  const avisTimerRef = useRef(null);
+  function basculerMessagesDirects() {
+    setMessagesDirects((actif) => {
+      const suivant = !actif;
+      try { localStorage.setItem("emprise-messages-directs", suivant ? "1" : "0"); } catch (e) { /* non persiste */ }
+      if (!suivant) { clearTimeout(bulleTimerRef.current); setMessageBulle(null); }
+      setBulleAvis(suivant ? "Messages affichés en direct" : "Affichage direct coupé");
+      clearTimeout(avisTimerRef.current);
+      avisTimerRef.current = setTimeout(() => setBulleAvis(""), 2200);
+      return suivant;
+    });
+  }
   // Revanche (mode "Jouer avec un ami" uniquement) : votes lus depuis le document.
   const [revancheVotes, setRevancheVotes] = useState(null);
   const revancheCreationRef = useRef(false); // évite de créer deux fois la partie de revanche
@@ -5968,6 +6060,8 @@ export default function Emprise() {
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
     chatVusRef.current = 0; chatOuvertRef.current = false;
+    setMessageBulle(null); setBulleAvis("");
+    clearTimeout(bulleTimerRef.current); clearTimeout(avisTimerRef.current);
     setRevancheVotes(null); revancheCreationRef.current = false;
     setTournoiOnlineId(null); setTournoiData(null); setTournoiErreur(""); setCodeTournoiInput("");
     tournoiLancementRef.current = false; tournoiResultatRef.current = null;
@@ -6451,8 +6545,18 @@ export default function Emprise() {
         chatVusRef.current = messages.length;
       }
       if (messages.length > chatVusRef.current) {
-        const nouveaux = messages.slice(chatVusRef.current).filter((m) => m.by !== onlineRole);
+        const arrivants = messages.slice(chatVusRef.current);
+        const nouveaux = arrivants.filter((m) => m.by !== onlineRole);
         setChatNonLus((n) => (chatOuvertRef.current ? 0 : n + nouveaux.length));
+        // Affichage direct : le dernier message arrive s'affiche quelques secondes
+        // par-dessus le plateau, sans qu'on ait a ouvrir le panneau. Inutile si le
+        // panneau est deja ouvert, il y figure deja.
+        const dernier = arrivants[arrivants.length - 1];
+        if (dernier && !chatOuvertRef.current && messagesDirectsRef.current) {
+          setMessageBulle(dernier);
+          clearTimeout(bulleTimerRef.current);
+          bulleTimerRef.current = setTimeout(() => setMessageBulle(null), 6000);
+        }
       }
       chatVusRef.current = messages.length;
       setChatMessages(messages);
@@ -6760,6 +6864,8 @@ export default function Emprise() {
     const el = chatListeRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chatMessages.length, chatOuvert]);
+
+  useEffect(() => { messagesDirectsRef.current = messagesDirects; }, [messagesDirects]);
 
   function basculerChat() {
     setChatOuvert((o) => {
@@ -8031,6 +8137,26 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, onlineGameId, phase, fileAttente, advPresent, advPret, gameOver]);
 
+  // Minuteur du choix des Ordres. Reserve au jeu en ligne : en solo, personne n'attend
+  // en face, et imposer une horloge la ou le joueur reflechit tranquillement n'aurait
+  // aucun sens.
+  const minuteurOrdresActif = mode === "online" && phase === "select-blue" && !gameOver;
+  useEffect(() => {
+    if (!minuteurOrdresActif) { setTempsOrdres(ORDRES_SECONDS); ordresAutoRef.current = false; return; }
+    if (tempsOrdres <= 0) {
+      if (ordresAutoRef.current) return;
+      ordresAutoRef.current = true;
+      // On respecte le choix en cours s'il est complet, sinon on tire au sort : mieux
+      // vaut une main choisie au hasard qu'une partie qui ne demarre jamais.
+      if (pickerChoice.length === 2) confirmOrders();
+      else chooseRandomOrders();
+      return;
+    }
+    const t = setTimeout(() => setTempsOrdres((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteurOrdresActif, tempsOrdres]);
+
   useEffect(() => {
     if (!isHumanTurn || testMode) return; // pas de minuteur en mode test
     if (timeLeft <= 0) {
@@ -9296,6 +9422,28 @@ export default function Emprise() {
               ? `${TOURNEY_ROUNDS[tourney.round].label} · Choisissez vos 2 Ordres`
               : phase === "select-blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres"}
           </h2>
+          {/* Minuteur du choix des Ordres, en haut a droite, avec un sablier qui tourne
+              en continu (transform seule) pour dire d'un coup d'oeil que le temps court. */}
+          {minuteurOrdresActif && (
+            <div className={`ordres-minuteur ${tempsOrdres <= 10 ? "urgent" : ""}`} role="timer" aria-live="off">
+              <svg className="ordres-sablier" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2h10v2h-1v2.6c0 1.4-.7 2.7-1.8 3.5L12 12l-2.2 1.9A4.3 4.3 0 0 0 8 17.4V20h1v2H7v-2h1v-2.6c0-1.4.7-2.7 1.8-3.5L12 12l2.2-1.9A4.3 4.3 0 0 0 16 6.6V4h1V2H7zm3 4.6c0 .8.4 1.6 1 2.1l1 .9 1-.9c.6-.5 1-1.3 1-2.1V4h-4v2.6z" />
+              </svg>
+              <span className="ordres-temps">{Math.floor(tempsOrdres / 60)}:{String(tempsOrdres % 60).padStart(2, "0")}</span>
+            </div>
+          )}
+          {/* Etat de l'adversaire : savoir qu'il a fini change la facon dont on prend
+              son temps, et evite de croire la partie figee. */}
+          {mode === "online" && phase === "select-blue" && (
+            <div className={`ordres-adversaire ${advPret ? "pret" : ""}`} role="status">
+              {advPret ? (
+                <>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                  L'adversaire a choisi ses Ordres
+                </>
+              ) : "L'adversaire choisit ses Ordres..."}
+            </div>
+          )}
           {/* Le code n'a de sens qu'entre amis : en Classé l'appariement est automatique,
               en tournoi c'est l'arbre qui decide. L'afficher ailleurs laissait croire
               qu'il fallait le transmettre a quelqu'un. */}
@@ -9612,7 +9760,7 @@ export default function Emprise() {
           {isHumanTurn && turn === campHaut && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           {/* ═══ TEMPORAIRE — sélecteur d'arène, à retirer avant publication ═══ */}
-          {(testMode || mode === "bot" || mode === "online") && (
+          {testMode && (
             <div className="arene-test">
               <button className={!areneTest ? "actif" : ""} onClick={() => setAreneTest(null)}>Aucune</button>
               {Object.keys(ARENES).map((nom) => (
@@ -9807,8 +9955,32 @@ export default function Emprise() {
             <>
               {/* Messages en direct : un bouton flottant, un panneau ancré au-dessus de la
                   main. Le badge compte les messages adverses arrivés panneau fermé. */}
-              <button className="chat-bouton" onClick={basculerChat} aria-label="Messages" title="Messages">
-                💬
+              {/* Message affiche directement au-dessus du plateau. Double-clic dessus
+                  (ou sur le bouton) pour couper ou remettre cet affichage. */}
+              {messageBulle && !chatOuvert && (
+                <div
+                  className={`chat-bulle-directe ${messageBulle.by === onlineRole ? "de-moi" : "de-lui"}`}
+                  role="button" tabIndex={0}
+                  onDoubleClick={basculerMessagesDirects}
+                  onClick={basculerChat}
+                  onKeyDown={KEY_ACTIVATE(basculerChat)}
+                  title="Toucher pour ouvrir les messages, double-toucher pour couper l'affichage direct"
+                >
+                  <span className="chat-bulle-auteur">{messageBulle.by === onlineRole ? "Vous" : "Adversaire"}</span>
+                  {String(messageBulle.texte || "").slice(0, 200)}
+                </div>
+              )}
+              {bulleAvis && <div className="chat-bulle-avis" role="status">{bulleAvis}</div>}
+              <button
+                className={`chat-bouton ${messagesDirects ? "" : "directs-coupes"}`}
+                onClick={basculerChat}
+                onDoubleClick={basculerMessagesDirects}
+                aria-label={`Messages. Affichage direct ${messagesDirects ? "activé" : "coupé"}. Double-toucher pour changer.`}
+                title={`Messages (double-toucher : affichage direct ${messagesDirects ? "activé" : "coupé"})`}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3c5 0 9 3.3 9 7.4 0 4-4 7.3-9 7.3-.9 0-1.7-.1-2.5-.3L5 20l1-3.4C4.1 15.2 3 13 3 10.4 3 6.3 7 3 12 3zm0 2c-3.9 0-7 2.4-7 5.4 0 1.9 1.2 3.6 3.1 4.6l.8.4-.4 1.3 2-1 .5.1c.6.2 1.3.2 2 .2 3.9 0 7-2.4 7-5.4S15.9 5 12 5z" />
+                </svg>
                 {chatNonLus > 0 && <span className="chat-badge">{chatNonLus > 9 ? "9+" : chatNonLus}</span>}
               </button>
               {chatOuvert && (

@@ -18,22 +18,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Salle d'attente de l'appariement automatique. Un seul document ("lobby") où le
-    // joueur en attente s'inscrit et où celui qui l'apparie annonce la partie créée.
-    // Tout utilisateur connecté doit pouvoir l'écrire : c'est justement ainsi que deux
-    // inconnus se trouvent. Le document ne contient aucune donnée sensible (deux
-    // identifiants anonymes et un code de partie), et la transaction côté client
-    // empêche deux joueurs d'être appariés au même adversaire.
-    // À durcir en même temps que /games le jour d'un vrai lancement public : ici, un
-    // client malveillant peut vider la salle d'attente ou s'y réinscrire en boucle.
-    // Tournois en ligne : le document liste les inscrits puis les matchs de chaque
-    // tour. Même niveau de confiance que /games, réellement cette fois :
+    // Tournois en ligne : le document liste les inscrits, puis les matchs de chaque
+    // tour. Trois règles, plus strictes que /games :
     //  - créer un tournoi, c'est s'y inscrire seul (joueurs == [soi]) ;
     //  - un INSCRIT peut tout mettre à jour (lancement, résultats, retrait) ;
     //  - un NON-inscrit ne peut faire qu'une chose : s'ajouter lui-même à la liste
     //    d'un tournoi encore en salle d'attente, sans toucher au reste.
-    // Sans ces contrôles, n'importe quel compte connecté pouvait réécrire l'arbre,
-    // poser un faux champion ou truquer un résultat d'un tournoi où il ne joue pas.
+    // Sans ces contrôles, n'importe quel compte connecté pourrait réécrire l'arbre,
+    // poser un faux champion ou truquer le résultat d'un tournoi où il ne joue pas.
     match /tournaments/{tournoiId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
@@ -50,6 +42,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Salle d'attente de l'appariement automatique. Un seul document ("lobby") où le
+    // joueur en attente s'inscrit et où celui qui l'apparie annonce la partie créée.
+    // Tout utilisateur connecté doit pouvoir l'écrire : c'est justement ainsi que deux
+    // inconnus se trouvent. Le document ne contient aucune donnée sensible (deux
+    // identifiants anonymes et un code de partie), et la transaction côté client
+    // empêche deux joueurs d'être appariés au même adversaire.
+    // À durcir en même temps que /games le jour d'un vrai lancement public : ici, un
+    // client malveillant peut vider la salle d'attente ou s'y réinscrire en boucle.
     match /matchmaking/{docId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null;
