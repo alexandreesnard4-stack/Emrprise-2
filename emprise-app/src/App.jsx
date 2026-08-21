@@ -5704,11 +5704,10 @@ export default function Emprise() {
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
   // Reconnexion : partie en ligne retrouvée au démarrage et proposée sur l'accueil.
-  const [repriseEnLigne, setRepriseEnLigne] = useState(null);
   // Vrai le temps d'une reprise : indique à l'écouteur qu'il doit router vers le bon
   // écran (jeu ou choix des Ordres) au lieu de laisser le joueur sur l'écran d'attente.
   const repriseRef = useRef(false);
-  const repriseTesteeRef = useRef(false); // la recherche d'une partie à reprendre n'a lieu qu'une fois
+  const repriseTesteeRef = useRef(false); // la purge des cles de reprise n'a lieu qu'une fois
   // Fin de partie décidée hors plateau : "blue"/"red" quand un camp gagne par abandon ou
   // forfait de l'adversaire, quel que soit le score. Dérivé du document Firestore à chaque
   // notification (champ abandonPar), donc toujours cohérent entre les deux appareils.
@@ -5769,7 +5768,6 @@ export default function Emprise() {
   const [codeTournoiInput, setCodeTournoiInput] = useState("");
   const tournoiLancementRef = useRef(false); // un seul client tente le lancement à la fois
   const tournoiResultatRef = useRef(null); // gameId dont le résultat a déjà été écrit
-  const [repriseTournoi, setRepriseTournoi] = useState(null); // tournoi retrouvé au démarrage
 
 
   const [board, setBoard] = useState(Array(CELLS).fill(null));
@@ -6308,84 +6306,18 @@ export default function Emprise() {
 
   function oublierPartieEnLigne() {
     try { localStorage.removeItem(CLE_PARTIE_EN_LIGNE); } catch (e) { /* stockage indisponible */ }
-    setRepriseEnLigne(null);
   }
 
-  // Mémorise la partie en cours à chaque changement, et l'oublie dès qu'elle est finie.
-  // Aucune donnée de jeu ici : Firestore fait foi, on ne stocke que de quoi s'y rebrancher.
+  // Au demarrage, on purge ce qu'une version precedente aurait laisse : la reprise en
+  // ligne n'existe plus, ces cles n'ont plus d'usage et ne doivent pas trainer.
   useEffect(() => {
-    if (mode !== "online" || !onlineGameId || !onlineRole) return;
-    // Pas de reprise en Classe : quitter un duel classe vaut abandon (le forfait s'en
-    // charge), le proposer a la reprise laissait croire qu'on pouvait revenir sans frais.
-    if (gameOver || partieClassee) { oublierPartieEnLigne(); return; }
-    try {
-      localStorage.setItem(CLE_PARTIE_EN_LIGNE, JSON.stringify({
-        gameId: onlineGameId, role: onlineRole, classee: partieClassee, uid: myUid,
-        tournoi: tournoiOnlineId || null,
-      }));
-    } catch (e) { /* stockage indisponible : pas de reprise possible, on continue */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, onlineGameId, onlineRole, partieClassee, gameOver, myUid]);
-
-  // Au démarrage, une fois l'identité connue : est-ce qu'une partie nous attend ?
-  // On ne propose la reprise qu'après avoir vérifié auprès de Firestore que la partie
-  // existe encore, qu'elle n'est pas terminée, et qu'on en fait bien partie — sinon on
-  // proposerait de reprendre une partie fantôme.
-  useEffect(() => {
-    if (!myUid || repriseTesteeRef.current) return;
+    if (repriseTesteeRef.current) return;
     repriseTesteeRef.current = true;
-    let brut = null;
-    try { brut = localStorage.getItem(CLE_PARTIE_EN_LIGNE); } catch (e) { return; }
-    if (!brut) return;
-    let enregistree = null;
-    try { enregistree = JSON.parse(brut); } catch (e) { oublierPartieEnLigne(); return; }
-    if (!enregistree || !enregistree.gameId) { oublierPartieEnLigne(); return; }
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, "games", enregistree.gameId));
-        if (!snap.exists()) { oublierPartieEnLigne(); return; }
-        const data = snap.data();
-        // Terminée, ou appartenant à quelqu'un d'autre (deux joueurs sur le même
-        // appareil) : il n'y a rien à reprendre.
-        if (data.gameOver) { oublierPartieEnLigne(); return; }
-        // Camps que cette identité peut légitimement reprendre dans cette partie.
-        const campsPossibles = [];
-        if (data.blueUid === myUid) campsPossibles.push("blue");
-        if (data.redUid === myUid) campsPossibles.push("red");
-        if (!campsPossibles.length) { oublierPartieEnLigne(); return; }
-        // Le camp mémorisé fait foi tant qu'il reste plausible : une même identité peut
-        // occuper les DEUX camps (deux onglets d'un même navigateur partagent le compte
-        // anonyme Firebase), et déduire le camp de la seule identité renvoyait alors
-        // systématiquement Azur — un joueur Écarlate se retrouvait dans le camp adverse.
-        const camp = campsPossibles.includes(enregistree.role) ? enregistree.role : campsPossibles[0];
-        setRepriseEnLigne({
-          gameId: enregistree.gameId,
-          role: camp,
-          classee: !!enregistree.classee,
-          tournoi: enregistree.tournoi || null,
-        });
-      } catch (e) { /* réseau absent : on ne propose rien, la partie reste mémorisée */ }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUid]);
-
-  function reprendrePartieEnLigne() {
-    if (!repriseEnLigne) return;
-    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
-    setConfluenceActive(false);
-    setTestMode(false);
-    setPickerChoice([]);
-    setOnlineError("");
-    setOnlineGameId(repriseEnLigne.gameId);
-    setOnlineRole(repriseEnLigne.role);
-    setPartieClassee(!!repriseEnLigne.classee);
-    if (repriseEnLigne.tournoi) setTournoiOnlineId(repriseEnLigne.tournoi);
-    setMode("online");
-    setOnlineStatus("Reprise de la partie...");
-    repriseRef.current = true;
-    setRepriseEnLigne(null);
-    setPhase("online-waiting");
-  }
+    try {
+      localStorage.removeItem(CLE_PARTIE_EN_LIGNE);
+      localStorage.removeItem(CLE_TOURNOI);
+    } catch (e) { /* stockage indisponible : rien a purger */ }
+  }, []);
 
   // ---------- Tournoi en ligne ----------
   // Huit vrais joueurs, un code à partager, et le même arbre que le tournoi solo.
@@ -6608,41 +6540,6 @@ export default function Emprise() {
     ecrireResultatTournoi(onlineGameId, winner);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
-
-  // Un tournoi en cours est mémorisé sur l'appareil, comme une partie en ligne : après
-  // un rechargement, l'accueil propose d'y revenir. Oublié dès qu'il est terminé.
-  useEffect(() => {
-    if (!tournoiOnlineId) return;
-    try {
-      if (tournoiData && tournoiData.status === "done") localStorage.removeItem(CLE_TOURNOI);
-      else localStorage.setItem(CLE_TOURNOI, JSON.stringify({ tournoiId: tournoiOnlineId }));
-    } catch (e) { /* stockage indisponible */ }
-  }, [tournoiOnlineId, tournoiData]);
-
-  useEffect(() => {
-    if (!myUid) return;
-    let brut = null;
-    try { brut = localStorage.getItem(CLE_TOURNOI); } catch (e) { return; }
-    if (!brut) return;
-    let enregistre = null;
-    try { enregistre = JSON.parse(brut); } catch (e) { return; }
-    if (!enregistre || !enregistre.tournoiId) return;
-    getDoc(doc(db, "tournaments", enregistre.tournoiId)).then((snap) => {
-      if (snap.exists() && snap.data().status !== "done" && (snap.data().joueurs || []).includes(myUid)) {
-        setRepriseTournoi(enregistre.tournoiId);
-      } else {
-        try { localStorage.removeItem(CLE_TOURNOI); } catch (e) { /* rien */ }
-      }
-    }).catch(() => { /* hors ligne : on ne propose rien */ });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUid]);
-
-  function reprendreTournoiEnLigne() {
-    if (!repriseTournoi) return;
-    setTournoiOnlineId(repriseTournoi);
-    setRepriseTournoi(null);
-    setPhase("tourney-online");
-  }
 
   async function createOnlineGame() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
@@ -8516,17 +8413,9 @@ export default function Emprise() {
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
                 <div className="league-badge">Le multijoueur arrive prochainement</div>
 
-                {/* Parties a reprendre : toujours au-dessus de tout, un adversaire attend. */}
-                {repriseEnLigne && (
-                  <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
-                    Reprendre la partie en ligne
-                  </button>
-                )}
-                {!repriseEnLigne && repriseTournoi && (
-                  <button className="landing-link reprise-en-ligne" onClick={reprendreTournoiEnLigne}>
-                    Reprendre le tournoi en ligne
-                  </button>
-                )}
+                {/* Seules les parties SOLO se reprennent. En ligne, un adversaire attend
+                    en face : une partie quittee est abandonnee, le forfait tranche pour
+                    celui qui reste. Proposer d'y revenir laissait croire le contraire. */}
                 {hasSavedGame && (
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
