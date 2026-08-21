@@ -6654,7 +6654,7 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null);
+    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null);
     setVainqueurForce(null); setFinMotif(null); setAttenteAdv(0); forfaitEcritRef.current = false;
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
@@ -7326,7 +7326,14 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
     setPickerChoice([]);
     oublierPartieEnLigne();
+    // On revient d'où l'on venait. Un joueur Classé n'est jamais passé par l'écran des
+    // codes de partie : il a appuyé sur Classé depuis le hub, et l'y renvoyer lui
+    // demandait un code d'ami qu'il n'a pas. Le drapeau du Classé est levé au passage,
+    // sans quoi la partie entre amis lancée juste après aurait compté des trophées.
+    const venaitDuClasse = partieClassee;
+    setPartieClassee(false);
     if (tournoiOnlineId) setPhase("tourney-online");
+    else if (venaitDuClasse) { setMode(null); setPhase("landing"); }
     else setPhase("online-menu");
   }
 
@@ -8335,14 +8342,16 @@ export default function Emprise() {
   // Rendu de la main d'un camp : carte directe pour un groupe à 1 seule carte (Confluence,
   // bac à sable), vignette d'Ordre + éventail au tap pour un groupe à plusieurs cartes
   // (main standard/Histoire/tournoi, où chaque Ordre en apporte 4 au départ). Partagé
-  // entre Écarlate et Azur : seuls le camp, le sens d'ouverture de l'éventail ("bas" pour
-  // Écarlate en haut d'écran, qui s'ouvre donc vers le plateau en dessous ; "haut" pour
-  // Azur en bas d'écran, qui s'ouvre vers le plateau au-dessus) et la règle de
-  // dissimulation des Scribes changent d'un côté à l'autre — reproduite ici À L'IDENTIQUE
-  // de ce qu'elle était avant l'éventail, camp par camp.
+  // entre Écarlate et Azur : seuls le sens d'ouverture de l'éventail et la règle de
+  // dissimulation des Scribes changent d'un côté à l'autre — cette dernière reproduite
+  // ici À L'IDENTIQUE de ce qu'elle était avant l'éventail, camp par camp.
   function renderHandGroups(owner) {
     const groups = owner === "blue" ? blueGroups : redGroups;
-    const sens = owner === "blue" ? "haut" : "bas";
+    // L'éventail s'ouvre vers le PLATEAU, donc d'après la place de la main à l'écran et
+    // non d'après sa couleur. Depuis que la main du joueur est toujours en bas de son
+    // écran, Écarlate s'y retrouve en ligne : s'en tenir à la couleur faisait alors
+    // s'ouvrir l'éventail vers le bas, hors de l'écran, sous les doigts.
+    const sens = owner === campBas ? "haut" : "bas";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
     const isConcealed = (card) =>
       card.ability === "scribe" &&
