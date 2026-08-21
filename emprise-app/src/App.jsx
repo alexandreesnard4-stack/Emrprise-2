@@ -532,9 +532,12 @@ const ARENES = {
   Légende: { img: "/arenes/legende.webp", marge: 13, braise: "rgba(255,95,35,0.85)" },
 };
 
+// hub : l'illustration de l'arene, quand elle existe. Les ligues qui n'en ont pas encore
+// s'affichent en chantier plutot que de laisser un trou : le joueur voit ainsi ce qui
+// l'attend, et que ca se construit.
 const LEAGUES = [
-  { name: "Bronze", min: 0 },
-  { name: "Argent", min: 300 },
+  { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp" },
+  { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp" },
   { name: "Or", min: 800 },
   { name: "Platine", min: 1500 },
   { name: "Légende", min: 2500 },
@@ -2675,6 +2678,93 @@ const APP_STYLES = `
           flex: 1 1 auto; min-height: 0; width: 100%;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           gap: 5px; margin-top: 2px;
+          background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+          transition: transform .16s ease-out;
+        }
+        /* On entre dans l'arene : elle avance vers le doigt avant de s'ouvrir. */
+        .hub-arene:active { transform: scale(1.05); }
+        .hub-arene:active .hub-arene-img { filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6)) brightness(1.15); }
+
+        /* ---------- Galerie des arenes ---------- */
+        .arenes-voile {
+          padding: 0; align-items: stretch; justify-content: stretch;
+          animation: arenes-ouvre 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes arenes-ouvre {
+          from { opacity: 0; backdrop-filter: blur(0); }
+          to { opacity: 1; }
+        }
+        .arenes-defile {
+          width: 100%; height: 100dvh; overflow-y: auto; overflow-x: hidden;
+          scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          scrollbar-width: none;
+        }
+        .arenes-defile::-webkit-scrollbar { display: none; }
+        .arene-page {
+          height: 100dvh; scroll-snap-align: center; scroll-snap-stop: always;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 6px; padding: 40px 20px 28px; box-sizing: border-box; position: relative;
+        }
+        .arene-page-img {
+          max-width: min(84vw, 380px); max-height: 46dvh; width: auto; height: auto;
+          object-fit: contain; display: block;
+          filter: drop-shadow(0 18px 30px rgba(0,0,0,0.65));
+          animation: arene-page-monte 0.5s ease-out both;
+        }
+        @keyframes arene-page-monte {
+          from { opacity: 0; transform: translateY(14px) scale(0.96); }
+          to { opacity: 1; transform: none; }
+        }
+        .arene-page-chantier {
+          width: min(70vw, 260px); aspect-ratio: 4 / 3; border-radius: 16px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+          background: rgba(255,255,255,0.03); border: 1px dashed rgba(203,164,86,0.3);
+        }
+        .arene-page-chantier svg { width: 34px; height: 34px; fill: var(--gold); opacity: 0.7; }
+        .arene-page-chantier span {
+          font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--muted);
+        }
+        .arene-page-nom {
+          font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700;
+          letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-bright);
+          text-shadow: 0 2px 8px rgba(0,0,0,0.9); margin-top: 8px;
+        }
+        .arene-page-seuil { font-size: 12px; color: var(--muted); }
+        .arene-page-ici {
+          margin-top: 6px; padding: 3px 12px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--gold-bright); background: rgba(203,164,86,0.16);
+          border: 1px solid rgba(203,164,86,0.5);
+        }
+        .arene-page-fleche {
+          position: absolute; left: 0; right: 0; bottom: 16px;
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+          animation: arene-fleche-respire 2.2s ease-in-out infinite;
+        }
+        .arene-page-fleche svg {
+          width: 16px; height: 16px; fill: none; stroke: var(--gold);
+          stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+        }
+        @keyframes arene-fleche-respire {
+          0%, 100% { opacity: 0.45; transform: translateY(2px); }
+          50% { opacity: 1; transform: translateY(-2px); }
+        }
+        .arenes-fermer {
+          position: fixed; top: 14px; right: 14px; z-index: 5;
+          width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+        }
+        .arenes-fermer svg {
+          width: 17px; height: 17px; fill: none; stroke: var(--bone);
+          stroke-width: 2; stroke-linecap: round;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .arenes-voile, .arene-page-img, .arene-page-fleche { animation: none; }
         }
         .hub-arene-img {
           max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
@@ -8945,15 +9035,15 @@ export default function Emprise() {
                     a son illustration pour l'instant ; les ligues suivantes reprendront la
                     même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
                     Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
-                <div className="hub-arene">
+                <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
                   <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
                   <img
                     className="hub-arene-img"
-                    src="/arenes/bronze-hub.webp"
+                    src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
                     alt=""
                     onError={(e) => { e.currentTarget.style.display = "none"; }}
                   />
-                </div>
+                </button>
 
                 {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
                     ici : sans cet avis, le joueur se retrouvait au hub sans savoir
@@ -9062,6 +9152,47 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+
+          {activeModal === "arenes" && (() => {
+            const ligue = getLeague(stats.trophies || 0);
+            return (
+              <div className="info-overlay arenes-voile" onClick={() => setActiveModal(null)}>
+                {/* Une arene par ecran, calee au defilement : on glisse vers le haut et la
+                    suivante vient se poser. Le voile se ferme au clic a cote. */}
+                <div className="arenes-defile" onClick={(e) => e.stopPropagation()}>
+                  {LEAGUES.map((l, i) => {
+                    const ici = l.name === ligue.name;
+                    return (
+                      <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
+                        {l.hub ? (
+                          <img className="arene-page-img" src={l.hub} alt="" />
+                        ) : (
+                          <div className="arene-page-chantier" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 2 2 20h20L12 2zm0 5 6 11H6l6-11zm-1 3v4h2v-4h-2zm0 5v2h2v-2h-2z" /></svg>
+                            <span>En construction</span>
+                          </div>
+                        )}
+                        <div className="arene-page-nom">Arène {l.name}</div>
+                        <div className="arene-page-seuil">
+                          {l.min === 0 ? "Dès votre premier duel" : `À partir de ${l.min} trophées`}
+                        </div>
+                        {ici && <span className="arene-page-ici">Vous êtes ici</span>}
+                        {i < LEAGUES.length - 1 && (
+                          <span className="arene-page-fleche" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 4v14M6 10l6-6 6 6" /></svg>
+                            glissez vers le haut
+                          </span>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+                <button className="arenes-fermer" onClick={() => setActiveModal(null)} aria-label="Fermer">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+            );
+          })()}
 
           {activeModal === "profil" && (() => {
             const profil = titresDuProfil(stats);
