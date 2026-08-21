@@ -1324,6 +1324,30 @@ function poisonHarms(poisonValue, cardOwner) {
   return poisonCount(poisonValue, cardOwner) > 0;
 }
 
+// ---------- Poison et Firestore ----------
+// Une case empoisonnee porte une PILE de marques, donc poisonedCells est un tableau de
+// tableaux. Firestore refuse net les tableaux imbriques ("Nested arrays are not
+// supported") : sans encodage, la premiere case empoisonnee faisait echouer l'ecriture du
+// coup, et plus rien ne se synchronisait de la partie. On aplatit donc chaque case en une
+// chaine ("" si saine, "blue", "blue|red", "*" pour une marque de l'ancien format).
+function encoderPoison(valeur) {
+  const pile = poisonMarques(valeur);
+  if (!pile.length) return "";
+  return pile.map((m) => (m === true ? "*" : String(m))).join("|");
+}
+
+function decoderPoison(valeur) {
+  if (Array.isArray(valeur)) return valeur; // deja au bon format (sauvegarde locale)
+  if (typeof valeur !== "string") return valeur ? [true] : false;
+  if (!valeur) return false;
+  return valeur.split("|").map((m) => (m === "*" ? true : m));
+}
+
+function decoderPoisonPlateau(liste) {
+  if (!Array.isArray(liste)) return Array(CELLS).fill(false);
+  return liste.map(decoderPoison);
+}
+
 // Ajoute une marque à une case, sans dépasser POISON_MAX.
 function poisonAjoute(poisonValue, marque) {
   const pile = poisonMarques(poisonValue);
@@ -6223,7 +6247,7 @@ export default function Emprise() {
       setBoard(data.board.map(hydrateFromSave));
       setBlueHand(data.blueHand.map(hydrateFromSave));
       setRedHand(data.redHand.map(hydrateFromSave));
-      setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
+      setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
       setTurn(data.turn || "blue"); setFirstPlayer(data.firstPlayer || "blue");
       setMode(data.mode || "bot");
       setGameOver(!!data.gameOver);
@@ -6334,7 +6358,7 @@ export default function Emprise() {
       status: "waiting-orders", createdAt: serverTimestamp(),
       blueUid: aUid, redUid: bUid,
       blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
-      board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+      board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
       turn: premier, firstPlayer: premier, gameOver: false,
       tournoiId: tournoiOnlineId, matchKey,
     };
@@ -6556,7 +6580,7 @@ export default function Emprise() {
       blueHand: null,
       redHand: null,
       board: Array(CELLS).fill(null),
-      poisonedCells: Array(CELLS).fill(false),
+      poisonedCells: Array(CELLS).fill(""),
       turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
       gameOver: false,
     };
@@ -6698,7 +6722,7 @@ export default function Emprise() {
         setBlueHand(data.blueHand.map(hydrateFromSave));
         setRedHand(data.redHand.map(hydrateFromSave));
         setBoard(data.board.map(hydrateFromSave));
-        setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
+        setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setGameOver(!!data.gameOver || finForcee);
@@ -6859,7 +6883,7 @@ export default function Emprise() {
           redUid: myUid,
           blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
           board: Array(CELLS).fill(null),
-          poisonedCells: Array(CELLS).fill(false),
+          poisonedCells: Array(CELLS).fill(""),
           turn: premier, firstPlayer: premier,
           gameOver: false,
           appariement: true, // partie née d'un appariement, pas d'un code partagé
@@ -7062,7 +7086,7 @@ export default function Emprise() {
               status: "waiting-orders", createdAt: serverTimestamp(),
               blueUid: ancienne.redUid, redUid: ancienne.blueUid,
               blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
-              board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+              board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
             });
           });
@@ -7783,7 +7807,7 @@ export default function Emprise() {
           board: resolvedBoard.map(stripForSave),
           blueHand: nextBlueHand.map(stripForSave),
           redHand: nextRedHand.map(stripForSave),
-          poisonedCells: nextPoison,
+          poisonedCells: nextPoison.map(encoderPoison),
           turn: nowGameOver ? turn : nextTurn,
           gameOver: nowGameOver,
           lastMove: {
