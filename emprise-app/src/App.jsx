@@ -2446,25 +2446,30 @@ const APP_STYLES = `
         /* Liste des Ordres : 4 fiches visibles, glissement VERTICAL aimante. Chaque
            fiche est une rangee (vignette a gauche, texte a droite) pour que quatre
            tiennent a l'ecran sans rien ecraser. */
-        .hub-ordres-carrousel {
-          display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px;
-          min-height: 0; flex: 1;
-          overflow-y: auto; overflow-x: hidden;
-          scroll-snap-type: y proximity; -webkit-overflow-scrolling: touch;
-          padding: 4px 4px 10px; box-sizing: border-box;
+        .hub-ordres-grille4 {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px 8px;
+          width: 100%; max-width: 420px; padding: 4px 2px 8px; box-sizing: border-box;
         }
-        .hub-ordres-carrousel .hub-ordre-fiche {
-          flex: 0 0 calc(25% - 6px); min-height: 68px; width: 100%;
-          scroll-snap-align: start; box-sizing: border-box;
-          flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px;
+        .hub-ordre-vignette {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          min-width: 0;
         }
-        .hub-ordres-carrousel .hub-ordre-fiche .order-thumb-wrap,
-        .hub-ordres-carrousel .hub-ordre-fiche .teaser-wrap {
-          width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden;
+        /* Triple selecteur a dessein : la vignette de base du selecteur d'Ordres impose
+           height 200px plus loin dans la feuille, il faut la battre en specificite.
+           Carre et non 3/4 : trois lignes doivent tenir sous le titre sans defiler. */
+        .hub-ordres-grille4 .hub-ordre-vignette .order-thumb-wrap,
+        .hub-ordres-grille4 .hub-ordre-vignette .teaser-wrap {
+          width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+          border: 1px solid rgba(203,164,86,0.28);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
-        .hub-ordres-carrousel .hub-ordre-fiche .thumb {
-          width: 100%; height: 100%; object-fit: cover;
+        .hub-ordres-grille4 .hub-ordre-vignette .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .hub-ordre-vignette-nom {
+          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.06em; text-transform: uppercase; color: var(--bone);
+          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        .hub-ordre-vignette.scellee .hub-ordre-vignette-nom { color: var(--muted); }
         .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
         .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -8543,33 +8548,26 @@ export default function Emprise() {
               <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
                 <h2 className="hub-page-titre">Les Ordres</h2>
                 <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
-                {/* Carrousel : le seul geste du hub est le gauche-droite. */}
-                <div className="hub-ordres-carrousel">
+                {/* Une galerie, pas une encyclopedie : 4 Ordres par ligne, portrait et
+                    nom seulement. Les descriptions vivent la ou l'on choisit ses Ordres.
+                    Le Geolier garde son portrait scelle : le cadenas dit tout. */}
+                <div className="hub-ordres-grille4">
                   {ORDERS.map((order) => {
                     const bientot = !isOrderAvailable(order);
                     return (
-                      <div key={order.key} className={`order-option hub-ordre-fiche ${bientot ? "order-option-locked" : ""}`}>
-                        {order.portrait ? (
-                          bientot ? (
-                            <ComingSoonThumb order={order} />
-                          ) : (
-                            <div className="order-thumb-wrap">
-                              <img className="thumb" src={order.portrait} alt={order.name} />
-                            </div>
-                          )
+                      <div key={order.key} className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`} title={bientot ? "Bientôt disponible" : order.desc}>
+                        {bientot ? (
+                          <ComingSoonThumb order={order} />
                         ) : (
-                          <div className="icon-frame">{order.icon}</div>
+                          <div className="order-thumb-wrap">
+                            <img className="thumb" src={order.portrait} alt={order.name} />
+                          </div>
                         )}
-                        <div className="info">
-                          <span className="name">{order.name}</span>
-                          <span className="desc">{bientot ? <CountdownLabel order={order} /> : order.desc}</span>
-                        </div>
-                        {bientot && <span className="coming-soon-badge">Bientôt disponible</span>}
+                        <span className="hub-ordre-vignette-nom">{order.name}</span>
                       </div>
                     );
                   })}
                 </div>
-                <div className="hub-carrousel-indice" aria-hidden="true">faites glisser vers le bas</div>
               </section>
             )}
           </main>
