@@ -2669,10 +2669,33 @@ const APP_STYLES = `
         .hub-avis {
           max-width: 340px; margin: 8px 0 0; cursor: pointer;
         }
-        /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau. */
+        /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
+           reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
+        .hub-arene {
+          flex: 1 1 auto; min-height: 0; width: 100%;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 2px; margin-top: 2px;
+        }
+        .hub-arene-img {
+          max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
+          object-fit: contain; display: block;
+          filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6));
+          animation: hub-arene-parait 0.7s ease-out both;
+        }
+        @keyframes hub-arene-parait {
+          from { opacity: 0; transform: translateY(10px) scale(0.97); }
+          to { opacity: 1; transform: none; }
+        }
+        .hub-arene-nom {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+          text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+        /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau.
+           margin-top: auto les colle au bas de la page, sous l'arene. */
         .hub-jouer-rang {
-          display: flex; align-items: stretch; gap: 9px;
-          width: 100%; max-width: 340px; margin-top: 6px;
+          display: flex; align-items: stretch; gap: 9px; flex: none;
+          width: 100%; max-width: 340px; margin-top: auto; padding-top: 6px;
         }
         .hub-jouer-rang .hub-jouer-classe { margin-top: 0; flex: 1.6; max-width: none; }
         .hub-jouer-modes-btn {
@@ -2798,23 +2821,26 @@ const APP_STYLES = `
            les traces SVG de secours. */
         /* cover et non contain : les illustrations fournies sont paysage avec de
            larges marges sombres, le recadrage central isole l'icone elle-meme. */
-        /* Les trois icones sont des illustrations, pas des pictogrammes : encadrees, elles
-           se lisaient comme des vignettes collees sur la barre. Leurs bords s'effacent
-           desormais dans le fond, il ne reste que le sujet. */
+        /* Les trois icones sont des illustrations sur fond NOIR, pas des pictogrammes
+           detoures : affichees telles quelles, elles se lisaient comme des vignettes
+           carrees collees sur la barre. mix-blend-mode: lighten ne garde d'une image que
+           ce qui est plus clair que le fond — le noir disparait donc entierement et il ne
+           reste que le blason, qui se fond dans la barre. Le masque radial acheve les
+           coins, au cas ou une image aurait un fond moins sombre que les autres. */
         .hub-onglet-img {
           width: 34px; height: 34px; object-fit: cover; border-radius: 9px;
           border: none;
-          -webkit-mask-image: radial-gradient(72% 72% at 50% 46%, #000 46%, rgba(0,0,0,0.45) 74%, transparent 100%);
-          mask-image: radial-gradient(72% 72% at 50% 46%, #000 46%, rgba(0,0,0,0.45) 74%, transparent 100%);
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          mix-blend-mode: lighten;
+          -webkit-mask-image: radial-gradient(64% 64% at 50% 48%, #000 62%, transparent 100%);
+          mask-image: radial-gradient(64% 64% at 50% 48%, #000 62%, transparent 100%);
           transition: filter .22s, opacity .22s;
         }
         .hub-onglet:not(.actif) .hub-onglet-img {
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.4) brightness(0.62);
-          opacity: 0.85;
+          filter: saturate(0.45) brightness(0.6);
+          opacity: 0.8;
         }
         .hub-onglet.actif .hub-onglet-img {
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.55));
+          filter: brightness(1.12) drop-shadow(0 0 7px rgba(232,200,119,0.5));
         }
         .hub-onglet-central .hub-onglet-img { width: 44px; height: 44px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
@@ -4690,15 +4716,7 @@ const APP_STYLES = `
           color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
         }
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
-        /* Rotation du duel local : tout l'écran pivote vers le joueur dont c'est le tour.
-           La transition donne le geste de tourner physiquement le plateau. */
-        /* Rotation du duel local : INSTANTANEE, et c'est voulu. Transition comme
-           animation restaient gelees a leur point de depart dans certains
-           environnements (constate : la valeur calculee ne bougeait jamais, ecran
-           jamais tourne). L'etat est donc porte uniquement par le style inline pose
-           par React : aucun mecanisme temporel, aucun environnement ne peut le geler. */
-        /* Trophées d'un joueur en partie Classée : une puce discrète dans l'étiquette. */
-        /* Puce de trophees en Classe : a gauche, a hauteur de la rangee d'Ordres. */
+        /* Trophées et titre d'un joueur en Classé : des puces posées à côté de son nom. */
         .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
         /* L'etiquette est une rangee : le nom, puis ce qui le decrit. */
         .turn-label {
@@ -6202,14 +6220,17 @@ export default function Emprise() {
   const [gameOver, setGameOver] = useState(false);
   const [infoAbility, setInfoAbility] = useState(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
-  // Duel local à deux sur le même appareil : quand l'option est active, l'écran pivote
-  // de 180° pendant le tour d'Écarlate, comme si on tournait le plateau vers l'autre
-  // joueur. Chacun joue ainsi "en bas" de son côté de la table.
-  const [rotationLocale, setRotationLocale] = useState(() => {
+  // Duel local à deux sur le même appareil : on se passe le téléphone SANS le retourner.
+  // L'écran ne pivote donc pas — il échange les deux mains, pour que celui qui doit jouer
+  // trouve toujours la sienne en bas, à portée du pouce, et tout le texte à l'endroit.
+  // (Une rotation à 180° a été essayée avant : elle suppose qu'on retourne l'appareil,
+  // ce qui n'est pas le geste réel, et laissait la moitié de l'écran tête-bêche.)
+  // La clé de stockage garde son ancien nom pour ne pas effacer le réglage des joueurs.
+  const [passageTelephone, setPassageTelephone] = useState(() => {
     try { return localStorage.getItem("emprise-rotation-locale") === "1"; } catch (e) { return false; }
   });
-  function toggleRotationLocale() {
-    setRotationLocale((r) => {
+  function togglePassageTelephone() {
+    setPassageTelephone((r) => {
       const suivant = !r;
       try { localStorage.setItem("emprise-rotation-locale", suivant ? "1" : "0"); } catch (e) { /* non persisté */ }
       return suivant;
@@ -6464,11 +6485,17 @@ export default function Emprise() {
   // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
   // l'adversaire". Les deux sections (étiquette + main) sont donc pilotées par le camp
   // affiché en haut et en bas, et non plus figées rouge en haut / bleu en bas.
-  const campHaut = mode === "online" && onlineRole === "red" ? "blue" : "red";
-  const campBas = campHaut === "red" ? "blue" : "red";
-  // Rotation du duel local : l'écran entier pivote pendant le tour d'Écarlate.
-  const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play"
-    && turn === "red" && !gameOver && !infoAbility && !confirmQuit;
+  // Voir juste en dessous : en duel local, ce placement suit désormais le tour de jeu.
+  // Qui occupe le bas de l'écran. En ligne, c'est toujours MOI. En duel local avec
+  // l'option de passage, c'est celui dont c'est le tour : le téléphone change de mains
+  // sans changer de sens, la main du joueur vient donc à lui. Partout ailleurs, Azur.
+  // Aucune condition sur les panneaux ouverts ("i", confirmation de départ) : ils ne
+  // peuvent pas changer le tour, et les exclure ferait sauter les deux mains à l'écran
+  // au moment précis où l'on ouvre un panneau.
+  const campBas = mode === "online"
+    ? (onlineRole || "blue")
+    : (mode === "local" && !testMode && passageTelephone && phase === "play" ? turn : "blue");
+  const campHaut = campBas === "red" ? "blue" : "red";
 
   // ---------- Profil de joueur : quel camp est le mien, avec quels Ordres ----------
   // Contre un Echo je suis toujours Azur ; en ligne, le camp que le serveur m'a donne.
@@ -8825,8 +8852,7 @@ export default function Emprise() {
 
   return (
     <div
-      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${vueTournee ? "vue-tournee" : ""}`}
-      style={vueTournee ? { transform: "rotate(180deg)" } : undefined}
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""}`}
     >
       <style>{APP_STYLES}</style>
 
@@ -8905,6 +8931,21 @@ export default function Emprise() {
                 {hasSavedGame && (
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
+
+                {/* L'arène de la ligue : la pièce centrale du hub, et ce qui pousse les
+                    deux boutons vers le bas de l'écran, à portée du pouce. Seul le Bronze
+                    a son illustration pour l'instant ; les ligues suivantes reprendront la
+                    même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
+                    Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
+                <div className="hub-arene">
+                  <img
+                    className="hub-arene-img"
+                    src="/arenes/bronze-hub.webp"
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
+                </div>
 
                 {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
                     ici : sans cet avis, le joueur se retrouvait au hub sans savoir
@@ -10418,11 +10459,11 @@ export default function Emprise() {
                   <div className="desc">Un bouton révèle le meilleur coup du joueur dont c'est le tour.</div>
                 </div>
               </label>
-              <label className={`assist-option ${rotationLocale ? "checked" : ""}`}>
-                <input type="checkbox" checked={rotationLocale} onChange={toggleRotationLocale} />
+              <label className={`assist-option ${passageTelephone ? "checked" : ""}`}>
+                <input type="checkbox" checked={passageTelephone} onChange={togglePassageTelephone} />
                 <div className="assist-text">
-                  <div className="name">Rotation de l'écran</div>
-                  <div className="desc">L'écran pivote vers le joueur dont c'est le tour, pour se passer l'appareil sans le retourner.</div>
+                  <div className="name">Se passer le téléphone</div>
+                  <div className="desc">La main du joueur dont c'est le tour descend en bas de l'écran. Rien ne pivote : on tend l'appareil tel quel.</div>
                 </div>
               </label>
             </div>
@@ -10779,7 +10820,7 @@ export default function Emprise() {
             // Sous rotation (duel local), la racine est pivotée : les coordonnées du
             // pointeur (repère de l'écran) doivent être inversées pour que le fantôme
             // suive le doigt au lieu de fuir à l'opposé.
-            <div className="drag-ghost" style={{ left: vueTournee ? window.innerWidth - drag.x : drag.x, top: vueTournee ? window.innerHeight - drag.y : drag.y }}>
+            <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
               <Card card={draggedCard} owner={drag.owner} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
             </div>
           )}
