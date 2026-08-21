@@ -2464,10 +2464,18 @@ const APP_STYLES = `
           box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         .hub-ordres-grille4 .hub-ordre-vignette .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Le cadre porte le nom : reference de position pour l'incrustation. */
+        .hub-ordres-grille4 .hub-ordre-cadre { position: relative; width: 100%; }
+        /* Nom pose EN HAUT de la carte, sur un voile qui descend : opaque derriere le
+           texte, transparent plus bas pour laisser voir le portrait. */
         .hub-ordre-vignette-nom {
-          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
-          letter-spacing: 0.06em; text-transform: uppercase; color: var(--bone);
-          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+          padding: 4px 3px 9px; border-radius: 10px 10px 0 0; pointer-events: none;
+          background: linear-gradient(180deg, rgba(8,6,12,0.92) 0%, rgba(8,6,12,0.62) 55%, rgba(8,6,12,0) 100%);
+          font-family: 'Cinzel', serif; font-size: 8.5px; font-weight: 700;
+          letter-spacing: 0.04em; text-transform: uppercase; color: var(--bone);
+          text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .hub-ordre-vignette.scellee .hub-ordre-vignette-nom { color: var(--muted); }
         .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
@@ -8556,14 +8564,16 @@ export default function Emprise() {
                     const bientot = !isOrderAvailable(order);
                     return (
                       <div key={order.key} className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`} title={bientot ? "Bientôt disponible" : order.desc}>
-                        {bientot ? (
-                          <ComingSoonThumb order={order} />
-                        ) : (
-                          <div className="order-thumb-wrap">
-                            <img className="thumb" src={order.portrait} alt={order.name} />
-                          </div>
-                        )}
-                        <span className="hub-ordre-vignette-nom">{order.name}</span>
+                        <div className="hub-ordre-cadre">
+                          {bientot ? (
+                            <ComingSoonThumb order={order} />
+                          ) : (
+                            <div className="order-thumb-wrap">
+                              <img className="thumb" src={order.portrait} alt={order.name} />
+                            </div>
+                          )}
+                          <span className="hub-ordre-vignette-nom">{order.name}</span>
+                        </div>
                       </div>
                     );
                   })}
