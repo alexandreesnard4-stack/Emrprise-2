@@ -475,7 +475,7 @@ function titrePrincipal(stats) {
   return t.titres.length ? t.titres[0].combo.nom : null;
 }
 
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0 };
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0 };
 
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
@@ -945,9 +945,15 @@ async function loadStats() {
 // pour le profil — bac a sable, Mode Histoire, duel local, ou annulation utilisee).
 // compteAuProfil : dit si cette partie entre dans le denominateur du profil. Une partie
 // hors-profil ne doit NI compter ses combos NI gonfler le total, sinon le taux baisserait.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false) {
+// monCamp : le camp que J'AI tenu cette partie (null en duel local, ou les deux joueurs
+// sont humains et aucune victoire n'est "la mienne"). blueWins et redWins comptent les
+// camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
+// et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
+// "victoires" que de parties jouees, defaites comprises.
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
+  if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
   if (compteAuProfil) {
     stats.combosParties = (stats.combosParties || 0) + 1;
     if (!stats.combos) stats.combos = {};
@@ -2660,6 +2666,9 @@ const APP_STYLES = `
         .hub-jouer-classe-sous {
           font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
         }
+        .hub-avis {
+          max-width: 340px; margin: 8px 0 0; cursor: pointer;
+        }
         /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau. */
         .hub-jouer-rang {
           display: flex; align-items: stretch; gap: 9px;
@@ -2789,9 +2798,14 @@ const APP_STYLES = `
            les traces SVG de secours. */
         /* cover et non contain : les illustrations fournies sont paysage avec de
            larges marges sombres, le recadrage central isole l'icone elle-meme. */
+        /* Les trois icones sont des illustrations, pas des pictogrammes : encadrees, elles
+           se lisaient comme des vignettes collees sur la barre. Leurs bords s'effacent
+           desormais dans le fond, il ne reste que le sujet. */
         .hub-onglet-img {
-          width: 32px; height: 32px; object-fit: cover; border-radius: 9px;
-          border: 1px solid rgba(203,164,86,0.35);
+          width: 34px; height: 34px; object-fit: cover; border-radius: 9px;
+          border: none;
+          -webkit-mask-image: radial-gradient(72% 72% at 50% 46%, #000 46%, rgba(0,0,0,0.45) 74%, transparent 100%);
+          mask-image: radial-gradient(72% 72% at 50% 46%, #000 46%, rgba(0,0,0,0.45) 74%, transparent 100%);
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
           transition: filter .22s, opacity .22s;
         }
@@ -2802,7 +2816,7 @@ const APP_STYLES = `
         .hub-onglet.actif .hub-onglet-img {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.55));
         }
-        .hub-onglet-central .hub-onglet-img { width: 42px; height: 42px; }
+        .hub-onglet-central .hub-onglet-img { width: 44px; height: 44px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
@@ -4576,14 +4590,29 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: center; gap: 4px;
           margin-top: 12px; width: 100%; max-width: 250px;
         }
-        /* Cadre du portrait : reference de position pour le texte incruste. */
+        /* Cadre du portrait : reference de position pour le texte incruste. Plus de trait
+           dore ni d'ombre portee : l'illustration ne doit plus se lire comme une carte
+           posee sur la page, elle doit s'y fondre. */
         .attente-ordre-cadre {
-          position: relative; display: block; overflow: hidden;
-          border-radius: 14px; border: 1px solid rgba(203,164,86,0.45);
-          box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+          position: relative; display: block; border-radius: 14px;
         }
+        /* Fondu a l'apparition, puis bords qui s'effacent : l'image sort du noir et s'y
+           replonge sur ses quatre cotes, au lieu de s'arreter net sur un bord franc. */
         .attente-ordre-cadre img {
           display: block; width: min(72vw, 300px); aspect-ratio: 3 / 4; object-fit: cover;
+          -webkit-mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
+          mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
+          animation: attente-image-fondu 1.4s ease-out both;
+        }
+        @keyframes attente-image-fondu {
+          from { opacity: 0; transform: scale(1.04); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        /* Le voile du texte suit le meme effacement : sans cela il flottait en rectangle
+           net sur une image aux bords fondus. */
+        .attente-ordre-cadre .recit-attente.sur-image {
+          -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
         }
         /* Textes poses SUR l'illustration : un voile monte du bas, opaque sous le texte
            pour le rendre lisible quel que soit le portrait, transparent en haut pour ne
@@ -4671,19 +4700,23 @@ const APP_STYLES = `
         /* Trophées d'un joueur en partie Classée : une puce discrète dans l'étiquette. */
         /* Puce de trophees en Classe : a gauche, a hauteur de la rangee d'Ordres. */
         .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
-        .trophees-flottant {
-          position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 3px 8px 3px 6px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
-          color: var(--gold-bright); background: rgba(8,6,12,0.8);
-          border: 1px solid rgba(203,164,86,0.4);
+        /* L'etiquette est une rangee : le nom, puis ce qui le decrit. */
+        .turn-label {
+          display: flex; align-items: center; justify-content: center;
+          gap: 8px; flex-wrap: wrap;
         }
-        .trophees-flottant svg { width: 12px; height: 12px; fill: var(--gold-bright); }
+        .turn-label-nom { flex: none; }
+        .trophees-flottant {
+          display: inline-flex; align-items: center; gap: 5px; flex: none;
+          padding: 3px 11px 3px 8px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; line-height: 1;
+          color: var(--gold-bright); background: rgba(8,6,12,0.8);
+          border: 1px solid rgba(203,164,86,0.45);
+        }
+        .trophees-flottant svg { width: 17px; height: 17px; fill: var(--gold-bright); }
         /* Titre de style en Classe : face aux trophees, a droite de la rangee d'Ordres. */
         .titre-flottant {
-          position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
-          max-width: 40%; padding: 3px 9px; border-radius: 999px;
+          flex: none; max-width: 44vw; padding: 3px 9px; border-radius: 999px;
           font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
           letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           color: var(--bone); background: rgba(8,6,12,0.8);
@@ -4764,8 +4797,15 @@ const APP_STYLES = `
         .tb-champion-annonce { color: var(--gold-bright); font-weight: 700; font-size: 13px; }
         /* Messages en direct. Bouton flottant au-dessus de la rangée d'actions ; le
            panneau reste compact pour ne jamais recouvrir le plateau entier. */
+        /* z-index 75/76 et non 60/61 : l'eventail se deploie vers le HAUT depuis la main
+           du bas, c'est-a-dire exactement sur la bande du chat, et son fond invisible
+           couvre tout l'ecran (65). En restant dessous, le panneau ouvert se faisait
+           recouvrir par les cartes (70) au niveau meme du champ de saisie, et le premier
+           tap sur "Envoyer" ne servait qu'a refermer l'eventail. Meme raison que
+           .order-tile (66) et .info-overlay (90) : ce qu'on a ouvert soi-meme doit rester
+           touchable. */
         .chat-bouton {
-          position: fixed; right: 10px; bottom: 86px; z-index: 60;
+          position: fixed; right: 10px; bottom: 86px; z-index: 75;
           width: 40px; height: 40px; border-radius: 50%; font-size: 17px; line-height: 1;
           background: var(--panel); color: var(--bone);
           border: 1px solid rgba(203,164,86,0.45); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
@@ -4784,7 +4824,7 @@ const APP_STYLES = `
           box-shadow: 0 0 5px rgba(224,101,90,0.7);
         }
         .chat-bulle-directe {
-          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          position: fixed; right: 10px; bottom: 132px; z-index: 76;
           width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
           padding: 9px 12px; border-radius: 12px; cursor: pointer;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.4);
@@ -4803,7 +4843,7 @@ const APP_STYLES = `
           to { opacity: 1; transform: translateY(0); }
         }
         .chat-bulle-avis {
-          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          position: fixed; right: 10px; bottom: 132px; z-index: 76;
           padding: 7px 12px; border-radius: 999px;
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.35);
           font-size: 11px; letter-spacing: 0.06em; color: var(--gold-bright);
@@ -4815,7 +4855,7 @@ const APP_STYLES = `
           color: #14111c; background: var(--gold-bright); text-align: center;
         }
         .chat-panneau {
-          position: fixed; right: 10px; bottom: 132px; z-index: 60;
+          position: fixed; right: 10px; bottom: 132px; z-index: 75;
           width: min(290px, calc(100vw - 20px)); max-height: 42vh;
           display: flex; flex-direction: column;
           background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
@@ -6447,25 +6487,29 @@ export default function Emprise() {
     return new Set((liste || []).map((o) => o && o.key).filter(Boolean));
   }
 
-  // Étiquette d'un camp — texte identique à l'ancienne version, plus les trophées en
-  // Classé (0 pour l'instant : les profils ne sont pas encore synchronisés côté serveur,
-  // l'emplacement est prêt pour brancher les vraies valeurs le moment venu).
+  // Étiquette d'un camp : son nom, puis ce qui le décrit — trophées et titre de style en
+  // Classé. Ces deux-là vivaient en pastilles flottantes calées sur les bords de l'écran,
+  // loin du joueur qu'elles décrivent ; elles appartiennent à son nom, elles s'y rangent
+  // donc, et les trophées sont assez gros pour se lire d'un coup d'œil en pleine partie.
   function labelCamp(camp) {
     const rouge = camp === "red";
     return (
       <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
-        {rouge ? "Écarlate" : "Azur"}
-        {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
-        {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
-        {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
-
+        <span className="turn-label-nom">
+          {rouge ? "Écarlate" : "Azur"}
+          {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
+          {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
+          {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
+        </span>
+        {pucesTrophees(camp)}
+        {pucesTitre(camp)}
       </div>
     );
   }
 
-  // Puce de trophees d'un camp en partie Classee, ancree a GAUCHE de sa rangee
-  // d'Ordres. Les valeurs viennent du document de la partie : les deux ecrans
-  // affichent les memes chiffres, quel que soit le camp qu'ils jouent.
+  // Puce de trophees d'un camp en partie Classee, posee a cote de son nom. Les valeurs
+  // viennent du document de la partie : les deux ecrans affichent les memes chiffres,
+  // quel que soit le camp qu'ils jouent.
   function pucesTrophees(camp) {
     if (mode !== "online" || !partieClassee) return null;
     const valeur = trophesPartie && typeof trophesPartie[camp] === "number"
@@ -6481,9 +6525,9 @@ export default function Emprise() {
     );
   }
 
-  // Titre de style d'un camp en partie Classee, ancre a DROITE de sa rangee d'Ordres,
-  // face aux trophees. Comme eux, la valeur vient du document de la partie : les deux
-  // ecrans lisent la meme chose. Un joueur sans titre n'affiche rien du tout.
+  // Titre de style d'un camp en partie Classee, a la suite de ses trophees. Comme eux, la
+  // valeur vient du document de la partie : les deux ecrans lisent la meme chose. Un
+  // joueur sans titre n'affiche rien du tout.
   function pucesTitre(camp) {
     if (mode !== "online" || !partieClassee) return null;
     const titre = titresPartie && typeof titresPartie[camp] === "string"
@@ -6557,7 +6601,7 @@ export default function Emprise() {
         });
       }
       const comboKeys = compteAuProfil ? [...suivi.reussis] : [];
-      recordGameStats(winner, orderKeys, trophyGain, comboKeys, compteAuProfil).then(setStats);
+      recordGameStats(winner, orderKeys, trophyGain, comboKeys, compteAuProfil, monCampCombos).then(setStats);
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
       // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
@@ -6655,6 +6699,13 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null);
+    // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
+    // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
+    // le leve alors que gameOver etait deja faux : l'effet ne se rejouait pas, le verrou
+    // restait leve, et la partie SUIVANTE n'etait comptee nulle part (ni trophees, ni
+    // historique, ni profil). Deserter deux parties classees de suite ne coutait alors
+    // plus rien. On le baisse donc ici, sur le chemin que toute sortie emprunte.
+    statsRecordedRef.current = false;
     setVainqueurForce(null); setFinMotif(null); setAttenteAdv(0); forfaitEcritRef.current = false;
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
@@ -7110,7 +7161,7 @@ export default function Emprise() {
         }
       } else {
         // L'adversaire est parti avant même que la partie ne démarre : pas de victoire
-        // (rien n'a été joué), juste un message et le retour au menu en ligne.
+        // (rien n'a été joué), juste un message et le retour d'où l'on venait.
         if (finForcee) {
           if (tournoiOnlineId) {
             // Match de tournoi : l'abandon adverse nous donne la victoire du match.
@@ -7125,11 +7176,16 @@ export default function Emprise() {
           // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
           // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
           setVainqueurForce(null); setFinMotif(null);
+          // On lit le Classé sur le DOCUMENT et non sur l'état React : cet écouteur ne se
+          // réabonne qu'au changement de partie, sa fermeture garderait donc une valeur
+          // périmée de partieClassee. Le document, lui, dit la vérité de cette partie-là.
+          const venaitDuClasse = !!data.appariement;
           setPartieClassee(false);
           oublierPartieEnLigne();
           setOnlineError("L'adversaire a quitté avant le début de la partie.");
           setPickerChoice([]);
-          setPhase("online-menu");
+          if (venaitDuClasse) { setMode(null); setPhase("landing"); }
+          else setPhase("online-menu");
           return;
         }
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
@@ -7266,6 +7322,11 @@ export default function Emprise() {
         return { code };
       });
       if (apparie) {
+        // L'appariement a eu lieu : la partie existe et l'adversaire y est deja annonce.
+        // On reaffirme le mode, car un Retour appuye PENDANT la transaction l'a peut-etre
+        // remis a null — on serait alors entre dans la partie sans que l'ecouteur, qui
+        // depend de mode, ne s'y abonne : plateau fige, adversaire seul en face.
+        setMode("online");
         setFileAttente(false);
         setOnlineStatus("");
         setOnlineGameId(apparie.code);
@@ -7278,7 +7339,9 @@ export default function Emprise() {
       setOnlineStatus("");
       setMode(null);
       setOnlineError("Recherche impossible. Vérifiez votre connexion.");
-      setPhase("online-menu");
+      // La recherche ne part que du bouton Classé : en cas d'échec on rend le joueur au
+      // hub, jamais à l'écran des codes d'ami où il n'a rien à faire.
+      setPhase("landing");
     }
   }
 
@@ -7343,7 +7406,7 @@ export default function Emprise() {
       if (partieClassee && !statsRecordedRef.current) {
         statsRecordedRef.current = true;
         const orderKeys = [...blueOrders, ...redOrders].map((l) => l.key);
-        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE).then(setStats);
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
       }
     }
     // Match de tournoi : abandonner la partie ne fait pas quitter le TOURNOI — on
@@ -8257,7 +8320,8 @@ export default function Emprise() {
     setHistory(stack);
   }
 
-  // "Augure" : suggère le meilleur coup pour le joueur (Bleu) en réutilisant
+  // "Augure" : suggère le meilleur coup pour le joueur — Azur contre un Écho, celui dont
+  // c'est le tour en duel local — en réutilisant
   // l'IA "Seigneur de Guerre" (la plus forte déjà codée), appliquée à sa propre
   // main plutôt qu'à celle du bot. Un second clic masque l'augure sans le perdre.
   function toggleHint() {
@@ -8352,6 +8416,11 @@ export default function Emprise() {
     // écran, Écarlate s'y retrouve en ligne : s'en tenir à la couleur faisait alors
     // s'ouvrir l'éventail vers le bas, hors de l'écran, sous les doigts.
     const sens = owner === campBas ? "haut" : "bas";
+    // L'augure conseille le joueur dont c'est le tour en duel local (voir toggleHint) :
+    // son indice de carte vaut pour la main de CE camp-la. Le comparer en dur a Azur
+    // laissait la carte conseillee d'Ecarlate sans halo, et allumait a sa place la carte
+    // d'Azur occupant le meme rang — chaque camp numerote sa main a partir de zero.
+    const campAugure = mode === "local" ? turn : "blue";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
     const isConcealed = (card) =>
       card.ability === "scribe" &&
@@ -8361,7 +8430,7 @@ export default function Emprise() {
       const isOpen = !!(fanOpen && fanOpen.owner === owner && fanOpen.ability === group.ability);
       const isClosing = !isOpen && !!(fanClosing && fanClosing.owner === owner && fanClosing.ability === group.ability);
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
-      const hasHintInside = owner === "blue" && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
+      const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
       return (
         <div key={group.ability} className={`order-tile-wrap ${isOpen ? "fan-open" : ""}`}>
@@ -8419,7 +8488,7 @@ export default function Emprise() {
                     <Card
                       card={card}
                       owner={owner}
-                      extraClass={`hand in-fan ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === "blue" && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
+                      extraClass={`hand in-fan ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === campAugure && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
                       onPointerDown={canInteract ? (e) => startCardDrag(owner, handIdx, e) : undefined}
                       selected={!!(selected && selected.owner === owner && selected.idx === handIdx)}
                       concealed={isConcealed(card)}
@@ -8837,6 +8906,15 @@ export default function Emprise() {
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
 
+                {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
+                    ici : sans cet avis, le joueur se retrouvait au hub sans savoir
+                    pourquoi. Un clic le chasse. */}
+                {onlineError && (
+                  <div className="online-error hub-avis" role="status" onClick={() => setOnlineError("")}>
+                    {onlineError}
+                  </div>
+                )}
+
                 {/* Deux entrees seulement : le Classe, action phare, et la porte vers
                     tous les autres modes. Le detail vit dans un panneau, la page reste
                     epuree comme un ecran d'accueil de jeu mobile. */}
@@ -8939,7 +9017,7 @@ export default function Emprise() {
           {activeModal === "profil" && (() => {
             const profil = titresDuProfil(stats);
             const total = stats.gamesPlayed || 0;
-            const victoires = (stats.blueWins || 0) + (stats.redWins || 0);
+            const victoires = stats.mesVictoires || 0;
             return (
               <div className="info-overlay" onClick={() => setActiveModal(null)}>
                 <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
@@ -10073,7 +10151,14 @@ export default function Emprise() {
               detourner l'attention d'une information qui, elle, demande une decision. */}
           {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />}
           {attentePreMatch > TURN_SECONDS && (
-            <div className="sub">{`L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
+            <div className="sub">{
+              // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
+              // simplement annulee et l'on rentre au menu. Promettre une victoire qui ne
+              // vient jamais etait la seule chose que cet ecran disait de faux.
+              tournoiOnlineId
+                ? `L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
+                : `L'adversaire ne se présente pas : la partie sera annulée dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
+            }</div>
           )}
           {onlineError && <div className="online-error">{onlineError}</div>}
         </div>
@@ -10436,8 +10521,6 @@ export default function Emprise() {
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
           <div className="zone-main">
-            {pucesTrophees(campHaut)}
-            {pucesTitre(campHaut)}
             {labelCamp(campHaut)}
             {mainCamp(campHaut)}
           </div>
@@ -10632,8 +10715,6 @@ export default function Emprise() {
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           <div>
-            {pucesTrophees(campBas)}
-            {pucesTitre(campBas)}
             {mainCamp(campBas)}
             {labelCamp(campBas)}
           </div>
