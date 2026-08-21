@@ -2389,6 +2389,38 @@ const APP_STYLES = `
         .hub-jouer-classe-sous {
           font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
         }
+        /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau. */
+        .hub-jouer-rang {
+          display: flex; align-items: stretch; gap: 9px;
+          width: 100%; max-width: 340px; margin-top: 6px;
+        }
+        .hub-jouer-rang .hub-jouer-classe { margin-top: 0; flex: 1.6; max-width: none; }
+        .hub-jouer-modes-btn {
+          flex: 1; box-sizing: border-box;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+          padding: 10px 10px 8px;
+          background: linear-gradient(180deg, #2c2340, #171221 75%);
+          border: 1px solid rgba(203,164,86,0.5); border-radius: 14px; cursor: pointer;
+          box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,205,0.12);
+          transition: filter .15s, transform .12s ease-in, border-color .2s;
+        }
+        .hub-jouer-modes-btn:hover { border-color: var(--gold-bright); }
+        .hub-jouer-modes-btn:active { transform: scale(0.94); }
+        .hub-jouer-modes-btn svg { width: 16px; height: 16px; fill: var(--gold-bright); }
+        .hub-jouer-modes-btn .hub-jouer-classe-titre { color: var(--gold-bright); }
+        .hub-jouer-modes-btn .hub-jouer-classe-sous { color: var(--muted); }
+        /* Panneau des modes : les tuiles du hub, rangees par famille. */
+        .modes-groupe-titre {
+          width: 100%; text-align: left;
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+          margin: 10px 0 6px; padding-bottom: 4px;
+          border-bottom: 1px solid rgba(203,164,86,0.18);
+        }
+        .modes-groupe {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
+        }
+        .modes-panel .reset-btn { margin-top: 14px; }
         .hub-modes-grille {
           display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
           width: 100%; max-width: 400px; margin-top: 4px;
@@ -8486,50 +8518,23 @@ export default function Emprise() {
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
 
-                {/* Bouton principal : le duel Classé, l'action phare du hub. */}
-                <button className="hub-jouer-classe" onClick={chercherAdversaire}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
-                  </svg>
-                  <span className="hub-jouer-classe-titre">Classé</span>
-                  <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
-                </button>
-
-                {/* Tuiles compactes : tout tient a l'ecran, aucun defilement vertical.
-                    La description complete de chaque mode reste portee par aria-label
-                    et title ; les ecrans suivants (difficulte, draft...) la detaillent. */}
-                <div className="hub-modes-grille">
-                  <button className="hub-mode-tuile" onClick={() => chooseMode("bot")} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
-                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-                    <span>Contre un Écho</span>
+                {/* Deux entrees seulement : le Classe, action phare, et la porte vers
+                    tous les autres modes. Le detail vit dans un panneau, la page reste
+                    epuree comme un ecran d'accueil de jeu mobile. */}
+                <div className="hub-jouer-rang">
+                  <button className="hub-jouer-classe" onClick={chercherAdversaire}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+                    </svg>
+                    <span className="hub-jouer-classe-titre">Classé</span>
+                    <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
                   </button>
-                  <button className="hub-mode-tuile" onClick={() => setPhase("chapters")} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>Mode Histoire</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={chooseConfluenceBot} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
-                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-                    <span>Confluence (Écho)</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => setPhase("tourney-menu")} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
-                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-                    <span>Tournoi</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => chooseMode("local")} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>2 Commandants</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={chooseConfluenceLocal} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Confluence (à 2)</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Jouer avec un ami</span>
-                  </button>
-                  <button className="hub-mode-tuile test" onClick={chooseTestMode} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
-                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-                    <span>Mode test</span>
+                  <button className="hub-jouer-modes-btn" onClick={() => setActiveModal("modes")} aria-haspopup="dialog">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7zm-7-7v3h3V6H6zm9 0v3h3V6h-3zM6 15v3h3v-3H6zm9 0v3h3v-3h-3z" />
+                    </svg>
+                    <span className="hub-jouer-classe-titre">Modes</span>
+                    <span className="hub-jouer-classe-sous">Tous les autres</span>
                   </button>
                 </div>
               </section>
@@ -8616,6 +8621,64 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+
+          {activeModal === "modes" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel modes-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Modes de jeu</div>
+
+                <div className="modes-groupe-titre">Contre un Écho</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("bot"); }} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
+                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
+                    <span>Contre un Écho</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("chapters"); }} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>Mode Histoire</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceBot(); }} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
+                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
+                    <span>Confluence (Écho)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("tourney-menu"); }} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
+                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
+                    <span>Tournoi</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">À deux sur le même écran</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("local"); }} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>2 Commandants</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceLocal(); }} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Confluence (à 2)</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">En ligne</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Jouer avec un ami</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">Bac à sable</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile test" onClick={() => { setActiveModal(null); chooseTestMode(); }} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
+                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
+                    <span>Mode test</span>
+                  </button>
+                </div>
+
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
 
           {activeModal === "historique" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
