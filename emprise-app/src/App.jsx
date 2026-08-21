@@ -372,7 +372,110 @@ function hydrateFromSave(card) {
 // Préférence : window.storage (artefacts Claude, persiste entre sessions) >
 // localStorage (site web hébergé) > mémoire (dernier recours, non persistant).
 // Tout est asynchrone car window.storage l'est ; les stats transitent par un état React.
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, orderPlays: {}, trophies: 0 };
+// ---------- Combos d'Ordres : le style de jeu d'un joueur ----------
+// Chaque combo est une paire d'Ordres qui se repondent. On ne les declare pas comme des
+// theories : chacun correspond a une detection precise dans le moteur (voir combosDuCoup),
+// et le "signe" ci-dessous decrit en une phrase ce qu'il faut faire pour le declencher.
+// Le nom sert de TITRE sur le profil : c'est ainsi qu'on dit au joueur quel joueur il est.
+const COMBOS = [
+  {
+    key: "or-corrompu", nom: "L'Or Corrompu", ordres: ["poison", "eveil"],
+    recit: "Vous empoisonnez votre propre terrain pour y poser vos Dorés : plus la carte est affaiblie, meilleur est le troc.",
+    signe: "Un Doré posé sur une case que vous aviez vous-même empoisonnée.",
+  },
+  {
+    key: "rancon", nom: "La Rançon", ordres: ["maudits", "eveil"],
+    recit: "Vous laissez l'adversaire vous prendre un Maudit — il en sort plus fort — puis vous le rachetez.",
+    signe: "Un Maudit perdu, puis repris dans la même partie.",
+  },
+  {
+    key: "traine-venin", nom: "La Traîne au Venin", ordres: ["cendres", "poison"],
+    recit: "Vous empoisonnez le couloir, puis vous y traînez l'ennemie : elle arrive exsangue.",
+    signe: "Une carte attirée dont le trajet traverse au moins une case empoisonnée.",
+  },
+  {
+    key: "maree-montante", nom: "La Marée Montante", ordres: ["devoreuse"],
+    recit: "Chaque Abysse volée à l'adversaire rejoint votre banc et nourrit la suivante que vous posez.",
+    signe: "Une Abysse ennemie capturée alors que vous alignez des Abysses.",
+  },
+  {
+    key: "miroir-truque", nom: "Le Miroir Truqué", ordres: ["mue", "eveil"],
+    recit: "La Chimère retourne l'ennemie pour exposer son rang fort, puis le Doré vient le lui échanger.",
+    signe: "Un Éveil déclenché sur une carte déjà retournée par une mue.",
+  },
+  {
+    key: "trait-voile", nom: "Le Trait Voilé", ordres: ["scribes", "portee"],
+    recit: "Le voile du Scribe cache où se trouve le 1 de l'Archer : il tire sans exposer sa gorge.",
+    signe: "Un Archer posé pendant qu'un de vos voiles de Scribe est actif.",
+  },
+  {
+    key: "battue", nom: "La Battue", ordres: ["cendres", "portee"],
+    recit: "Les Cendres arrachent l'ennemie de sa poche protégée, la flèche l'abat en terrain ouvert.",
+    signe: "Une capture à distance dans les deux tours qui suivent une attirance.",
+  },
+  {
+    key: "breche", nom: "La Brèche", ordres: ["mue", "percee"],
+    recit: "La mue ouvre le flanc faible, la Pique s'enfonce dans l'alignement.",
+    signe: "Une percée réussie sur une carte retournée par une mue.",
+  },
+  {
+    key: "fosse", nom: "La Fosse", ordres: ["poison", "devoreuse"],
+    recit: "Le venin rend la zone invivable le temps que vos Abysses, les plus fragiles du jeu, deviennent intouchables.",
+    signe: "Une Abysse posée à côté d'une case que vous avez empoisonnée.",
+  },
+  {
+    key: "rempart-vicie", nom: "Le Rempart Vicié", ordres: ["guardian", "poison"],
+    recit: "Le Rempart verrouille les cases saines, le venin rend les autres inhabitables : l'adversaire n'a plus où se poser.",
+    signe: "Une victoire au score avec des Gardiens et au moins trois cases empoisonnées.",
+  },
+];
+
+// Un titre ne se donne pas sur un coup de chance : il faut un echantillon (10 parties) et
+// une vraie regularite (le combo dans 30 % d'entre elles). Au-dela, on affiche les trois
+// plus frequents, le premier faisant office de titre principal.
+const COMBOS_PARTIES_MIN = 10;
+const COMBOS_SEUIL = 0.3;
+const COMBOS_TITRES_MAX = 3;
+
+// Etat de suivi d'UNE partie : ce qu'il faut retenir d'un coup a l'autre pour reconnaitre
+// les combos qui se jouent en plusieurs temps.
+function nouveauSuiviCombos() {
+  return {
+    mesPoisons: new Set(),      // cases que J'AI empoisonnees
+    mues: new Set(),            // identifiants des cartes retournees par une mue
+    mauditsMiens: new Set(),    // Maudits vus sous mes couleurs a un moment de la partie
+    dernierAttraction: null,    // numero de mon coup ou une attirance a eu lieu
+    coups: 0,                   // nombre de coups que j'ai joues
+    reussis: new Set(),         // combos deja realises cette partie
+    disqualifie: false,         // une annulation a eu lieu : la partie ne compte plus
+  };
+}
+
+// Renvoie les titres merites par ces statistiques, du plus frequent au moins frequent.
+function titresDuProfil(stats) {
+  const parties = (stats && stats.combosParties) || 0;
+  const compte = (stats && stats.combos) || {};
+  const classement = COMBOS
+    .map((combo) => ({ combo, parties: compte[combo.key] || 0, taux: parties ? (compte[combo.key] || 0) / parties : 0 }))
+    .filter((t) => t.parties > 0)
+    .sort((a, b) => b.taux - a.taux || b.parties - a.parties);
+  const assez = parties >= COMBOS_PARTIES_MIN;
+  return {
+    pret: assez,
+    parties,
+    restantes: Math.max(0, COMBOS_PARTIES_MIN - parties),
+    titres: assez ? classement.filter((t) => t.taux >= COMBOS_SEUIL).slice(0, COMBOS_TITRES_MAX) : [],
+    classement, // tout, y compris sous le seuil : le profil montre la progression
+  };
+}
+
+// Le titre a afficher a cote d'un joueur, ou null s'il n'en a pas encore merite.
+function titrePrincipal(stats) {
+  const t = titresDuProfil(stats);
+  return t.titres.length ? t.titres[0].combo.nom : null;
+}
+
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0 };
 
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
@@ -827,7 +930,7 @@ async function loadStats() {
   if (!raw) return { ...DEFAULT_STATS };
   try {
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_STATS, ...parsed, orderPlays: parsed.orderPlays || {} };
+    return { ...DEFAULT_STATS, ...parsed, orderPlays: parsed.orderPlays || {}, combos: parsed.combos || {} };
   } catch (e) {
     return { ...DEFAULT_STATS };
   }
@@ -838,9 +941,18 @@ async function loadStats() {
 // Seules les parties en ligne comptent pour le classement ; les Échos et le jeu local ne
 // rapportent rien. La valeur peut être négative (défaite en ligne).
 // Renvoie les stats mises à jour pour rafraîchir l'état React.
-async function recordGameStats(winner, orderKeys, trophyGain = 0) {
+// comboKeys : combos reconnus pendant cette partie (liste vide si la partie ne compte pas
+// pour le profil — bac a sable, Mode Histoire, duel local, ou annulation utilisee).
+// compteAuProfil : dit si cette partie entre dans le denominateur du profil. Une partie
+// hors-profil ne doit NI compter ses combos NI gonfler le total, sinon le taux baisserait.
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
+  if (compteAuProfil) {
+    stats.combosParties = (stats.combosParties || 0) + 1;
+    if (!stats.combos) stats.combos = {};
+    comboKeys.forEach((key) => { stats.combos[key] = (stats.combos[key] || 0) + 1; });
+  }
   if (winner === "blue") stats.blueWins += 1;
   else if (winner === "red") stats.redWins += 1;
   orderKeys.forEach((key) => {
@@ -1346,6 +1458,139 @@ function decoderPoison(valeur) {
 function decoderPoisonPlateau(liste) {
   if (!Array.isArray(liste)) return Array(CELLS).fill(false);
   return liste.map(decoderPoison);
+}
+
+// ---------- Detection des combos pendant la partie ----------
+// Appelee UNE FOIS par coup reellement joue, depuis placeCardAt — jamais depuis
+// resolvePlacement, qui tourne aussi sur les survols et les simulations du bot et
+// compterait alors des combos qui n'ont jamais eu lieu.
+//
+// La fonction met a jour le suivi de partie (pour les deux camps : l'adversaire nourrit
+// certains combos, comme le Maudit qu'il vous prend) et renvoie les combos que CE coup
+// vient de realiser pour le camp du joueur.
+function combosDuCoup(ctx) {
+  const { card, position, owner, monCamp, mesOrdres, events,
+          plateauAvant, plateauApres, poisonAvant, poisonApres, suivi } = ctx;
+  const trouves = [];
+  const a = (cle) => mesOrdres.has(cle);
+  const marque = (cle) => { if (!suivi.reussis.has(cle)) { suivi.reussis.add(cle); trouves.push(cle); } };
+
+  // --- Suivi alimente par les DEUX camps ---
+
+  // Cases dont la pile de marques a grossi pendant ce coup : c'est owner qui les a
+  // empoisonnees. On ne peut pas le lire sur le plateau (une marque sans Heraut vaut
+  // "true" et ne dit pas qui l'a posee), d'ou ce releve au moment ou ca se produit.
+  for (let i = 0; i < poisonApres.length; i++) {
+    if (poisonMarques(poisonApres[i]).length > poisonMarques(poisonAvant[i]).length && owner === monCamp) {
+      suivi.mesPoisons.add(i);
+    }
+  }
+
+  // Cartes retournees par une mue : suivies par identifiant, car l'Attraction les deplace.
+  events.forEach((e) => {
+    if (e.kind === "mue" && plateauApres[e.index]) suivi.mues.add(plateauApres[e.index].id);
+  });
+
+  // Changements de camp de ce coup, par identifiant de carte (les index bougent).
+  // En ligne, les coups de l'adversaire n'arrivent pas par ici mais par l'ecouteur
+  // Firestore : on ne peut donc PAS reperer le vol au moment ou il se produit. On note
+  // plutot, apres chacun de mes coups, les Maudits qui sont alors sous mes couleurs ; si
+  // l'un d'eux revient plus tard chez moi apres etre passe chez l'adversaire, c'est une
+  // Rancon — et cette lecture vaut aussi bien contre un Echo qu'en ligne.
+  const campAvant = new Map();
+  plateauAvant.forEach((c) => { if (c) campAvant.set(c.id, c.owner); });
+  let mauditRachete = false, abysseVolee = false;
+  plateauApres.forEach((c) => {
+    if (!c) return;
+    const ancien = campAvant.get(c.id);
+    if (ancien === undefined || ancien === c.owner) return;
+    if (c.ability === "maudit" && c.owner === monCamp && suivi.mauditsMiens.has(c.id)) mauditRachete = true;
+    if (c.ability === "devoreuse" && c.owner === monCamp) abysseVolee = true;
+  });
+
+  // --- A partir d'ici, seuls MES coups peuvent creer un combo ---
+  if (owner !== monCamp) return trouves;
+  suivi.coups += 1;
+
+  // Une capture porte sur une AUTRE case que celle qu'on vient de jouer : plusieurs effets
+  // emettent aussi un evenement du meme nom sur la carte posee, en simple signal visuel.
+  const victimes = (kind) => events.filter((e) => e.kind === kind && e.index !== position);
+
+  // 1. L'Or Corrompu : un Dore pose sur une case que j'ai empoisonnee et qui me nuit
+  // vraiment (avec le Heraut des Pestiferes, le venin epargne mon camp : pas de combo).
+  if (a("eveil") && a("poison") && card.ability === "eveil"
+      && suivi.mesPoisons.has(position) && poisonHarms(poisonAvant[position], monCamp)) {
+    marque("or-corrompu");
+  }
+
+  // 2. La Rancon : un Maudit que l'adversaire m'avait pris revient chez moi.
+  if (a("maudits") && a("eveil") && mauditRachete) marque("rancon");
+
+  // 3. La Traine au Venin : une carte tiree par les Cendres a traverse du poison. Le moteur
+  // signale la penalite par un evenement "poison" negatif sur la case d'arrivee.
+  if (a("cendres") && a("poison")) {
+    const tirees = victimes("attraction-pull").map((e) => e.index);
+    if (events.some((e) => e.kind === "poison" && e.delta < 0 && tirees.includes(e.index))) {
+      marque("traine-venin");
+    }
+    if (tirees.length) suivi.dernierAttraction = suivi.coups;
+  } else if (a("cendres") && events.some((e) => e.kind === "attraction-pull")) {
+    suivi.dernierAttraction = suivi.coups;
+  }
+
+  // 4. La Maree Montante : voler une Abysse a l'adversaire quand on en aligne soi-meme.
+  if (a("devoreuse") && abysseVolee) marque("maree-montante");
+
+  // 5. Le Miroir Truque : l'Eveil frappe une carte deja retournee par une mue.
+  if (a("mue") && a("eveil")
+      && victimes("eveil").some((e) => plateauApres[e.index] && suivi.mues.has(plateauApres[e.index].id))) {
+    marque("miroir-truque");
+  }
+
+  // 6. Le Trait Voile : un Archer pose pendant qu'un de mes voiles de Scribe tient encore.
+  if (a("scribes") && a("portee") && card.ability === "portee"
+      && plateauAvant.some((c) => c && c.scribeJustPlaced && c.scribePlacedBy === monCamp)) {
+    marque("trait-voile");
+  }
+
+  // 7. La Battue : une capture a distance dans les deux coups qui suivent une attirance.
+  if (a("cendres") && a("portee") && victimes("portee").length
+      && suivi.dernierAttraction !== null && suivi.coups - suivi.dernierAttraction <= 2) {
+    marque("battue");
+  }
+
+  // 8. La Breche : une percee qui aboutit sur une carte retournee par une mue.
+  if (a("mue") && a("percee")
+      && victimes("percee").some((e) => plateauApres[e.index] && suivi.mues.has(plateauApres[e.index].id))) {
+    marque("breche");
+  }
+
+  // 9. La Fosse : une Abysse posee au contact d'une case que j'ai empoisonnee.
+  if (a("devoreuse") && a("poison") && card.ability === "devoreuse") {
+    const r = Math.floor(position / COLS), c = position % COLS;
+    const voisines = DIRS
+      .map((d) => (inBounds(r + d.dr, c + d.dc) ? idx(r + d.dr, c + d.dc) : null))
+      .filter((i) => i !== null);
+    if (voisines.some((i) => suivi.mesPoisons.has(i))) marque("fosse");
+  }
+
+  // Releve de fin de coup : les Maudits actuellement a moi. C'est la seule occasion de les
+  // voir sous mes couleurs avant que l'adversaire ne joue.
+  plateauApres.forEach((c) => {
+    if (c && c.ability === "maudit" && c.owner === monCamp) suivi.mauditsMiens.add(c.id);
+  });
+
+  return trouves;
+}
+
+// Le Rempart Vicie ne se lit qu'a la fin : c'est une facon de gagner, pas un coup.
+function comboDeFin(ctx) {
+  const { mesOrdres, gagne, poison, suivi } = ctx;
+  if (!gagne || !mesOrdres.has("guardian") || !mesOrdres.has("poison")) return null;
+  const actives = poison.filter((v) => poisonMarques(v).length > 0).length;
+  if (actives < 3 || suivi.reussis.has("rempart-vicie")) return null;
+  suivi.reussis.add("rempart-vicie");
+  return "rempart-vicie";
 }
 
 // Ajoute une marque à une case, sans dépasser POISON_MAX.
@@ -2292,6 +2537,8 @@ const APP_STYLES = `
         }
         .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .hub-pseudo {
+          background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+          font: inherit;
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.12em; color: var(--bone);
           text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -4433,6 +4680,68 @@ const APP_STYLES = `
           border: 1px solid rgba(203,164,86,0.4);
         }
         .trophees-flottant svg { width: 12px; height: 12px; fill: var(--gold-bright); }
+        /* Titre de style en Classe : face aux trophees, a droite de la rangee d'Ordres. */
+        .titre-flottant {
+          position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
+          max-width: 40%; padding: 3px 9px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          color: var(--bone); background: rgba(8,6,12,0.8);
+          border: 1px solid rgba(203,164,86,0.28);
+        }
+        /* Le titre sous le pseudo du hub : discret, il n'eclipse pas le nom. */
+        .hub-pseudo-titre {
+          display: block; margin-top: 1px;
+          font-family: 'Cinzel', serif; font-size: 8.5px; font-weight: 600;
+          letter-spacing: 0.08em; color: var(--gold); text-transform: none;
+        }
+        /* Panneau de profil. Un joueur chevronne peut cumuler trois titres ET la liste
+           des dix combos : le panneau defile plutot que de deborder de l'ecran, ce qui
+           rendait le bouton Fermer inatteignable sur les petits telephones. */
+        .info-panel.settings-panel.profil-panel {
+          max-height: 88dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        .profil-chiffres { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
+        .profil-chiffres > div {
+          flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+          padding: 8px 4px; border-radius: 10px;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.18);
+        }
+        .profil-chiffres b { font-family: 'Cinzel', serif; font-size: 17px; color: var(--gold-bright); }
+        .profil-chiffres span { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+        .profil-titre {
+          width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px;
+          padding: 9px 11px; margin-bottom: 7px; border-radius: 11px;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
+        }
+        .profil-titre.principal {
+          background: linear-gradient(180deg, rgba(203,164,86,0.16), rgba(203,164,86,0.05));
+          border-color: rgba(203,164,86,0.55);
+        }
+        .profil-titre-haut { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .profil-titre-nom { font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; color: var(--gold-bright); }
+        .profil-titre-taux { font-size: 11px; font-weight: 700; color: var(--gold); }
+        .profil-titre-recit { font-size: 11.5px; line-height: 1.45; color: var(--bone); }
+        .profil-titre-ordres {
+          font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+        }
+        .profil-vide {
+          width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 11px;
+          font-size: 11.5px; line-height: 1.5; color: var(--muted);
+          background: rgba(255,255,255,0.03); border: 1px dashed rgba(203,164,86,0.25);
+        }
+        .profil-liste { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+        .profil-ligne { display: flex; align-items: center; gap: 8px; }
+        .profil-ligne-nom { flex: 0 0 43%; font-size: 11px; color: var(--bone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .profil-ligne-jauge {
+          flex: 1; height: 6px; border-radius: 999px; overflow: hidden;
+          background: rgba(255,255,255,0.07);
+        }
+        .profil-ligne-jauge i {
+          display: block; height: 100%; border-radius: 999px;
+          background: linear-gradient(90deg, #b89742, #e8c877);
+        }
+        .profil-ligne-nombre { flex: none; min-width: 18px; text-align: right; font-size: 11px; font-weight: 700; color: var(--gold); }
         .trophees-chip {
           margin-left: 7px; padding: 1px 7px 1px 8px; border-radius: 999px;
           font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
@@ -5724,6 +6033,7 @@ export default function Emprise() {
   const [partieClassee, setPartieClassee] = useState(false);
   // Trophees des deux camps, lus depuis le document de la partie classee.
   const [trophesPartie, setTrophesPartie] = useState(null);
+  const [titresPartie, setTitresPartie] = useState(null); // titres de style des deux camps
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
@@ -5915,6 +6225,9 @@ export default function Emprise() {
   }, []);
   const [stats, setStats] = useState(DEFAULT_STATS);
   const statsRecordedRef = useRef(false);
+  // Suivi des combos de la partie en cours. Un ref et non un etat : il est lu et ecrit
+  // au milieu d'un coup, un rendu de retard fausserait la detection.
+  const combosRef = useRef(nouveauSuiviCombos());
   // Charge les stats au démarrage et à chaque ouverture du panneau (lecture asynchrone).
   useEffect(() => { loadStats().then(setStats); }, [activeModal === "stats"]);
   const [storyProgress, setStoryProgress] = useState(DEFAULT_STORY_PROGRESS);
@@ -6117,6 +6430,23 @@ export default function Emprise() {
   const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play"
     && turn === "red" && !gameOver && !infoAbility && !confirmQuit;
 
+  // ---------- Profil de joueur : quel camp est le mien, avec quels Ordres ----------
+  // Contre un Echo je suis toujours Azur ; en ligne, le camp que le serveur m'a donne.
+  // En duel local les deux camps sont humains : aucun profil ne peut leur etre attribue,
+  // d'ou l'exclusion plus bas.
+  const monCampCombos = mode === "bot" ? "blue" : mode === "online" ? onlineRole : null;
+  // Une partie ne nourrit le profil que si elle engage un vrai adversaire et un vrai
+  // choix d'Ordres : ni bac a sable (tous les Ordres, annulation libre), ni Mode Histoire
+  // (Ordres imposes par le chapitre), ni duel local (deux joueurs sur un meme profil), ni
+  // Confluence (on y dispose des dix Ordres : les combos y sont a portee de main, et les
+  // melanger aux parties a deux Ordres rendrait le profil illisible).
+  const partieCompteAuProfil = !!monCampCombos && !testMode && !storyChapterKey && !confluenceActive;
+
+  function mesOrdresDuJeu() {
+    const liste = monCampCombos === "red" ? redOrders : blueOrders;
+    return new Set((liste || []).map((o) => o && o.key).filter(Boolean));
+  }
+
   // Étiquette d'un camp — texte identique à l'ancienne version, plus les trophées en
   // Classé (0 pour l'instant : les profils ne sont pas encore synchronisés côté serveur,
   // l'emplacement est prêt pour brancher les vraies valeurs le moment venu).
@@ -6148,6 +6478,21 @@ export default function Emprise() {
         </svg>
         {valeur}
       </span>
+    );
+  }
+
+  // Titre de style d'un camp en partie Classee, ancre a DROITE de sa rangee d'Ordres,
+  // face aux trophees. Comme eux, la valeur vient du document de la partie : les deux
+  // ecrans lisent la meme chose. Un joueur sans titre n'affiche rien du tout.
+  function pucesTitre(camp) {
+    if (mode !== "online" || !partieClassee) return null;
+    const titre = titresPartie && typeof titresPartie[camp] === "string"
+      ? titresPartie[camp]
+      : (onlineRole === camp ? titrePrincipal(stats) : "");
+    if (!titre) return null;
+    const combo = COMBOS.find((c) => c.nom === titre);
+    return (
+      <span className="titre-flottant" title={combo ? combo.recit : "Style de jeu"}>{titre}</span>
     );
   }
 
@@ -6198,7 +6543,21 @@ export default function Emprise() {
       const trophyGain = partieClassee && onlineRole
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
-      recordGameStats(winner, orderKeys, trophyGain).then(setStats);
+      // Combos de la partie : ceux reconnus coup par coup, plus le Rempart Vicie qui ne
+      // se juge qu'au tableau final. Une partie disqualifiee (annulation) ne compte pas
+      // du tout — ni ses combos ni son total.
+      const suivi = combosRef.current;
+      const compteAuProfil = partieCompteAuProfil && !suivi.disqualifie;
+      if (compteAuProfil) {
+        comboDeFin({
+          mesOrdres: mesOrdresDuJeu(),
+          gagne: winner === monCampCombos,
+          poison: poisonedCells,
+          suivi,
+        });
+      }
+      const comboKeys = compteAuProfil ? [...suivi.reussis] : [];
+      recordGameStats(winner, orderKeys, trophyGain, comboKeys, compteAuProfil).then(setStats);
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
       // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
@@ -6725,6 +7084,7 @@ export default function Emprise() {
         setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
+        setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -6862,6 +7222,9 @@ export default function Emprise() {
             // Mes trophees voyagent avec l'inscription : celui qui creera la partie les
             // recopiera dans le document, et les DEUX ecrans afficheront les memes chiffres.
             waitingTrophees: stats.trophies || 0,
+            // Le titre suit le meme chemin que les trophees : recopie dans le document de
+            // la partie, il s'affiche a l'identique sur les deux ecrans.
+            waitingTitre: titrePrincipal(stats) || "",
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
           return null;
@@ -6893,6 +7256,8 @@ export default function Emprise() {
           // contredisaient sur le meme joueur.
           blueTrophees: lobby.waitingTrophees || 0,
           redTrophees: stats.trophies || 0,
+          blueTitre: lobby.waitingTitre || "",
+          redTitre: titrePrincipal(stats) || "",
         });
         tx.set(lobbyRef, {
           waitingUid: null, waitingAt: null,
@@ -7746,6 +8111,19 @@ export default function Emprise() {
       scribePlacedBy: card.ability === "scribe" ? owner : undefined,
     };
     const { board: resolvedBoard, events, poisonedCells: nextPoison } = resolvePlacement(newBoard, position, owner, poisonedCells);
+
+    // Combos : on lit le coup ICI, une fois qu'il est reellement joue. resolvePlacement
+    // tourne aussi sur chaque survol et pour chaque coup imagine par l'Echo ; y brancher
+    // la detection crediterait des combos que personne n'a joues.
+    if (history.length === 0) combosRef.current = nouveauSuiviCombos();
+    if (partieCompteAuProfil && !combosRef.current.disqualifie) {
+      combosDuCoup({
+        card, position, owner, monCamp: monCampCombos, mesOrdres: mesOrdresDuJeu(), events,
+        plateauAvant: board, plateauApres: resolvedBoard,
+        poisonAvant: poisonedCells, poisonApres: nextPoison,
+        suivi: combosRef.current,
+      });
+    }
     if (viaTouch) {
       // Léger tapotement à la pose, plus franc si ça capture — jamais pour le bot ni
       // pour un coup auto-joué par le minuteur, seulement pour un vrai geste du joueur.
@@ -7850,6 +8228,9 @@ export default function Emprise() {
     if (history.length === 0 || drag) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
     if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
+    // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
+    // du style du joueur, on la retire du profil plutot que de compter des combos essayes.
+    combosRef.current.disqualifie = true;
     const stack = history.slice();
     let target = stack.pop();
     if (mode === "bot" && target.owner === "red" && stack.length) {
@@ -8381,14 +8762,17 @@ export default function Emprise() {
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
             <div className="hub-joueur">
-              {/* TODO : remplacer le pseudo en dur par un vrai profil joueur. */}
-              <span className="hub-pseudo">CARNAGE</span>
+              {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
+                  Il reste en dur pour l'instant, faute de comptes nommes. */}
+              <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
+                CARNAGE
+                {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
+              </button>
               <span className="hub-trophees" title="Trophées">
                 <svg className="hub-icone-coupe" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
                 </svg>
-                {/* TODO : brancher sur stats.trophies quand les profils seront synchronisés. */}
-                <span className="hub-trophees-nombre">0</span>
+                <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </span>
             </div>
             <span className="hub-haut-boutons">
@@ -8542,6 +8926,64 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+
+          {activeModal === "profil" && (() => {
+            const profil = titresDuProfil(stats);
+            const total = stats.gamesPlayed || 0;
+            const victoires = (stats.blueWins || 0) + (stats.redWins || 0);
+            return (
+              <div className="info-overlay" onClick={() => setActiveModal(null)}>
+                <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="info-panel-title">CARNAGE</div>
+
+                  <div className="profil-chiffres">
+                    <div><b>{total}</b><span>parties</span></div>
+                    <div><b>{victoires}</b><span>victoires</span></div>
+                    <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
+                  </div>
+
+                  <div className="modes-groupe-titre">Le joueur que vous êtes</div>
+                  {profil.titres.length > 0 ? (
+                    profil.titres.map((t, i) => (
+                      <div key={t.combo.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
+                        <div className="profil-titre-haut">
+                          <span className="profil-titre-nom">{t.combo.nom}</span>
+                          <span className="profil-titre-taux">{Math.round(t.taux * 100)} %</span>
+                        </div>
+                        <span className="profil-titre-recit">{t.combo.recit}</span>
+                        <span className="profil-titre-ordres">
+                          {t.combo.ordres.map((k) => ORDERS.find((o) => o.key === k)?.name).filter(Boolean).join(" + ")}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="profil-vide">
+                      {profil.pret
+                        ? "Vous jouez de tout, sans manie affirmée. Aucun combo ne revient assez souvent pour vous donner un titre."
+                        : `Encore ${profil.restantes} partie${profil.restantes > 1 ? "s" : ""} avant qu'un style se dégage. Seules comptent vos parties à deux Ordres, contre un Écho ou en ligne.`}
+                    </div>
+                  )}
+
+                  {profil.classement.length > 0 && (
+                    <>
+                      <div className="modes-groupe-titre">Combos réalisés</div>
+                      <div className="profil-liste">
+                        {profil.classement.map((t) => (
+                          <div key={t.combo.key} className="profil-ligne" title={t.combo.signe}>
+                            <span className="profil-ligne-nom">{t.combo.nom}</span>
+                            <span className="profil-ligne-jauge"><i style={{ width: `${Math.min(100, Math.round(t.taux * 100))}%` }} /></span>
+                            <span className="profil-ligne-nombre">{t.parties}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+                </div>
+              </div>
+            );
+          })()}
 
           {activeModal === "modes" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
@@ -9986,6 +10428,7 @@ export default function Emprise() {
 
           <div className="zone-main">
             {pucesTrophees(campHaut)}
+            {pucesTitre(campHaut)}
             {labelCamp(campHaut)}
             {mainCamp(campHaut)}
           </div>
@@ -10181,6 +10624,7 @@ export default function Emprise() {
 
           <div>
             {pucesTrophees(campBas)}
+            {pucesTitre(campBas)}
             {mainCamp(campBas)}
             {labelCamp(campBas)}
           </div>
