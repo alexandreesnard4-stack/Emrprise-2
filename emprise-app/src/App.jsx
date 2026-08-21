@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
-  doc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
+  doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction, arrayUnion,
 } from "firebase/firestore";
 
 // ---------- Multijoueur : code de partie à 5 lettres (sans caractères ambigus) ----------
@@ -12,6 +12,20 @@ function makeGameCode() {
   for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
+
+// Sièges du tournoi en ligne : chaque place d'arrivée reçoit un alias et le portrait
+// d'un Ordre — comme les adversaires nommés du tournoi solo, mais pour de vrais joueurs
+// sans compte ni pseudo. Le joueur se reconnaît à la mention "Vous" sur sa plaque.
+const SIEGES_TOURNOI = [
+  { nom: "Le Doré", key: "eveil" },
+  { nom: "Le Ressac", key: "maudits" },
+  { nom: "La Vermine", key: "poison" },
+  { nom: "L'Abysse", key: "devoreuse" },
+  { nom: "Le Copiste", key: "scribes" },
+  { nom: "La Mue", key: "mue" },
+  { nom: "La Lance", key: "percee" },
+  { nom: "Le Rempart", key: "guardian" },
+];
 
 // ---------- Board config ----------
 // ROWS/COLS/CELLS sont volontairement mutables (pas des const) : le mode test utilise un
@@ -131,6 +145,28 @@ function CountdownLabel({ order }) {
 // Le jour de la sortie, il suffit de passer status à AVAILABLE : le teaser, le
 // cadenas et le compte à rebours disparaissent d'eux-mêmes, le portrait
 // s'affiche en clair. Aucune image à remplacer.
+// Fait defiler les textes d'attente. Une seule animation, sur opacity et transform,
+// relancee a chaque changement par la cle React : rien ne tourne en boucle.
+function RecitsAttente({ actif }) {
+  const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
+  useEffect(() => {
+    if (!actif) return;
+    // 13 secondes : le temps de lire une phrase de trois lignes sans se sentir presse,
+    // et de la relire si le regard etait ailleurs. A 7 secondes, le texte partait avant
+    // d'avoir ete lu.
+    const t = setInterval(() => setI((n) => (n + 1) % RECITS_ATTENTE.length), 13000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif) return null;
+  const recit = RECITS_ATTENTE[i];
+  return (
+    <div className="recit-attente" role="status" aria-live="polite">
+      <div className="recit-genre">{recit.genre === "histoire" ? "L'Histoire" : "Astuce"}</div>
+      <p key={i} className="recit-texte">{recit.texte}</p>
+    </div>
+  );
+}
+
 function ComingSoonThumb({ order }) {
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef(null);
@@ -161,6 +197,10 @@ function ComingSoonThumb({ order }) {
 }
 
 const TURN_SECONDS = 105; // durée du minuteur par tour (1 min 45)
+// Minuteur du choix des Ordres, en ligne uniquement : sans lui, un joueur qui pose son
+// telephone bloque l'autre sur un ecran d'attente. A l'echeance, la selection en cours
+// est confirmee ; si elle est incomplete, deux Ordres sont tires au sort.
+const ORDRES_SECONDS = 60;
 // Passé de 60 à 105 s avec la main en éventail : les cartes ne sont plus toutes visibles
 // d'un coup, il faut déployer chaque Ordre pour lire ses rangs avant de choisir. Une
 // minute ne suffisait plus pour comparer sereinement.
@@ -700,6 +740,60 @@ const STORY_BRAISES_COTES = [
   { cote: "d", bas: 68, taille: 7, duree: "6.1s", retard: "3.6s" },
   { cote: "d", bas: 88, taille: 6, duree: "5.8s", retard: "2s" },
 ];
+
+// ---------- Textes affiches pendant les temps d'attente ----------
+// Deux registres qui alternent : l'Histoire du monde, et des conseils de jeu tires
+// des regles reelles. Ils occupent les secondes ou le joueur ne peut rien faire :
+// recherche d'un adversaire, ou attente de ses Ordres.
+// Ordre volontairement fixe (pas de tirage au sort) : deux joueurs qui attendent
+// cote a cote voient la meme chose, et la relecture reste coherente d'une partie
+// a l'autre. Le point de depart, lui, tourne a chaque attente.
+const RECITS_ATTENTE = [
+  { genre: "histoire", texte: "Le ciel se déchira sans avertissement. La Faille aspira la réalité et recracha des flots de magie brute, bouleversant les dix Ordres à jamais." },
+  { genre: "astuce", texte: "Un rang supérieur à celui qui lui fait face capture la carte adverse. Comparez toujours le côté qui touche, jamais la carte entière." },
+  { genre: "histoire", texte: "Le Pacte Azur veut contenir la Faille. La Horde Écarlate veut y puiser. Aucun des deux camps ne cédera avant le prochain Rite." },
+  { genre: "astuce", texte: "Deux rangs identiques parmi vos voisines déclenchent la Résonance : toutes les ennemies concernées tombent d'un coup, même les plus fortes." },
+  { genre: "histoire", texte: "Les Ordres ne jurent fidélité à aucune bannière fixe, seulement au vainqueur du Rite. C'est pourquoi un Commandant invoque les deux Ordres de son choix." },
+  { genre: "astuce", texte: "Une carte capturée sert aussitôt son nouveau camp : sa capacité se déclenche pour vous. C'est l'Onde, et elle peut renverser un plateau entier." },
+  { genre: "histoire", texte: "Les Maudits portent une malédiction antique : chaque capture subie les rend plus redoutables. Les retourner deux fois est rarement une bonne idée." },
+  { genre: "astuce", texte: "Les coins ne présentent que deux côtés attaquables. Vos cartes aux rangs faibles y survivent bien plus longtemps qu'au centre." },
+  { genre: "histoire", texte: "Les Scribes gardaient leurs secrets jusqu'au dernier instant. Leurs rangs restent cachés en main, puis un tour encore après la pose." },
+  { genre: "astuce", texte: "Azur part avec un point d'avance pour compenser le fait de jouer en premier. Une égalité de cartes sur le plateau lui donne donc la victoire." },
+  { genre: "histoire", texte: "Les Abysses sont remontées des tréfonds océaniques. Chaque Abysse en jeu renforce toutes les autres : elles ne chassent jamais seules." },
+  { genre: "astuce", texte: "Gardez une carte forte pour le dernier tour. La dernière pose ne peut plus être punie, c'est souvent elle qui décide de la partie." },
+];
+
+// ---------- Historique des parties ----------
+// Les 3 dernières parties terminées, la plus récente en premier. Volontairement
+// minuscule (3 entrées, quelques champs) : un vrai journal viendra avec les profils.
+const HISTORIQUE_MAX = 3;
+function lireHistorique() {
+  try {
+    const brut = localStorage.getItem("emprise-historique");
+    const liste = brut ? JSON.parse(brut) : [];
+    if (!Array.isArray(liste)) return [];
+    // Classé uniquement pour l'instant. Le filtre sert aussi de nettoyage : les entrees
+    // enregistrees avant cette regle, qui n'ont pas le marqueur, sont ecartees.
+    return liste.filter((e) => e && e.classee).slice(0, HISTORIQUE_MAX);
+  } catch (e) { return []; }
+}
+function ecrireHistorique(entree) {
+  const liste = [entree, ...lireHistorique()].slice(0, HISTORIQUE_MAX);
+  try { localStorage.setItem("emprise-historique", JSON.stringify(liste)); } catch (e) { /* non persisté */ }
+  return liste;
+}
+// "il y a 5 min" plutôt qu'une date brute : sur 3 parties récentes, la fraîcheur
+// relative se lit mieux qu'un horodatage.
+function ilYa(t) {
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "à l'instant";
+  const min = Math.floor(s / 60);
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const j = Math.floor(h / 24);
+  return j === 1 ? "hier" : `il y a ${j} jours`;
+}
 
 let memoryStats = null; // repli en mémoire si aucun stockage durable n'est disponible
 
@@ -2157,6 +2251,320 @@ const APP_STYLES = `
           margin: -14px 0 20px; background: rgba(203,164,86,0.08);
         }
 
+        /* ==================== HUB D'ACCUEIL ====================
+           Structure de hub mobile (bandeau haut, pages, navigation basse) posee
+           PAR-DESSUS l'ecran d'accueil existant : le fond, le heros et la sequence
+           d'entree (intro-eN) sont conserves tels quels. */
+        .landing.hub {
+          justify-content: flex-start; text-align: center;
+          padding: 0; gap: 0;
+        }
+        .hub-haut {
+          width: 100%; box-sizing: border-box;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+          background: linear-gradient(180deg, rgba(10,8,15,0.92), rgba(10,8,15,0.55) 75%, transparent);
+          flex: none;
+        }
+        .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .hub-pseudo {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.12em; color: var(--bone);
+          text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .hub-trophees {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 3px 9px 3px 6px; border-radius: 999px;
+          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+        }
+        .hub-icone-coupe { width: 14px; height: 14px; fill: var(--gold-bright); }
+        .hub-trophees-nombre {
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
+        }
+        .hub-haut-boutons { display: flex; gap: 8px; flex: none; }
+        .histo-vide { text-align: center; padding: 14px 6px 6px; color: var(--muted); font-size: 12.5px; }
+        .histo-vide p { margin: 0 0 4px; }
+        .histo-vide-sous { font-size: 11px; }
+        .histo-ligne {
+          width: 100%; box-sizing: border-box; text-align: left;
+          padding: 9px 11px; border-radius: 10px; margin-bottom: 7px;
+          background: rgba(8,6,12,0.55); border: 1px solid rgba(203,164,86,0.16);
+        }
+        .histo-resultat {
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
+          letter-spacing: 0.08em; color: var(--bone);
+        }
+        .histo-resultat.gagnee { color: var(--gold-bright); }
+        .histo-resultat.perdue { color: var(--red-bright); }
+        .histo-motif { font-family: 'Spectral', Georgia, serif; font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+        .histo-detail {
+          display: flex; align-items: baseline; gap: 10px; margin-top: 3px;
+          font-size: 11px; color: var(--muted);
+        }
+        .histo-mode { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .histo-score b { font-family: 'Cinzel', serif; font-size: 12px; }
+        .histo-sb { color: var(--blue-bright); }
+        .histo-sr { color: var(--red-bright); }
+        .histo-quand { flex: none; }
+        .hub-rouage {
+          width: 36px; height: 36px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
+          border-radius: 10px; cursor: pointer; padding: 0;
+          transition: border-color .2s, transform .35s ease;
+        }
+        .hub-rouage svg { width: 19px; height: 19px; fill: rgba(203,164,86,0.75); }
+        .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
+        .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
+        .hub-pages {
+          flex: 1; width: 100%; min-height: 0; overflow: hidden;
+          display: flex; flex-direction: column; align-items: center;
+        }
+        /* Filet de securite sur les ecrans tres bas : mieux vaut un defilement
+           que du contenu inatteignable. */
+        @media (max-height: 600px) {
+          .hub-pages { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        }
+        .hub-page {
+          width: 100%; max-width: 540px; box-sizing: border-box; height: 100%;
+          padding: 4px 18px 10px;
+          display: flex; flex-direction: column; align-items: center; gap: 9px;
+          animation: hub-page-entre 0.28s ease-out both;
+        }
+        /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
+        .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
+        .landing.hub .landing-emblem { margin: 0; }
+        .landing.hub .landing-subtitle { margin: 0; }
+        .landing.hub .league-badge { margin: 0 0 2px; }
+        /* Glissement d'entree : transform et opacity uniquement, en une seule passe. */
+        .hub-glisse-droite { --hub-depart: 26px; }
+        .hub-glisse-gauche { --hub-depart: -26px; }
+        @keyframes hub-page-entre {
+          from { opacity: 0; transform: translateX(var(--hub-depart, 26px)); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .hub-page-titre {
+          font-family: 'Cinzel', serif; font-size: 17px; letter-spacing: 0.14em;
+          text-transform: uppercase; color: var(--gold-bright); margin: 6px 0 0;
+        }
+        .hub-page-sous { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
+        .hub-boutique-vide {
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          margin: auto 0; padding: 46px 20px;
+        }
+        .hub-boutique-icone { width: 44px; height: 44px; fill: rgba(203,164,86,0.45); }
+        .hub-boutique-titre {
+          font-family: 'Cinzel', serif; font-size: 18px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--gold-bright); margin: 4px 0 0;
+        }
+        .hub-boutique-texte {
+          font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.2em;
+          text-transform: uppercase; color: var(--bone); margin: 0;
+        }
+        .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
+        .hub-jouer-classe {
+          width: 100%; max-width: 240px; box-sizing: border-box;
+          display: flex; flex-direction: column; align-items: center; gap: 1px;
+          margin-top: 4px; padding: 8px 14px 7px;
+          background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
+          border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
+          box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
+          transition: filter .2s, transform .15s;
+        }
+        .hub-jouer-classe:hover { filter: brightness(1.06); }
+        /* Appui : le bouton s'enfonce, l'ombre exterieure rentre, une ombre interne
+           apparait. La sensation d'entrer DANS le bouton. */
+        .hub-jouer-classe:active {
+          transform: scale(0.93);
+          box-shadow: 0 3px 8px rgba(0,0,0,0.45), inset 0 3px 8px rgba(60,40,10,0.45);
+          filter: brightness(0.96);
+        }
+        .hub-jouer-classe { transition: filter .15s, transform .12s ease-in, box-shadow .12s; }
+        .hub-jouer-classe svg { width: 16px; height: 16px; fill: #241d10; }
+        .hub-jouer-classe-titre {
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 800;
+          letter-spacing: 0.2em; text-transform: uppercase; color: #241d10;
+        }
+        .hub-jouer-classe-sous {
+          font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
+        }
+        .hub-modes-grille {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+          width: 100%; max-width: 400px; margin-top: 4px;
+        }
+        .hub-mode-tuile {
+          display: flex; align-items: center; gap: 9px;
+          padding: 8px 10px; min-height: 46px; box-sizing: border-box;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.2);
+          border-radius: 11px; cursor: pointer; color: var(--bone); text-align: left;
+          transition: border-color .2s, transform .15s;
+        }
+        .hub-mode-tuile:hover { border-color: var(--gold); }
+        .hub-mode-tuile:active { transform: scale(0.97); }
+        .hub-mode-tuile img {
+          width: 30px; height: 30px; border-radius: 8px; object-fit: cover; flex: none;
+          border: 1px solid rgba(203,164,86,0.3);
+        }
+        .hub-mode-tuile span {
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.04em; line-height: 1.3;
+        }
+        .hub-mode-tuile.test { opacity: 0.72; }
+        /* Liste des Ordres : 4 fiches visibles, glissement VERTICAL aimante. Chaque
+           fiche est une rangee (vignette a gauche, texte a droite) pour que quatre
+           tiennent a l'ecran sans rien ecraser. */
+        .hub-ordres-carrousel {
+          display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px;
+          min-height: 0; flex: 1;
+          overflow-y: auto; overflow-x: hidden;
+          scroll-snap-type: y proximity; -webkit-overflow-scrolling: touch;
+          padding: 4px 4px 10px; box-sizing: border-box;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche {
+          flex: 0 0 calc(25% - 6px); min-height: 68px; width: 100%;
+          scroll-snap-align: start; box-sizing: border-box;
+          flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .order-thumb-wrap,
+        .hub-ordres-carrousel .hub-ordre-fiche .teaser-wrap {
+          width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .thumb {
+          width: 100%; height: 100%; object-fit: cover;
+        }
+        .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
+        .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .hub-carrousel-indice {
+          font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+          color: var(--muted); flex: none; padding-bottom: 2px;
+        }
+        .hub-ordre-fiche { cursor: default; }
+        .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
+        /* ---------- Barre de navigation : socle de pierre et metal ----------
+           Le rendu vise une barre d'interface de jeu, pas une barre d'onglets de site :
+           un socle sombre borde d'un liseré clair en haut (l'arete captant la lumiere),
+           des icones en metal dore avec ombre portee, et une hierarchie franche entre
+           l'onglet actif, encadre et lumineux, et les autres, assombris. */
+        .hub-nav {
+          position: relative;
+          width: 100%; box-sizing: border-box; flex: none;
+          display: flex; align-items: flex-end; justify-content: space-around;
+          padding: 8px 8px calc(9px + env(safe-area-inset-bottom, 0px));
+          background:
+            linear-gradient(180deg, rgba(46,37,62,0.55) 0%, rgba(18,14,26,0.97) 42%, rgba(9,7,14,1) 100%);
+          border-top: 1px solid rgba(203,164,86,0.32);
+          box-shadow: 0 -6px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,240,205,0.09);
+        }
+        /* Le <defs> du degrade ne doit rien occuper dans la mise en page. */
+        .hub-nav-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+        .hub-onglet {
+          flex: 1; max-width: 150px; position: relative;
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          padding: 8px 6px; background: transparent; cursor: pointer;
+          border: 1px solid transparent; border-radius: 13px;
+          color: var(--muted);
+          transition: color .22s, transform .18s, background .22s, border-color .22s;
+        }
+        .hub-onglet svg { width: 23px; height: 23px; }
+        /* Icones fournies en image : memes traitements de relief et de hierarchie que
+           les traces SVG de secours. */
+        /* cover et non contain : les illustrations fournies sont paysage avec de
+           larges marges sombres, le recadrage central isole l'icone elle-meme. */
+        .hub-onglet-img {
+          width: 32px; height: 32px; object-fit: cover; border-radius: 9px;
+          border: 1px solid rgba(203,164,86,0.35);
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          transition: filter .22s, opacity .22s;
+        }
+        .hub-onglet:not(.actif) .hub-onglet-img {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.4) brightness(0.62);
+          opacity: 0.85;
+        }
+        .hub-onglet.actif .hub-onglet-img {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.55));
+        }
+        .hub-onglet-central .hub-onglet-img { width: 42px; height: 42px; }
+        /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
+           du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
+        .hub-onglet svg path {
+          fill: url(#or-metal); stroke: url(#or-metal);
+          stroke-width: 0.9; stroke-linejoin: round; paint-order: stroke fill;
+        }
+        .hub-onglet svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          transition: filter .22s, opacity .22s;
+        }
+        /* Onglets au repos : memes icones, mais eteintes et en retrait. */
+        .hub-onglet:not(.actif) svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.35) brightness(0.62);
+          opacity: 0.8;
+        }
+        .hub-onglet span {
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.11em; text-transform: uppercase;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+        }
+        /* Onglet actif : cadre dore net, fond legerement eclaire, icone qui rayonne. */
+        .hub-onglet.actif {
+          color: var(--gold-bright);
+          background: linear-gradient(180deg, rgba(232,200,119,0.13), rgba(232,200,119,0.03));
+          border-color: rgba(232,200,119,0.65);
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.16), 0 3px 10px rgba(0,0,0,0.4);
+        }
+        .hub-onglet.actif svg {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.6));
+        }
+        /* Onglet central : plus grand et sureleve, comme l'onglet de bataille de Clash
+           Royale, mais dans la sobriete du jeu. Socle en relief, arete claire en haut. */
+        .hub-onglet-central {
+          transform: translateY(-10px);
+          background: linear-gradient(180deg, #2c2340, #171221 70%);
+          border: 1px solid rgba(203,164,86,0.5);
+          box-shadow:
+            0 8px 18px rgba(0,0,0,0.55),
+            inset 0 1px 0 rgba(255,240,205,0.14),
+            inset 0 -2px 6px rgba(0,0,0,0.5);
+          padding: 12px 12px 10px;
+        }
+        .hub-onglet-central svg { width: 28px; height: 28px; }
+        .hub-onglet-central span { font-size: 11px; }
+        .hub-onglet-central.actif {
+          border-color: var(--gold-bright);
+          background: linear-gradient(180deg, #3a2f52, #1d1730 72%);
+          box-shadow:
+            0 8px 20px rgba(0,0,0,0.6),
+            inset 0 1px 0 rgba(255,240,205,0.24),
+            0 0 16px rgba(232,200,119,0.28);
+        }
+        /* Lueur qui respire autour de l'onglet central actif. Un calque a ombre FIXE
+           dont seule l'opacite varie : jamais de box-shadow anime en boucle. */
+        .hub-onglet-central.actif::after {
+          content: ""; position: absolute; inset: -2px; border-radius: inherit;
+          pointer-events: none; opacity: 0; will-change: opacity;
+          box-shadow: 0 0 22px rgba(232,200,119,0.55);
+          animation: halo-respire 3.2s ease-in-out infinite;
+        }
+        .hub-onglet-central:active { transform: translateY(-8px) scale(0.97); }
+        @media (prefers-reduced-motion: reduce) {
+          .hub-onglet-central.actif::after { animation: none; opacity: 0.5; }
+        }
+        /* La sequence d'entree existante revele aussi le hub : memes etapes que
+           l'ancien bouton Nouvelle partie. */
+        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
+        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
+        .landing.intro-e0 .hub-pages, .landing.intro-e1 .hub-pages { opacity: 0; }
+        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
+        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
+        .landing.intro-e2 .hub-pages, .landing.intro-e3 .hub-pages {
+          opacity: 1; transition: opacity .55s ease;
+        }
+        .landing.intro-e2 .hub-pages { transition-delay: .48s; }
+        .landing.intro-e2 .hub-haut { transition-delay: .6s; }
+        .landing.intro-e2 .hub-nav { transition-delay: .6s; }
+
         .landing-cta {
           font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 14px; text-transform: uppercase;
           color: #2a2413; background: linear-gradient(180deg, #cba456, #8f7238); border: none;
@@ -2441,8 +2849,8 @@ const APP_STYLES = `
           100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
         }
         .defeat-title {
-          font-family: 'Cinzel', 'Georgia', serif; font-weight: 700;
-          font-size: clamp(2.2rem, 8vw, 3.6rem); letter-spacing: 0.3em; text-indent: 0.3em;
+          font-family: 'Cinzel', 'Georgia', serif; font-weight: 600;
+          font-size: clamp(1.9rem, 6.6vw, 3rem); letter-spacing: 0.3em; text-indent: 0.3em;
           color: #8b0000; text-transform: uppercase; margin: 0;
           text-shadow: 0 0 20px rgba(139, 0, 0, 0.8), 0 4px 10px rgba(0, 0, 0, 0.9), 0 0 2px #ff3333;
         }
@@ -2846,6 +3254,9 @@ const APP_STYLES = `
           background:rgba(90,150,45,.10);
           box-shadow:inset 0 0 12px rgba(90,150,45,.35)}
         .cell.poisoned.can-play{border-color:var(--gold)}
+        /* Pendant le survol d'une carte en glisser : la case montre l'apercu de pose,
+           les pastilles de dose se retirent pour ne pas se superposer a la carte. */
+        .cell.poisoned.drag-target::after{display:none}
         /* --- Compteur de dose : 1 à 4 pastilles, au CENTRE de la case.
            Centrées volontairement : en haut elles recouvriraient le rang supérieur de la
            carte pendant l'aperçu de pose, et en bas la flaque les avalerait à partir du
@@ -3842,14 +4253,211 @@ const APP_STYLES = `
           text-shadow: 0 0 26px rgba(203,164,86,0.45); box-shadow: 0 0 0 1px rgba(203,164,86,0.18), 0 10px 30px rgba(0,0,0,0.45);
         }
         .code-copie { font-size: 11px; color: var(--gold-bright); margin-top: -4px; min-height: 14px; }
+        /* Textes d'attente : un encart discret, hauteur reservee pour que le bloc ne
+           saute pas d'une phrase a l'autre. */
+        /* L'Ordre en vedette pendant la recherche d'adversaire. */
+        .attente-ordre {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          margin-top: 10px; width: 100%; max-width: 250px;
+        }
+        .attente-ordre img {
+          width: min(58vw, 210px); aspect-ratio: 3 / 4; object-fit: cover;
+          border-radius: 14px; border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+        }
+        .attente-ordre-nom {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
+          margin-top: 6px;
+        }
+        .attente-ordre-desc { font-size: 11px; color: var(--muted); text-align: center; }
+        .attente-message { margin-top: 8px; }
+        .recit-attente {
+          width: 100%; max-width: 340px; box-sizing: border-box;
+          margin-top: 12px;
+          padding: 13px 16px 14px;
+          background: rgba(8,6,12,0.5); border: 1px solid rgba(203,164,86,0.18);
+          border-radius: 12px; text-align: center; min-height: 96px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+        }
+        .recit-genre {
+          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold);
+        }
+        .recit-texte {
+          margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--bone);
+          animation: recit-parait 0.7s ease-out both;
+        }
+        @keyframes recit-parait {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         /* Rappel du code pendant le choix des Ordres : plus discret que l'écran d'attente,
            mais toujours lisible sans plisser les yeux (l'ancienne version était en 11px). */
+        /* Minuteur du choix des Ordres : ancre en haut a droite de l'ecran, en vis-a-vis
+           du bouton Retour place en haut a gauche. */
+        .ordres-minuteur {
+          position: absolute; top: 16px; right: 14px; z-index: 40;
+          display: flex; align-items: center; gap: 7px;
+          padding: 7px 13px 7px 10px; border-radius: 999px;
+          background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .ordres-sablier {
+          width: 19px; height: 19px; fill: var(--gold-bright);
+          filter: drop-shadow(0 0 4px rgba(232,200,119,0.55));
+          animation: sablier-tourne 2.4s linear infinite;
+        }
+        /* Seul transform est anime : le sablier tourne sans rien recalculer. */
+        @keyframes sablier-tourne {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .ordres-temps {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.06em; color: var(--gold-bright);
+          font-variant-numeric: tabular-nums;
+        }
+        .ordres-minuteur.urgent { border-color: var(--red-bright); }
+        .ordres-minuteur.urgent .ordres-temps,
+        .ordres-minuteur.urgent .ordres-sablier { color: var(--red-bright); fill: var(--red-bright); }
+        .ordres-adversaire {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-size: 11.5px; color: var(--muted); margin-top: -2px;
+        }
+        .ordres-adversaire svg { width: 13px; height: 13px; fill: var(--bonus); }
+        .ordres-adversaire.pret { color: var(--bonus); }
         .code-rappel { font-size: 15px; color: var(--muted); margin-top: -4px; }
         .code-rappel b {
           font-family: 'Cinzel', serif; font-size: 24px; letter-spacing: 0.14em;
           color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
         }
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
+        /* Rotation du duel local : tout l'écran pivote vers le joueur dont c'est le tour.
+           La transition donne le geste de tourner physiquement le plateau. */
+        /* Rotation du duel local : INSTANTANEE, et c'est voulu. Transition comme
+           animation restaient gelees a leur point de depart dans certains
+           environnements (constate : la valeur calculee ne bougeait jamais, ecran
+           jamais tourne). L'etat est donc porte uniquement par le style inline pose
+           par React : aucun mecanisme temporel, aucun environnement ne peut le geler. */
+        /* Trophées d'un joueur en partie Classée : une puce discrète dans l'étiquette. */
+        /* Puce de trophees en Classe : a gauche, a hauteur de la rangee d'Ordres. */
+        .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        .trophees-flottant {
+          position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 3px 8px 3px 6px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          color: var(--gold-bright); background: rgba(8,6,12,0.8);
+          border: 1px solid rgba(203,164,86,0.4);
+        }
+        .trophees-flottant svg { width: 12px; height: 12px; fill: var(--gold-bright); }
+        .trophees-chip {
+          margin-left: 7px; padding: 1px 7px 1px 8px; border-radius: 999px;
+          font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+          color: var(--gold-bright); background: rgba(203,164,86,0.12);
+          border: 1px solid rgba(203,164,86,0.35); vertical-align: 1px;
+        }
+        .trophees-icone { font-size: 10px; }
+        .revanche-attente { font-size: 11px; color: var(--muted); text-align: center; font-style: italic; }
+        /* Code du tournoi : lisible sans crier — l'arbre au-dessous est la vraie vedette,
+           contrairement au mode "Jouer avec un ami" où le code occupe l'écran. */
+        .code-tournoi {
+          font-family: 'Cinzel', serif; font-size: clamp(24px, 7vw, 38px); font-weight: 700;
+          letter-spacing: 0.18em; text-indent: 0.18em; color: var(--gold-bright);
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.45); border-radius: 10px;
+          padding: 8px 18px; margin: 4px 0; text-align: center;
+        }
+        /* Siège encore vide dans l'arbre du tournoi en ligne. */
+        .tb-plaque.tb-attente { opacity: 0.55; border-style: dashed; }
+        .tb-plaque.tb-attente .tb-nom { color: var(--muted); letter-spacing: 0.3em; }
+        .tb-champion-annonce { color: var(--gold-bright); font-weight: 700; font-size: 13px; }
+        /* Messages en direct. Bouton flottant au-dessus de la rangée d'actions ; le
+           panneau reste compact pour ne jamais recouvrir le plateau entier. */
+        .chat-bouton {
+          position: fixed; right: 10px; bottom: 86px; z-index: 60;
+          width: 40px; height: 40px; border-radius: 50%; font-size: 17px; line-height: 1;
+          background: var(--panel); color: var(--bone);
+          border: 1px solid rgba(203,164,86,0.45); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .chat-bouton svg { width: 20px; height: 20px; fill: var(--bone); }
+        /* Affichage direct coupe : le bouton reste la, en retrait, pour qu'on sache
+           que les messages arrivent toujours. */
+        .chat-bouton.directs-coupes { opacity: 0.8; }
+        .chat-bouton.directs-coupes svg { fill: var(--muted); }
+        /* Barre rouge en diagonale : l'affichage direct est coupe, et ca se voit. */
+        .chat-bouton.directs-coupes::after {
+          content: ""; position: absolute; left: 6px; right: 6px; top: 50%;
+          height: 3px; margin-top: -1.5px; border-radius: 2px;
+          background: var(--red-bright); transform: rotate(-45deg);
+          box-shadow: 0 0 5px rgba(224,101,90,0.7);
+        }
+        .chat-bulle-directe {
+          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
+          padding: 9px 12px; border-radius: 12px; cursor: pointer;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.4);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+          font-size: 12.5px; line-height: 1.45; color: var(--bone);
+          animation: chat-bulle-parait 0.32s ease-out both;
+        }
+        .chat-bulle-directe.de-moi { border-color: rgba(111,164,230,0.5); }
+        .chat-bulle-directe.de-lui { border-color: rgba(224,101,90,0.5); }
+        .chat-bulle-auteur {
+          display: block; font-family: 'Cinzel', serif; font-size: 9.5px;
+          letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+        }
+        @keyframes chat-bulle-parait {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-bulle-avis {
+          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          padding: 7px 12px; border-radius: 999px;
+          background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.35);
+          font-size: 11px; letter-spacing: 0.06em; color: var(--gold-bright);
+          animation: chat-bulle-parait 0.28s ease-out both;
+        }
+        .chat-badge {
+          position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px;
+          border-radius: 999px; padding: 0 4px; font-size: 10px; font-weight: 700; line-height: 17px;
+          color: #14111c; background: var(--gold-bright); text-align: center;
+        }
+        .chat-panneau {
+          position: fixed; right: 10px; bottom: 132px; z-index: 60;
+          width: min(290px, calc(100vw - 20px)); max-height: 42vh;
+          display: flex; flex-direction: column;
+          background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
+          border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.55); overflow: hidden;
+        }
+        .chat-liste { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 70px; }
+        .chat-vide { font-size: 11px; color: var(--muted); text-align: center; margin: auto; font-style: italic; }
+        .chat-msg {
+          max-width: 82%; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.35;
+          word-break: break-word; white-space: pre-wrap;
+        }
+        .chat-moi { align-self: flex-end; background: rgba(203,164,86,0.18); border: 1px solid rgba(203,164,86,0.35); color: var(--bone); border-bottom-right-radius: 3px; }
+        .chat-lui { align-self: flex-start; background: rgba(63,111,176,0.2); border: 1px solid rgba(111,164,230,0.3); color: var(--bone); border-bottom-left-radius: 3px; }
+        .chat-saisie-ligne { display: flex; gap: 6px; padding: 8px; border-top: 1px solid rgba(203,164,86,0.2); }
+        .chat-saisie {
+          flex: 1; min-width: 0; background: rgba(8,6,12,0.6); color: var(--bone);
+          border: 1px solid rgba(203,164,86,0.3); border-radius: 8px; padding: 7px 10px; font-size: 13px;
+          font-family: inherit;
+        }
+        .chat-saisie:focus { outline: none; border-color: var(--gold); }
+        .chat-envoyer {
+          width: 36px; border-radius: 8px; border: 1px solid rgba(203,164,86,0.45);
+          background: rgba(203,164,86,0.15); color: var(--gold-bright); font-size: 14px; cursor: pointer;
+        }
+        .chat-envoyer:disabled { opacity: 0.4; cursor: default; }
+        .revanche-btn.revanche-invite {
+          border-color: var(--gold-bright); color: var(--gold-bright);
+          animation: hint-pulse 1.4s ease-in-out infinite;
+        }
+        /* Reprise d'une partie en ligne : un adversaire attend en face, donc elle passe
+           devant la reprise d'une partie solo, qui peut attendre. */
+        .landing-link.reprise-en-ligne { color: var(--gold-bright); font-weight: 600; }
         .order-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; width: 100%; }
         .order-option { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.15); cursor: pointer;
@@ -3970,9 +4578,10 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
           padding: 4px 10px; border-radius: 999px; white-space: nowrap; z-index: 5;
         }
+        .lock-chip svg { width: 17px; height: 17px; }
         .lock-chip {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4;
-          width: 46px; height: 46px; border-radius: 50%;
+          width: 32px; height: 32px; border-radius: 50%;
           background: rgba(20,17,28,0.32);
           backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
           display: flex; align-items: center; justify-content: center;
@@ -4963,7 +5572,7 @@ const APP_STYLES = `
 `;
 
 export default function Emprise() {
-  const [phase, setPhase] = useState("landing"); // landing -> select-mode -> (bot: select-difficulty -> select-assist -> select-blue -> preview | confluence-bot: select-difficulty -> select-assist -> confluence-draft -> preview | local: select-blue -> select-red | confluence-local: confluence-draft) -> play
+  const [phase, setPhase] = useState("landing"); // landing (hub) -> (bot: select-difficulty -> select-assist -> select-blue -> preview | confluence-bot: select-difficulty -> select-assist -> confluence-draft -> preview | local: select-blue -> select-red | confluence-local: confluence-draft) -> play
   const [mode, setMode] = useState(null); // "bot" | "local"
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   // Draft Confluence : un pool COMMUN aux deux joueurs. Chacun choisit un Ordre à son tour
@@ -5022,13 +5631,88 @@ export default function Emprise() {
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
+  // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
+  // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
+  const [ordreAttente, setOrdreAttente] = useState(null);
+  // Appariements déjà consommés par cet appareil : garde synchrone contre une seconde
+  // lecture du même champ (l'écouteur se déclenche à chaque écriture du document).
+  const matchsConsommesRef = useRef(new Set());
   const [codeCopie, setCodeCopie] = useState(false); // retour visuel après copie du code de partie
   // Vrai pour une partie née de l'appariement (mode Classé) : c'est ce qui décide de
   // jouer dans l'arène de sa ligue plutôt que sur le plateau nu.
   const [partieClassee, setPartieClassee] = useState(false);
+  // Trophees des deux camps, lus depuis le document de la partie classee.
+  const [trophesPartie, setTrophesPartie] = useState(null);
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
+  // Reconnexion : partie en ligne retrouvée au démarrage et proposée sur l'accueil.
+  const [repriseEnLigne, setRepriseEnLigne] = useState(null);
+  // Vrai le temps d'une reprise : indique à l'écouteur qu'il doit router vers le bon
+  // écran (jeu ou choix des Ordres) au lieu de laisser le joueur sur l'écran d'attente.
+  const repriseRef = useRef(false);
+  const repriseTesteeRef = useRef(false); // la recherche d'une partie à reprendre n'a lieu qu'une fois
+  // Fin de partie décidée hors plateau : "blue"/"red" quand un camp gagne par abandon ou
+  // forfait de l'adversaire, quel que soit le score. Dérivé du document Firestore à chaque
+  // notification (champ abandonPar), donc toujours cohérent entre les deux appareils.
+  const [vainqueurForce, setVainqueurForce] = useState(null);
+  const [finMotif, setFinMotif] = useState(null); // "abandon" | "forfait" | null
+  // Secondes d'attente du coup adverse en ligne — alimente l'avertissement de forfait.
+  const [attenteAdv, setAttenteAdv] = useState(0);
+  // Avant-match : présence de l'adversaire (les deux sièges pris) et état de son choix
+  // d'Ordres, dérivés du document à chaque notification. Servent au forfait d'avant-match.
+  const [advPresent, setAdvPresent] = useState(false);
+  const [advPret, setAdvPret] = useState(false);
+  const [attentePreMatch, setAttentePreMatch] = useState(0);
+  const [tempsOrdres, setTempsOrdres] = useState(ORDRES_SECONDS);
+  const ordresAutoRef = useRef(false); // l'echeance ne doit confirmer qu'une seule fois
+  const autoForfaitRef = useRef(false); // le forfait pour inactivite ne s'ecrit qu'une fois
+  const preForfaitEcritRef = useRef(false);
+  const forfaitEcritRef = useRef(false); // un seul constat de forfait par tour d'attente
+  // Messages en direct pendant une partie en ligne.
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatOuvert, setChatOuvert] = useState(false);
+  const [chatSaisie, setChatSaisie] = useState("");
+  const [chatNonLus, setChatNonLus] = useState(0);
+  const chatVusRef = useRef(0); // combien de messages étaient déjà affichés/comptés
+  const chatOuvertRef = useRef(false); // miroir de chatOuvert lisible depuis l'écouteur Firestore
+  const messagesDirectsRef = useRef(true); // miroir du reglage, meme raison
+  const chatDernierEnvoiRef = useRef(0); // anti-rafale : 1 message par seconde
+  const chatListeRef = useRef(null); // la liste déroulante du panneau, pour l'autoscroll
+  // Partie dont le compteur de messages vus est le référentiel : au changement de partie
+  // (reprise, revanche, match suivant), l'historique existant ne doit pas gonfler le badge.
+  const chatGameIdRef = useRef(null);
+  // Bulle qui montre le dernier message sans ouvrir le panneau, et reglage qui
+  // l'active ou la coupe (double-clic). Persiste d'une partie a l'autre.
+  const [messageBulle, setMessageBulle] = useState(null);
+  const [messagesDirects, setMessagesDirects] = useState(() => {
+    try { return localStorage.getItem("emprise-messages-directs") !== "0"; } catch (e) { return true; }
+  });
+  const [bulleAvis, setBulleAvis] = useState("");
+  const bulleTimerRef = useRef(null);
+  const avisTimerRef = useRef(null);
+  function basculerMessagesDirects() {
+    setMessagesDirects((actif) => {
+      const suivant = !actif;
+      try { localStorage.setItem("emprise-messages-directs", suivant ? "1" : "0"); } catch (e) { /* non persiste */ }
+      if (!suivant) { clearTimeout(bulleTimerRef.current); setMessageBulle(null); }
+      setBulleAvis(suivant ? "Messages affichés en direct" : "Affichage direct coupé");
+      clearTimeout(avisTimerRef.current);
+      avisTimerRef.current = setTimeout(() => setBulleAvis(""), 2200);
+      return suivant;
+    });
+  }
+  // Revanche (mode "Jouer avec un ami" uniquement) : votes lus depuis le document.
+  const [revancheVotes, setRevancheVotes] = useState(null);
+  const revancheCreationRef = useRef(false); // évite de créer deux fois la partie de revanche
+  // Tournoi en ligne.
+  const [tournoiOnlineId, setTournoiOnlineId] = useState(null);
+  const [tournoiData, setTournoiData] = useState(null);
+  const [tournoiErreur, setTournoiErreur] = useState("");
+  const [codeTournoiInput, setCodeTournoiInput] = useState("");
+  const tournoiLancementRef = useRef(false); // un seul client tente le lancement à la fois
+  const tournoiResultatRef = useRef(null); // gameId dont le résultat a déjà été écrit
+  const [repriseTournoi, setRepriseTournoi] = useState(null); // tournoi retrouvé au démarrage
 
 
   const [board, setBoard] = useState(Array(CELLS).fill(null));
@@ -5089,6 +5773,20 @@ export default function Emprise() {
   const [gameOver, setGameOver] = useState(false);
   const [infoAbility, setInfoAbility] = useState(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
+  // Duel local à deux sur le même appareil : quand l'option est active, l'écran pivote
+  // de 180° pendant le tour d'Écarlate, comme si on tournait le plateau vers l'autre
+  // joueur. Chacun joue ainsi "en bas" de son côté de la table.
+  const [rotationLocale, setRotationLocale] = useState(() => {
+    try { return localStorage.getItem("emprise-rotation-locale") === "1"; } catch (e) { return false; }
+  });
+  function toggleRotationLocale() {
+    setRotationLocale((r) => {
+      const suivant = !r;
+      try { localStorage.setItem("emprise-rotation-locale", suivant ? "1" : "0"); } catch (e) { /* non persisté */ }
+      return suivant;
+    });
+  }
+
   const [reducedMotion, setReducedMotion] = useState(() => {
     try {
       const saved = localStorage.getItem("emprise-reduced-motion");
@@ -5105,7 +5803,18 @@ export default function Emprise() {
       return next;
     });
   }
-  const [activeModal, setActiveModal] = useState(null); // null | "stats" | "rules" | "story" | "settings" — un seul panneau ouvert à la fois
+  const [activeModal, setActiveModal] = useState(null);
+  // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
+  // changement d'onglet, pour orienter le glissement d'entrée de la page.
+  const [hubPage, setHubPage] = useState("jouer");
+  const [historique, setHistorique] = useState(() => lireHistorique());
+  const [hubSens, setHubSens] = useState("droite");
+  const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
+  function allerPageHub(page) {
+    if (page === hubPage) return;
+    setHubSens(HUB_ORDRE_PAGES.indexOf(page) > HUB_ORDRE_PAGES.indexOf(hubPage) ? "droite" : "gauche");
+    setHubPage(page);
+  } // null | "stats" | "rules" | "story" | "settings" — un seul panneau ouvert à la fois
   // ---------- Séquence d'entrée de l'écran d'accueil ----------
   // Trois temps : noir total, puis l'illustration des Abysses monte du noir en fondu,
   // puis le titre / sous-titre / bouton glissent vers le haut. Tout est porté par des
@@ -5314,7 +6023,64 @@ export default function Emprise() {
   // blueScore + redScore = blueCount + redCount + 1 = 16 + 1 = 17 (toujours impair) :
   // une égalité est donc mathématiquement impossible, on ne teste plus ce cas.
   // Le +1 va toujours à celui qui a commencé, quel que soit son camp.
-  const winner = gameOver ? (blueScore > redScore ? "blue" : "red") : null;
+  // Un abandon ou un forfait désigne le vainqueur quel que soit l'état du plateau.
+  // vainqueurForce n'a de sens qu'en ligne : ce verrou garantit qu'un état résiduel ne
+  // peut jamais décider du vainqueur d'une partie solo ou locale.
+  const winner = gameOver ? ((mode === "online" ? vainqueurForce : null) || (blueScore > redScore ? "blue" : "red")) : null;
+
+  // ---------- Perspective : chacun joue EN BAS de son écran ----------
+  // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
+  // l'adversaire". Les deux sections (étiquette + main) sont donc pilotées par le camp
+  // affiché en haut et en bas, et non plus figées rouge en haut / bleu en bas.
+  const campHaut = mode === "online" && onlineRole === "red" ? "blue" : "red";
+  const campBas = campHaut === "red" ? "blue" : "red";
+  // Rotation du duel local : l'écran entier pivote pendant le tour d'Écarlate.
+  const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play"
+    && turn === "red" && !gameOver && !infoAbility && !confirmQuit;
+
+  // Étiquette d'un camp — texte identique à l'ancienne version, plus les trophées en
+  // Classé (0 pour l'instant : les profils ne sont pas encore synchronisés côté serveur,
+  // l'emplacement est prêt pour brancher les vraies valeurs le moment venu).
+  function labelCamp(camp) {
+    const rouge = camp === "red";
+    return (
+      <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
+        {rouge ? "Écarlate" : "Azur"}
+        {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
+        {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
+        {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
+
+      </div>
+    );
+  }
+
+  // Puce de trophees d'un camp en partie Classee, ancree a GAUCHE de sa rangee
+  // d'Ordres. Les valeurs viennent du document de la partie : les deux ecrans
+  // affichent les memes chiffres, quel que soit le camp qu'ils jouent.
+  function pucesTrophees(camp) {
+    if (mode !== "online" || !partieClassee) return null;
+    const valeur = trophesPartie && typeof trophesPartie[camp] === "number"
+      ? trophesPartie[camp]
+      : (onlineRole === camp ? (stats.trophies || 0) : 0);
+    return (
+      <span className="trophees-flottant" title="Trophées">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+        </svg>
+        {valeur}
+      </span>
+    );
+  }
+
+  function mainCamp(camp) {
+    const main = camp === "red" ? redHand : blueHand;
+    if (main.length === 0) return null;
+    return (
+      <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
+        {renderHandGroups(camp)}
+      </div>
+    );
+  }
 
   // Cérémonie de fin : uniquement pour une victoire HUMAINE, jamais en mode Histoire
   // (il a sa propre récompense de chapitre) ni en mode test. La Défaite n'est pas
@@ -5343,16 +6109,31 @@ export default function Emprise() {
       const orderKeys = confluenceActive
         ? [...draft.pool, ...draft.pool] // les deux camps jouent avec les mêmes 8, comme en mode standard où chaque camp compte pour lui
         : [...blueOrders, ...redOrders].map((l) => l.key);
-      // Trophées : UNIQUEMENT en multijoueur en ligne. Les parties contre un Écho (mode Bot,
-      // Tournoi, mode Histoire) et les parties locales à deux ne rapportent ni ne coûtent rien :
-      // le classement ne doit récompenser que des victoires sur de vrais Commandants.
+      // Trophées : UNIQUEMENT en mode Classé. Les parties contre un Écho, les duels locaux,
+      // mais aussi "Jouer avec un ami" et le tournoi en ligne ne rapportent ni ne coûtent
+      // rien : deux amis pourraient sinon se faire monter mutuellement dans les ligues en
+      // se laissant gagner à tour de rôle. Le classement ne compte que les duels appariés.
       // Victoire +30, défaite -15 ; le total ne peut jamais descendre sous 0 (plancher dans
       // recordGameStats). En ligne on peut jouer Azur OU Écarlate, d'où la comparaison avec
       // onlineRole et non avec "blue" : sinon un joueur Écarlate serait crédité à l'envers.
-      const trophyGain = mode === "online" && onlineRole
+      const trophyGain = partieClassee && onlineRole
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
       recordGameStats(winner, orderKeys, trophyGain).then(setStats);
+      // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
+      // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
+      // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
+      if (partieClassee && onlineRole && !testMode) {
+        setHistorique(ecrireHistorique({
+          t: Date.now(),
+          classee: true,
+          sb: blueScore, sr: redScore,
+          vainqueur: winner,
+          camp: onlineRole,
+          trophees: trophyGain,
+          motif: finMotif || null,
+        }));
+      }
       // Mode Histoire : une victoire fait avancer la progression du chapitre en cours.
       // Si c'était la dernière partie (Seigneur de Guerre), le chapitre est marqué
       // terminé et le Héraut débloqué, plutôt qu'une simple victoire de plus.
@@ -5410,6 +6191,8 @@ export default function Emprise() {
 
   function reset() {
     clearSavedGame();
+    oublierPartieEnLigne();
+    setHubPage("jouer"); // quitter une partie ramene toujours a la page Jouer du hub
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
@@ -5433,7 +6216,16 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null);
+    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null);
+    setVainqueurForce(null); setFinMotif(null); setAttenteAdv(0); forfaitEcritRef.current = false;
+    setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
+    setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
+    chatVusRef.current = 0; chatOuvertRef.current = false;
+    setMessageBulle(null); setBulleAvis("");
+    clearTimeout(bulleTimerRef.current); clearTimeout(avisTimerRef.current);
+    setRevancheVotes(null); revancheCreationRef.current = false;
+    setTournoiOnlineId(null); setTournoiData(null); setTournoiErreur(""); setCodeTournoiInput("");
+    tournoiLancementRef.current = false; tournoiResultatRef.current = null;
     setPhase("landing");
   }
 
@@ -5446,6 +6238,354 @@ export default function Emprise() {
     });
     return unsub;
   }, []);
+
+  // ---------- Reconnexion à une partie en ligne ----------
+  // Le problème réglé ici : sur téléphone, verrouiller l'écran ou changer d'application
+  // suffit à faire recharger la page. onlineGameId et onlineRole vivaient uniquement en
+  // mémoire React, donc la partie devenait injoignable — l'adversaire restait à attendre
+  // un coup qui ne viendrait jamais. On garde donc de quoi la retrouver.
+  // localStorage et pas sessionStorage (utilisé par la sauvegarde des parties solo) :
+  // sessionStorage est vidé dès que l'onglet se ferme, ce qui ne couvre pas le cas le
+  // plus fréquent, l'application chassée de la mémoire par le téléphone.
+  const CLE_PARTIE_EN_LIGNE = "emprise-partie-en-ligne";
+
+  function oublierPartieEnLigne() {
+    try { localStorage.removeItem(CLE_PARTIE_EN_LIGNE); } catch (e) { /* stockage indisponible */ }
+    setRepriseEnLigne(null);
+  }
+
+  // Mémorise la partie en cours à chaque changement, et l'oublie dès qu'elle est finie.
+  // Aucune donnée de jeu ici : Firestore fait foi, on ne stocke que de quoi s'y rebrancher.
+  useEffect(() => {
+    if (mode !== "online" || !onlineGameId || !onlineRole) return;
+    // Pas de reprise en Classe : quitter un duel classe vaut abandon (le forfait s'en
+    // charge), le proposer a la reprise laissait croire qu'on pouvait revenir sans frais.
+    if (gameOver || partieClassee) { oublierPartieEnLigne(); return; }
+    try {
+      localStorage.setItem(CLE_PARTIE_EN_LIGNE, JSON.stringify({
+        gameId: onlineGameId, role: onlineRole, classee: partieClassee, uid: myUid,
+        tournoi: tournoiOnlineId || null,
+      }));
+    } catch (e) { /* stockage indisponible : pas de reprise possible, on continue */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, onlineGameId, onlineRole, partieClassee, gameOver, myUid]);
+
+  // Au démarrage, une fois l'identité connue : est-ce qu'une partie nous attend ?
+  // On ne propose la reprise qu'après avoir vérifié auprès de Firestore que la partie
+  // existe encore, qu'elle n'est pas terminée, et qu'on en fait bien partie — sinon on
+  // proposerait de reprendre une partie fantôme.
+  useEffect(() => {
+    if (!myUid || repriseTesteeRef.current) return;
+    repriseTesteeRef.current = true;
+    let brut = null;
+    try { brut = localStorage.getItem(CLE_PARTIE_EN_LIGNE); } catch (e) { return; }
+    if (!brut) return;
+    let enregistree = null;
+    try { enregistree = JSON.parse(brut); } catch (e) { oublierPartieEnLigne(); return; }
+    if (!enregistree || !enregistree.gameId) { oublierPartieEnLigne(); return; }
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "games", enregistree.gameId));
+        if (!snap.exists()) { oublierPartieEnLigne(); return; }
+        const data = snap.data();
+        // Terminée, ou appartenant à quelqu'un d'autre (deux joueurs sur le même
+        // appareil) : il n'y a rien à reprendre.
+        if (data.gameOver) { oublierPartieEnLigne(); return; }
+        // Camps que cette identité peut légitimement reprendre dans cette partie.
+        const campsPossibles = [];
+        if (data.blueUid === myUid) campsPossibles.push("blue");
+        if (data.redUid === myUid) campsPossibles.push("red");
+        if (!campsPossibles.length) { oublierPartieEnLigne(); return; }
+        // Le camp mémorisé fait foi tant qu'il reste plausible : une même identité peut
+        // occuper les DEUX camps (deux onglets d'un même navigateur partagent le compte
+        // anonyme Firebase), et déduire le camp de la seule identité renvoyait alors
+        // systématiquement Azur — un joueur Écarlate se retrouvait dans le camp adverse.
+        const camp = campsPossibles.includes(enregistree.role) ? enregistree.role : campsPossibles[0];
+        setRepriseEnLigne({
+          gameId: enregistree.gameId,
+          role: camp,
+          classee: !!enregistree.classee,
+          tournoi: enregistree.tournoi || null,
+        });
+      } catch (e) { /* réseau absent : on ne propose rien, la partie reste mémorisée */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid]);
+
+  function reprendrePartieEnLigne() {
+    if (!repriseEnLigne) return;
+    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setConfluenceActive(false);
+    setTestMode(false);
+    setPickerChoice([]);
+    setOnlineError("");
+    setOnlineGameId(repriseEnLigne.gameId);
+    setOnlineRole(repriseEnLigne.role);
+    setPartieClassee(!!repriseEnLigne.classee);
+    if (repriseEnLigne.tournoi) setTournoiOnlineId(repriseEnLigne.tournoi);
+    setMode("online");
+    setOnlineStatus("Reprise de la partie...");
+    repriseRef.current = true;
+    setRepriseEnLigne(null);
+    setPhase("online-waiting");
+  }
+
+  // ---------- Tournoi en ligne ----------
+  // Huit vrais joueurs, un code à partager, et le même arbre que le tournoi solo.
+  // Un document "tournaments/{code}" porte la liste des inscrits (l'ordre d'arrivée fait
+  // les sièges) puis les matchs de chaque tour. Les parties d'un tournoi sont des parties
+  // en ligne ordinaires dont l'identifiant est DÉTERMINISTE ("{code}-QF0"...) : aucune
+  // collision possible puisque le code du tournoi est déjà unique, et aucun tirage à
+  // vérifier au moment de créer un tour complet dans une seule transaction.
+  const CLE_TOURNOI = "emprise-tournoi-en-ligne";
+
+  function nouvellePartieDeTournoi(aUid, bUid, matchKey) {
+    const premier = tirerPremierJoueur();
+    return {
+      status: "waiting-orders", createdAt: serverTimestamp(),
+      blueUid: aUid, redUid: bUid,
+      blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
+      board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+      turn: premier, firstPlayer: premier, gameOver: false,
+      tournoiId: tournoiOnlineId, matchKey,
+    };
+  }
+
+  async function creerTournoiEnLigne() {
+    if (!myUid) { setTournoiErreur("Connexion en cours, réessayez dans un instant."); return; }
+    setTournoiErreur("");
+    try {
+      let code = null;
+      for (let essai = 0; essai < 5 && !code; essai++) {
+        const candidat = makeGameCode();
+        try {
+          await runTransaction(db, async (tx) => {
+            const ref = doc(db, "tournaments", candidat);
+            const snap = await tx.get(ref);
+            if (snap.exists()) throw new Error("code-pris");
+            tx.set(ref, {
+              createdAt: serverTimestamp(), status: "waiting",
+              joueurs: [myUid], matches: {}, champion: null,
+            });
+          });
+          code = candidat;
+        } catch (e) { if (e.message !== "code-pris") throw e; }
+      }
+      if (!code) { setTournoiErreur("Impossible de trouver un code libre. Réessayez."); return; }
+      setTournoiOnlineId(code);
+      setPhase("tourney-online");
+    } catch (e) {
+      setTournoiErreur("Impossible de créer le tournoi. Vérifiez votre connexion.");
+    }
+  }
+
+  async function rejoindreTournoiEnLigne() {
+    if (!myUid) { setTournoiErreur("Connexion en cours, réessayez dans un instant."); return; }
+    const code = codeTournoiInput.trim().toUpperCase();
+    if (!code) return;
+    setTournoiErreur("");
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", code);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error("introuvable");
+        const t = snap.data();
+        const joueurs = t.joueurs || [];
+        if (joueurs.includes(myUid)) return; // déjà inscrit : on entre simplement
+        if (t.status !== "waiting") throw new Error("commence");
+        if (joueurs.length >= 8) throw new Error("complet");
+        tx.update(ref, { joueurs: [...joueurs, myUid] });
+      });
+      setTournoiOnlineId(code);
+      setPhase("tourney-online");
+    } catch (e) {
+      if (e.message === "introuvable") setTournoiErreur("Code introuvable.");
+      else if (e.message === "commence") setTournoiErreur("Ce tournoi a déjà commencé.");
+      else if (e.message === "complet") setTournoiErreur("Ce tournoi est déjà complet (8 Commandants).");
+      else setTournoiErreur("Impossible de rejoindre. Vérifiez le code et votre connexion.");
+    }
+  }
+
+  // Quitter la salle d'attente (avant le lancement) : on libère son siège, sinon le
+  // tournoi resterait bloqué à attendre un huitième joueur parti depuis longtemps.
+  async function quitterSalleTournoi() {
+    const id = tournoiOnlineId;
+    setTournoiOnlineId(null); setTournoiData(null);
+    try { localStorage.removeItem(CLE_TOURNOI); } catch (e) { /* rien */ }
+    if (!id || !myUid) return;
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", id);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const t = snap.data();
+        if (t.status !== "waiting") return; // trop tard pour se retirer proprement
+        tx.update(ref, { joueurs: (t.joueurs || []).filter((u) => u !== myUid) });
+      });
+    } catch (e) { /* le siège restera occupé : le tournoi ne pourra pas se lancer, dommage */ }
+  }
+
+  // Lancement des quarts de finale, par N'IMPORTE QUEL client qui constate 8 inscrits :
+  // aucune dépendance à un "hôte" qui pourrait être parti. La transaction est idempotente
+  // (elle re-vérifie le statut), donc deux clients simultanés ne créent rien en double.
+  async function lancerQuartsDeFinale() {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", tournoiOnlineId);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const t = snap.data();
+        if (t.status !== "waiting" || (t.joueurs || []).length !== 8) return;
+        const matches = {};
+        for (let k = 0; k < 4; k++) {
+          const a = t.joueurs[k * 2], b = t.joueurs[k * 2 + 1];
+          // Suffixe aléatoire : un identifiant entièrement prévisible pouvait être
+          // pré-créé par un tiers dans games/, ce qui faisait échouer la transaction à
+          // jamais (mise à jour refusée par les règles, suppression interdite) et gelait
+          // le tournoi. L'identifiant qui fait foi est celui stocké dans matches.
+          const gameId = `${tournoiOnlineId}-QF${k}-${Math.random().toString(36).slice(2, 8)}`;
+          tx.set(doc(db, "games", gameId), nouvellePartieDeTournoi(a, b, `qf${k}`));
+          matches[`qf${k}`] = { a, b, gameId, vainqueur: null };
+        }
+        tx.update(ref, { status: "running", matches });
+      });
+    } catch (e) { /* un autre client y arrivera */ }
+  }
+
+  // Écrit le résultat d'un match, et si le tour est alors complet, crée le tour suivant
+  // dans la MÊME transaction — le client qui dépose le dernier résultat ouvre le tour
+  // d'après, quel qu'il soit. Les deux joueurs d'un match tentent l'écriture : le second
+  // trouve le vainqueur déjà posé et repart sans rien faire.
+  async function ecrireResultatTournoi(gameId, campVainqueur) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", tournoiOnlineId);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const t = snap.data();
+        const cles = Object.keys(t.matches || {});
+        const cle = cles.find((k) => t.matches[k].gameId === gameId);
+        if (!cle) return;
+        const m = t.matches[cle];
+        if (m.vainqueur) return;
+        const vainqueurUid = campVainqueur === "blue" ? m.a : m.b;
+        const matches = { ...t.matches, [cle]: { ...m, vainqueur: vainqueurUid } };
+        const majs = { matches };
+        const v = (k) => matches[k] && matches[k].vainqueur;
+        if (cle.startsWith("qf") && v("qf0") && v("qf1") && v("qf2") && v("qf3") && !matches.sf0) {
+          const sf0 = { a: v("qf0"), b: v("qf1"), gameId: `${tournoiOnlineId}-SF0-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
+          const sf1 = { a: v("qf2"), b: v("qf3"), gameId: `${tournoiOnlineId}-SF1-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
+          tx.set(doc(db, "games", sf0.gameId), nouvellePartieDeTournoi(sf0.a, sf0.b, "sf0"));
+          tx.set(doc(db, "games", sf1.gameId), nouvellePartieDeTournoi(sf1.a, sf1.b, "sf1"));
+          matches.sf0 = sf0; matches.sf1 = sf1;
+        } else if (cle.startsWith("sf") && v("sf0") && v("sf1") && !matches.f0) {
+          const f0 = { a: v("sf0"), b: v("sf1"), gameId: `${tournoiOnlineId}-F0-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
+          tx.set(doc(db, "games", f0.gameId), nouvellePartieDeTournoi(f0.a, f0.b, "f0"));
+          matches.f0 = f0;
+        } else if (cle === "f0") {
+          majs.champion = vainqueurUid;
+          majs.status = "done";
+        }
+        tx.update(ref, majs);
+      });
+    } catch (e) {
+      tournoiResultatRef.current = null; // l'autre client (ou une reprise) réessaiera
+    }
+  }
+
+  // Mon prochain match encore à jouer, s'il existe.
+  function monMatchEnAttente() {
+    if (!tournoiData || !tournoiData.matches || !myUid) return null;
+    for (const k of ["qf0", "qf1", "qf2", "qf3", "sf0", "sf1", "f0"]) {
+      const m = tournoiData.matches[k];
+      if (m && !m.vainqueur && (m.a === myUid || m.b === myUid)) return { cle: k, ...m };
+    }
+    return null;
+  }
+
+  function jouerMatchTournoi() {
+    const m = monMatchEnAttente();
+    if (!m) return;
+    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setConfluenceActive(false); setTestMode(false); setPickerChoice([]);
+    dernierCoupDistantRef.current = null;
+    chatVusRef.current = 0;
+    setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    setVainqueurForce(null); setFinMotif(null);
+    setBoard(Array(CELLS).fill(null)); setPoisonedCells(Array(CELLS).fill(false));
+    setBlueHand([]); setRedHand([]);
+    setGameOver(false);
+    tournoiResultatRef.current = null;
+    setPartieClassee(false);
+    setOnlineGameId(m.gameId);
+    setOnlineRole(m.a === myUid ? "blue" : "red");
+    setMode("online");
+    setOnlineError("");
+    setPhase("select-blue");
+  }
+
+  // Écoute du tournoi : liste des inscrits, matchs, résultats. C'est aussi ici que le
+  // lancement se déclenche dès que la salle est pleine.
+  useEffect(() => {
+    if (!tournoiOnlineId) return;
+    const unsub = onSnapshot(doc(db, "tournaments", tournoiOnlineId), (snap) => {
+      if (!snap.exists()) { setTournoiErreur("Ce tournoi n'existe plus."); return; }
+      const t = snap.data();
+      setTournoiData(t);
+      setTournoiErreur("");
+      if (t.status === "waiting" && (t.joueurs || []).length === 8 && !tournoiLancementRef.current) {
+        tournoiLancementRef.current = true;
+        lancerQuartsDeFinale().finally(() => { tournoiLancementRef.current = false; });
+      }
+    }, () => setTournoiErreur("Connexion au tournoi interrompue."));
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiOnlineId]);
+
+  // Dépôt du résultat de MON match dès qu'il se termine (victoire comme défaite : les
+  // deux clients tentent, le premier gagne, l'autre ne fait rien).
+  useEffect(() => {
+    if (!gameOver || mode !== "online" || !tournoiOnlineId || !onlineGameId || !winner) return;
+    if (tournoiResultatRef.current === onlineGameId) return;
+    tournoiResultatRef.current = onlineGameId;
+    ecrireResultatTournoi(onlineGameId, winner);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
+
+  // Un tournoi en cours est mémorisé sur l'appareil, comme une partie en ligne : après
+  // un rechargement, l'accueil propose d'y revenir. Oublié dès qu'il est terminé.
+  useEffect(() => {
+    if (!tournoiOnlineId) return;
+    try {
+      if (tournoiData && tournoiData.status === "done") localStorage.removeItem(CLE_TOURNOI);
+      else localStorage.setItem(CLE_TOURNOI, JSON.stringify({ tournoiId: tournoiOnlineId }));
+    } catch (e) { /* stockage indisponible */ }
+  }, [tournoiOnlineId, tournoiData]);
+
+  useEffect(() => {
+    if (!myUid) return;
+    let brut = null;
+    try { brut = localStorage.getItem(CLE_TOURNOI); } catch (e) { return; }
+    if (!brut) return;
+    let enregistre = null;
+    try { enregistre = JSON.parse(brut); } catch (e) { return; }
+    if (!enregistre || !enregistre.tournoiId) return;
+    getDoc(doc(db, "tournaments", enregistre.tournoiId)).then((snap) => {
+      if (snap.exists() && snap.data().status !== "done" && (snap.data().joueurs || []).includes(myUid)) {
+        setRepriseTournoi(enregistre.tournoiId);
+      } else {
+        try { localStorage.removeItem(CLE_TOURNOI); } catch (e) { /* rien */ }
+      }
+    }).catch(() => { /* hors ligne : on ne propose rien */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid]);
+
+  function reprendreTournoiEnLigne() {
+    if (!repriseTournoi) return;
+    setTournoiOnlineId(repriseTournoi);
+    setRepriseTournoi(null);
+    setPhase("tourney-online");
+  }
 
   async function createOnlineGame() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
@@ -5546,6 +6686,58 @@ export default function Emprise() {
       if (!snap.exists()) { setOnlineError("La partie a été fermée."); return; }
       const data = snap.data();
 
+      // Fin par abandon ou forfait : le champ abandonPar désigne le camp fautif, l'autre
+      // gagne. Dérivé À CHAQUE notification (et pas posé une fois) pour rester idempotent :
+      // un message de chat ou une revanche re-déclenchent l'écouteur sans rien casser.
+      // Un abandon n'est valable que si la partie n'était PAS déjà finie sur le plateau :
+      // sans ce garde, un forfait écrit dans la même seconde que le dernier coup gagnant
+      // (ou après coup, par un client trafiqué) inverserait le vainqueur au score des
+      // deux côtés. Les écritures d'abandon ne posent jamais gameOver : un document
+      // portant les deux à la fois est forcément une fin réelle suivie d'un abandon tardif.
+      const finForcee = (data.abandonPar === "blue" || data.abandonPar === "red") && !data.gameOver;
+      setVainqueurForce(finForcee ? (data.abandonPar === "blue" ? "red" : "blue") : null);
+      setFinMotif(finForcee ? (data.finMotif || "abandon") : null);
+
+      // Messages en direct : la liste vit dans le document, chaque appareil l'affiche.
+      // Le compteur de non-lus ne monte que pour les messages ADVERSES arrivés panneau fermé.
+      const messages = data.chat || [];
+      if (chatGameIdRef.current !== onlineGameId) {
+        // Première notification pour CETTE partie : l'historique déjà présent (reprise
+        // après rechargement) est affiché mais pas compté comme non-lu.
+        chatGameIdRef.current = onlineGameId;
+        chatVusRef.current = messages.length;
+      }
+      if (messages.length > chatVusRef.current) {
+        const arrivants = messages.slice(chatVusRef.current);
+        const nouveaux = arrivants.filter((m) => m.by !== onlineRole);
+        setChatNonLus((n) => (chatOuvertRef.current ? 0 : n + nouveaux.length));
+        // Affichage direct : le dernier message arrive s'affiche quelques secondes
+        // par-dessus le plateau, sans qu'on ait a ouvrir le panneau. Inutile si le
+        // panneau est deja ouvert, il y figure deja.
+        const dernier = arrivants[arrivants.length - 1];
+        if (dernier && !chatOuvertRef.current && messagesDirectsRef.current) {
+          setMessageBulle(dernier);
+          clearTimeout(bulleTimerRef.current);
+          bulleTimerRef.current = setTimeout(() => setMessageBulle(null), 6000);
+        }
+      }
+      chatVusRef.current = messages.length;
+      setChatMessages(messages);
+
+      // Revanche (ami uniquement) : votes partagés via le document. Quand les deux camps
+      // ont voté, c'est le client AZUR qui crée la partie suivante (un seul créateur,
+      // déterministe) ; les deux clients basculent dès que son code apparaît.
+      setRevancheVotes(data.revanche || null);
+      if (data.revanche && data.revanche.prochainCode) {
+        basculerVersRevanche(data.revanche.prochainCode);
+        return;
+      }
+      if (data.revanche && data.revanche.blue && data.revanche.red
+          && !data.revanche.prochainCode && onlineRole === "blue" && !revancheCreationRef.current) {
+        revancheCreationRef.current = true;
+        creerPartieDeRevanche(data);
+      }
+
       if (data.blueOrderKeys && data.redOrderKeys && data.blueHand && data.redHand) {
         setBlueOrders(data.blueOrderKeys.map((k) => ORDERS.find((l) => l.key === k)).filter(Boolean));
         setRedOrders(data.redOrderKeys.map((k) => ORDERS.find((l) => l.key === k)).filter(Boolean));
@@ -5554,10 +6746,12 @@ export default function Emprise() {
         setBoard(data.board.map(hydrateFromSave));
         setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
-        setGameOver(!!data.gameOver);
+        setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
+        setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
         setPhase((p) => (p === "play" ? p : "play"));
+        repriseRef.current = false; // reprise aboutie : la partie est retrouvée
 
         // Coup de l'adversaire : on rejoue chez nous les animations qu'il a vues (chute
         // de la carte, captures, retournements, brume empoisonnée). Sans ça le plateau
@@ -5577,7 +6771,43 @@ export default function Emprise() {
           }
         }
       } else {
+        // L'adversaire est parti avant même que la partie ne démarre : pas de victoire
+        // (rien n'a été joué), juste un message et le retour au menu en ligne.
+        if (finForcee) {
+          if (tournoiOnlineId) {
+            // Match de tournoi : l'abandon adverse nous donne la victoire du match.
+            if (tournoiResultatRef.current !== onlineGameId) {
+              tournoiResultatRef.current = onlineGameId;
+              ecrireResultatTournoi(onlineGameId, onlineRole);
+            }
+            retournerAuTournoi();
+            return;
+          }
+          setOnlineGameId(null); setOnlineRole(null); setOnlineStatus("");
+          // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
+          // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
+          setVainqueurForce(null); setFinMotif(null);
+          setPartieClassee(false);
+          oublierPartieEnLigne();
+          setOnlineError("L'adversaire a quitté avant le début de la partie.");
+          setPickerChoice([]);
+          setPhase("online-menu");
+          return;
+        }
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
+        setAdvPresent(!!(data.blueUid && data.redUid));
+        setAdvPret(onlineRole === "blue" ? !!data.redOrderKeys : !!data.blueOrderKeys);
+        // Reprise alors que la partie n'avait pas encore démarré : si mes Ordres
+        // n'étaient pas choisis, il faut revenir à l'écran de choix. Sans ça le joueur
+        // resterait indéfiniment sur un écran d'attente que rien ne peut débloquer,
+        // puisque c'est lui qu'on attend.
+        if (repriseRef.current && !iAmReady) {
+          repriseRef.current = false;
+          setOnlineStatus("");
+          setPhase("select-blue");
+          return;
+        }
+        repriseRef.current = false;
         setOnlineStatus(iAmReady ? "En attente que l'adversaire choisisse ses Ordres..." : "");
       }
     });
@@ -5632,6 +6862,7 @@ export default function Emprise() {
     setPickerChoice([]);
     setMode("online");
     setFileAttente(true);
+    setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
     try {
@@ -5643,7 +6874,18 @@ export default function Emprise() {
           && !!lobby.waitingAt && (Date.now() - lobby.waitingAt) < ATTENTE_PERIMEE_MS;
         if (!attenteValide) {
           // Personne (ou une inscription abandonnée) : je prends la place et j'attends.
-          tx.set(lobbyRef, { waitingUid: myUid, waitingAt: Date.now() }, { merge: true });
+          // On efface AU PASSAGE un appariement qui m'était adressé : ces champs n'étaient
+          // jamais nettoyés une fois consommés, si bien qu'en revenant en file je me
+          // faisais aussitôt renvoyer dans la partie précédente, souvent déjà terminée —
+          // impossible de lancer une nouvelle partie classée.
+          const monAncienMatch = lobby.matchedUid === myUid;
+          tx.set(lobbyRef, {
+            waitingUid: myUid, waitingAt: Date.now(),
+            // Mes trophees voyagent avec l'inscription : celui qui creera la partie les
+            // recopiera dans le document, et les DEUX ecrans afficheront les memes chiffres.
+            waitingTrophees: stats.trophies || 0,
+            ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
+          }, { merge: true });
           return null;
         }
         // Quelqu'un attend : je crée la partie et je la lui annonce. Firestore impose que
@@ -5667,6 +6909,12 @@ export default function Emprise() {
           turn: premier, firstPlayer: premier,
           gameOver: false,
           appariement: true, // partie née d'un appariement, pas d'un code partagé
+          // Trophees des deux camps au moment de l'appariement : la seule source que les
+          // deux ecrans peuvent lire a l'identique. Avant, chaque client affichait ses
+          // propres trophees pour lui et 0 pour l'autre, et les deux ecrans se
+          // contredisaient sur le meme joueur.
+          blueTrophees: lobby.waitingTrophees || 0,
+          redTrophees: stats.trophies || 0,
         });
         tx.set(lobbyRef, {
           waitingUid: null, waitingAt: null,
@@ -5691,6 +6939,213 @@ export default function Emprise() {
     }
   }
 
+  // Quitter une partie en ligne EN COURS : c'est un abandon. Le document le signale à
+  // l'adversaire, qui remporte la victoire (son écouteur affiche la cérémonie). En Classé,
+  // la défaite est comptée AVANT de partir : abandonner ne doit pas permettre d'esquiver
+  // les -15 trophées. Le quitteur, lui, revient simplement au menu — il a choisi de partir,
+  // pas besoin de lui rejouer sa défaite.
+  // Départ AVANT le début de la partie (écran d'attente ou choix des Ordres) : sans ce
+  // signal, l'adversaire resterait indéfiniment à attendre qu'on choisisse nos Ordres.
+  // En tournoi, partir c'est perdre le match : le résultat est déposé dans la foulée et
+  // on revient à l'arbre en éliminé, le tournoi continue sans nous.
+  // Écriture d'un abandon/forfait sous transaction : on relit le document et on ne
+  // scelle l'issue QUE si elle ne l'est pas déjà (ni gameOver, ni abandon antérieur),
+  // et que la précondition du moment tient toujours (le fautif n'a pas joué entre-temps,
+  // ses Ordres sont toujours manquants...). Un updateDoc aveugle pouvait inverser le
+  // résultat d'une partie gagnée sur le fil — et une transaction ne part jamais d'une
+  // file d'écritures hors-ligne, ce qui évite un forfait fantôme au retour du réseau.
+  // Renvoie false uniquement sur erreur (réseau) : issue déjà scellée = true, rien à refaire.
+  async function deposerAbandon(gameId, fautif, motif, encoreValable) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "games", gameId);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const d = snap.data();
+        if (d.gameOver || d.abandonPar) return;
+        if (encoreValable && !encoreValable(d)) return;
+        tx.update(ref, { abandonPar: fautif, finMotif: motif });
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function abandonnerAvantDebut() {
+    if (onlineGameId) {
+      deposerAbandon(onlineGameId, onlineRole, "abandon", null);
+      if (tournoiOnlineId) {
+        tournoiResultatRef.current = onlineGameId;
+        ecrireResultatTournoi(onlineGameId, onlineRole === "blue" ? "red" : "blue");
+      }
+    }
+    setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
+    setPickerChoice([]);
+    oublierPartieEnLigne();
+    if (tournoiOnlineId) setPhase("tourney-online");
+    else setPhase("online-menu");
+  }
+
+  function quitterPartieEnLigne() {
+    if (onlineGameId && !gameOver) {
+      deposerAbandon(onlineGameId, onlineRole, "abandon", null);
+      if (partieClassee && !statsRecordedRef.current) {
+        statsRecordedRef.current = true;
+        const orderKeys = [...blueOrders, ...redOrders].map((l) => l.key);
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE).then(setStats);
+      }
+    }
+    // Match de tournoi : abandonner la partie ne fait pas quitter le TOURNOI — on
+    // revient à l'arbre en éliminé. Le résultat est déposé par NOUS aussi (pas seulement
+    // par le client adverse) : si l'adversaire est hors ligne à cet instant, l'arbre
+    // resterait sinon bloqué en attendant un dépôt qui ne viendrait jamais.
+    if (tournoiOnlineId) {
+      if (onlineGameId && tournoiResultatRef.current !== onlineGameId) {
+        tournoiResultatRef.current = onlineGameId;
+        ecrireResultatTournoi(onlineGameId, onlineRole === "blue" ? "red" : "blue");
+      }
+      setConfirmQuit(false); retournerAuTournoi(); return;
+    }
+    reset();
+  }
+
+  // Envoi d'un message en direct. Contraintes volontairement simples : 200 caractères,
+  // au plus un message par seconde, et rien d'autre — une partie dure 16 coups, la liste
+  // reste courte. Le texte est affiché tel quel côté React (échappé par construction).
+  function envoyerMessage() {
+    const texte = chatSaisie.trim().slice(0, 200);
+    if (!texte || !onlineGameId || !onlineRole) return;
+    const maintenant = Date.now();
+    if (maintenant - chatDernierEnvoiRef.current < 1000) return;
+    chatDernierEnvoiRef.current = maintenant;
+    setChatSaisie("");
+    const nouveau = { id: `${maintenant}-${Math.random().toString(36).slice(2, 6)}`, by: onlineRole, texte, t: maintenant };
+    // Fenêtre glissante : au-delà de 60 messages on réécrit la liste tronquée au lieu
+    // d'empiler par arrayUnion — le document Firestore est plafonné à 1 Mo, et le
+    // dépasser rendrait la partie injouable (chaque coup serait refusé à l'écriture).
+    const maj = chatMessages.length >= 60
+      ? { chat: [...chatMessages.slice(-59), nouveau] }
+      : { chat: arrayUnion(nouveau) };
+    updateDoc(doc(db, "games", onlineGameId), maj)
+      .catch(() => setOnlineError("Message non envoyé, vérifiez votre connexion."));
+  }
+
+  // Autoscroll UNIQUEMENT à l'arrivée d'un message ou à l'ouverture du panneau. Un ref
+  // callback inline le faisait à CHAQUE rendu — or l'écran se re-rend chaque seconde
+  // (tic du minuteur), ce qui ramenait la liste en bas et interdisait de relire l'historique.
+  useEffect(() => {
+    const el = chatListeRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatMessages.length, chatOuvert]);
+
+  useEffect(() => { messagesDirectsRef.current = messagesDirects; }, [messagesDirects]);
+
+  function basculerChat() {
+    setChatOuvert((o) => {
+      const suivant = !o;
+      chatOuvertRef.current = suivant;
+      if (suivant) setChatNonLus(0);
+      return suivant;
+    });
+  }
+
+  // ---------- Revanche (mode "Jouer avec un ami" uniquement) ----------
+  // Pas en Classé : une revanche immédiate contre le même adversaire fausserait
+  // l'appariement. Pas non plus en tournoi : l'arbre décide des matchs.
+  const revancheDisponible = mode === "online" && gameOver && !partieClassee && !tournoiOnlineId && !finMotif;
+
+  // Après un match de tournoi en ligne : on quitte la partie mais PAS le tournoi — retour
+  // à l'arbre pour suivre la suite (et y jouer son prochain duel, si l'on a gagné).
+  function retournerAuTournoi() {
+    setCeremonieFin(null); setCerPose(false);
+    dernierCoupDistantRef.current = null;
+    chatVusRef.current = 0;
+    setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    setVainqueurForce(null); setFinMotif(null);
+    setOnlineGameId(null); setOnlineRole(null);
+    setBoard(Array(CELLS).fill(null)); setPoisonedCells(Array(CELLS).fill(false));
+    setBlueHand([]); setRedHand([]);
+    setGameOver(false);
+    setOnlineStatus(""); setOnlineError("");
+    setPhase("tourney-online");
+  }
+
+  // Bouton/état de revanche affiché en fin de partie (cérémonies et rangée d'actions).
+  // Trois états : proposer, attendre l'adversaire, ou accepter sa proposition.
+  function boutonRevanche() {
+    if (!revancheDisponible || !onlineGameId) return null;
+    const mien = !!(revancheVotes && revancheVotes[onlineRole]);
+    const sien = !!(revancheVotes && revancheVotes[onlineRole === "blue" ? "red" : "blue"]);
+    if (mien) return <div className="revanche-attente" key="rv">Revanche proposée, en attente de l'adversaire...</div>;
+    return (
+      <button key="rv" className={`reset-btn revanche-btn ${sien ? "revanche-invite" : ""}`} onClick={demanderRevanche}>
+        {sien ? "⚔ Accepter la revanche" : "Revanche"}
+      </button>
+    );
+  }
+
+  function demanderRevanche() {
+    if (!revancheDisponible || !onlineGameId || !onlineRole) return;
+    updateDoc(doc(db, "games", onlineGameId), { [`revanche.${onlineRole}`]: true })
+      .catch(() => setOnlineError("Impossible de proposer la revanche."));
+  }
+
+  // Création de la partie de revanche par le client Azur, une fois les deux votes posés.
+  // Les couleurs sont ÉCHANGÉES : chacun jouera le camp adverse de la manche précédente.
+  async function creerPartieDeRevanche(ancienne) {
+    try {
+      const premier = tirerPremierJoueur();
+      let code = null;
+      for (let essai = 0; essai < 5 && !code; essai++) {
+        const candidat = makeGameCode();
+        try {
+          await runTransaction(db, async (tx) => {
+            const ref = doc(db, "games", candidat);
+            const snap = await tx.get(ref);
+            if (snap.exists()) throw new Error("code-pris");
+            tx.set(ref, {
+              status: "waiting-orders", createdAt: serverTimestamp(),
+              blueUid: ancienne.redUid, redUid: ancienne.blueUid,
+              blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
+              board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+              turn: premier, firstPlayer: premier, gameOver: false,
+            });
+          });
+          code = candidat;
+        } catch (e) { if (e.message !== "code-pris") throw e; }
+      }
+      if (!code) throw new Error("code-indisponible");
+      await updateDoc(doc(db, "games", onlineGameId), { "revanche.prochainCode": code });
+    } catch (e) {
+      revancheCreationRef.current = false;
+      setOnlineError("Impossible de lancer la revanche.");
+    }
+  }
+
+  // Bascule des deux clients vers la partie de revanche. Le rôle s'inverse (couleurs
+  // échangées à la création) — on ne se fie PAS aux uid, identiques quand deux onglets
+  // d'un même navigateur partagent le compte anonyme.
+  function basculerVersRevanche(code) {
+    if (code === onlineGameId) return;
+    revancheCreationRef.current = false;
+    dernierCoupDistantRef.current = null;
+    chatVusRef.current = 0;
+    setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    setRevancheVotes(null);
+    setVainqueurForce(null); setFinMotif(null);
+    setCeremonieFin(null); setCerPose(false);
+    setBoard(Array(CELLS).fill(null));
+    setPoisonedCells(Array(CELLS).fill(false));
+    setBlueHand([]); setRedHand([]);
+    setGameOver(false);
+    setPickerChoice([]);
+    setOnlineRole((r) => (r === "blue" ? "red" : "blue"));
+    setOnlineGameId(code);
+    setOnlineStatus("");
+    setPhase("select-blue");
+  }
+
   // Copie du code dans le presse-papier — confort sur téléphone, où recopier cinq
   // lettres dans une conversation est plus pénible que sur un clavier. L'API n'existe
   // qu'en contexte sécurisé (https ou localhost) : en cas d'échec on ne dit rien, le
@@ -5704,6 +7159,21 @@ export default function Emprise() {
     } catch (e) { /* le joueur lira le code à l'écran */ }
   }
 
+  // Efface l'annonce d'appariement une fois qu'elle a été prise, pour qu'elle ne soit
+  // jamais rejouée. Conditionnée au code exact : si un nouvel appariement a déjà été
+  // annoncé entre-temps, on n'y touche pas.
+  async function libererAppariement(code) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "matchmaking", "lobby");
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        if (snap.data().matchedGameId !== code) return;
+        tx.set(ref, { matchedUid: null, matchedGameId: null, matchedAt: null }, { merge: true });
+      });
+    } catch (e) { /* la garde de fraicheur suffit a empecher un rejeu */ }
+  }
+
   // Libère ma place dans la salle d'attente quand j'abandonne la recherche. En cas
   // d'échec on ne fait rien : l'inscription périmera d'elle-même au bout d'une minute.
   async function annulerRecherche() {
@@ -5714,9 +7184,13 @@ export default function Emprise() {
       const lobbyRef = doc(db, "matchmaking", "lobby");
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(lobbyRef);
-        if (snap.exists() && snap.data().waitingUid === myUid) {
-          tx.set(lobbyRef, { waitingUid: null, waitingAt: null }, { merge: true });
-        }
+        if (!snap.exists()) return;
+        const d = snap.data();
+        const maj = {};
+        if (d.waitingUid === myUid) { maj.waitingUid = null; maj.waitingAt = null; }
+        // Une annonce qui m'était adressée n'a plus lieu d'être si je quitte la file.
+        if (d.matchedUid === myUid) { maj.matchedUid = null; maj.matchedGameId = null; maj.matchedAt = null; }
+        if (Object.keys(maj).length) tx.set(lobbyRef, maj, { merge: true });
       });
     } catch (e) { /* l'inscription expirera toute seule */ }
   }
@@ -5728,10 +7202,20 @@ export default function Emprise() {
     const unsub = onSnapshot(doc(db, "matchmaking", "lobby"), (snap) => {
       if (!snap.exists()) return;
       const lobby = snap.data();
-      if (lobby.matchedUid === myUid && lobby.matchedGameId) {
+      // Un appariement ne vaut que s'il vient d'être annoncé (quelques secondes) et
+      // qu'on ne l'a pas déjà pris. Sans ces deux gardes, un champ resté en place
+      // relançait indéfiniment la même vieille partie.
+      const frais = !!lobby.matchedAt && (Date.now() - lobby.matchedAt) < ATTENTE_PERIMEE_MS;
+      if (lobby.matchedUid === myUid && lobby.matchedGameId && frais
+          && !matchsConsommesRef.current.has(lobby.matchedGameId)) {
+        const code = lobby.matchedGameId;
+        matchsConsommesRef.current.add(code);
+        // Effacement du champ pour que personne ne le relise : en arrière-plan, l'entrée
+        // en partie ne doit pas attendre le réseau.
+        libererAppariement(code);
         setFileAttente(false);
         setOnlineStatus("");
-        setOnlineGameId(lobby.matchedGameId);
+        setOnlineGameId(code);
         setOnlineRole("blue");
         setMode("online");
         setPickerChoice([]);
@@ -5751,9 +7235,8 @@ export default function Emprise() {
     }, duration);
   }
 
-  function startNewGameAnimated() {
-    withRift(() => setPhase("select-mode"), 850);
-  }
+  // (L'ancien bouton "Nouvelle partie" ouvrait un ecran de choix de Voie ; le hub
+  // presente ces choix directement sur la page Jouer.)
 
   function loadTutStep(i) {
     const step = TUTORIAL_STEPS[i];
@@ -5782,13 +7265,13 @@ export default function Emprise() {
 
   function nextTutorialStep() {
     const next = tut.stepIdx + 1;
-    if (next >= TUTORIAL_STEPS.length) { setPhase("select-mode"); return; }
+    if (next >= TUTORIAL_STEPS.length) { setPhase("landing"); return; }
     setTut((t) => ({ ...t, stepIdx: next }));
     loadTutStep(next);
   }
 
   function skipTutorial() {
-    setPhase("select-mode");
+    setPhase("landing");
   }
 
   // 3 tours, difficulté croissante. On réutilise les mêmes clés que DIFFICULTIES.
@@ -5924,7 +7407,9 @@ export default function Emprise() {
     setMode(m);
     setTestMode(false);
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
-    setPhase(m === "bot" ? "select-difficulty" : "select-blue");
+    // Le duel local passe d'abord par ses options de partie (rotation de l'écran) ;
+    // l'Écho garde son parcours difficulté puis assistance.
+    setPhase(m === "bot" ? "select-difficulty" : "select-assist");
   }
 
   function chooseConfluenceBot() {
@@ -6112,42 +7597,49 @@ export default function Emprise() {
   function goBack() {
     if (phase === "tourney-bracket") {
       setPhase("tourney-menu");
+    } else if (phase === "tourney-online-menu") {
+      setTournoiErreur(""); setCodeTournoiInput("");
+      setPhase("tourney-menu");
+    } else if (phase === "tourney-online") {
+      // Salle d'attente : on libère son siège. Tournoi lancé : on sort juste de l'écran,
+      // le tournoi continue sans nous et l'accueil proposera d'y revenir.
+      if (tournoiData && tournoiData.status === "waiting") quitterSalleTournoi();
+      else { setTournoiOnlineId(null); setTournoiData(null); }
+      setPhase("tourney-online-menu");
     } else if (phase === "tourney-menu") {
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "chapter-pick-order") {
       setPhase("chapters");
     } else if (phase === "chapters") {
-      setPhase("select-mode");
-    } else if (phase === "select-mode") {
-      setMode(null);
-      setConfluenceActive(false);
       setPhase("landing");
     } else if (phase === "select-difficulty") {
       setMode(null);
       setConfluenceActive(false);
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "select-assist") {
-      setPhase("select-difficulty");
+      if (mode === "local") { setMode(null); setPhase("landing"); }
+      else setPhase("select-difficulty");
     } else if (phase === "online-menu") {
       setMode(null);
       setOnlineError("");
-      setPhase("select-mode");
+      setPhase("landing");
     } else if (phase === "online-waiting") {
       // Recherche en cours : on libère d'abord sa place dans la salle d'attente, sinon
       // le prochain joueur serait apparié à quelqu'un qui a quitté l'écran.
-      if (fileAttente) { annulerRecherche(); setMode(null); setPhase("select-mode"); return; }
-      // Abandon avant que la partie ne démarre : le document Firestore reste (inoffensif,
-      // personne ne le rejoindra sans le code), on revient juste au menu en ligne.
-      setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
-      setPickerChoice([]);
-      setPhase("online-menu");
+      if (fileAttente) { annulerRecherche(); setMode(null); setPartieClassee(false); setPhase("landing"); return; }
+      // Match de tournoi : revenir en arrière avant le début NE vaut PAS abandon — le
+      // match reste en attente dans l'arbre et se rejoue via "Jouer votre duel". Sans ça,
+      // un simple tap sur Retour pendant le choix des Ordres éliminait du tournoi, sans
+      // confirmation ni retour possible.
+      if (tournoiOnlineId) { setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setPickerChoice([]); setPhase("tourney-online"); return; }
+      abandonnerAvantDebut();
     } else if (phase === "select-blue") {
       setPickerChoice([]);
       if (mode === "online") {
-        setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
-        setPhase("online-menu");
-      } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("select-mode"); }
-      else setPhase(mode === "bot" ? "select-assist" : "select-mode");
+        if (tournoiOnlineId) { setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setPhase("tourney-online"); return; }
+        abandonnerAvantDebut();
+      } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("landing"); }
+      else setPhase(mode === "bot" ? "select-assist" : "landing");
     } else if (phase === "select-red") {
       // Bleu rechoisit ses 2 Ordres : on repart de sa sélection.
       setPickerChoice([]);
@@ -6155,7 +7647,7 @@ export default function Emprise() {
     } else if (phase === "confluence-draft") {
       // Abandon du draft en cours : on le vide entièrement (un draft partiel n'a pas de sens).
       setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
-      setPhase(mode === "bot" ? "select-assist" : "select-mode");
+      setPhase(mode === "bot" ? "select-assist" : "landing");
     } else if (phase === "preview") {
       if (confluenceActive) {
         // Le draft précédent est terminé : revenir signifie le relancer à zéro.
@@ -6379,7 +7871,7 @@ export default function Emprise() {
   function undo() {
     if (history.length === 0 || drag) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
-    if (mode === "bot" && !allowUndo) return; // "Repentir" désactivé pour cette partie
+    if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
     const stack = history.slice();
     let target = stack.pop();
     if (mode === "bot" && target.owner === "red" && stack.length) {
@@ -6403,9 +7895,15 @@ export default function Emprise() {
   // l'IA "Seigneur de Guerre" (la plus forte déjà codée), appliquée à sa propre
   // main plutôt qu'à celle du bot. Un second clic masque l'augure sans le perdre.
   function toggleHint() {
-    if (!allowHint || mode !== "bot" || gameOver || turn !== "blue") return;
+    if (!allowHint || gameOver || mode === "online") return;
+    if (mode === "bot" && turn !== "blue") return; // contre l'Écho, l'augure ne sert que le joueur
     if (hint) { setHint(null); setFanOpen(null); return; }
-    const move = botChooseMove(board, blueHand, redHand, "blue", "red", "expert", poisonedCells);
+    // En duel local, l'augure éclaire le joueur dont c'est le tour, quel que soit son camp.
+    const joueur = mode === "local" ? turn : "blue";
+    const adverse = joueur === "blue" ? "red" : "blue";
+    const mainJoueur = joueur === "blue" ? blueHand : redHand;
+    const mainAdverse = joueur === "blue" ? redHand : blueHand;
+    const move = botChooseMove(board, mainJoueur, mainAdverse, joueur, adverse, "expert", poisonedCells);
     if (move) {
       setHint({ cardIdx: move.cardIdx, cellIdx: move.cellIdx });
       // La carte suggérée peut être repliée dans un éventail fermé : on force son
@@ -6413,8 +7911,8 @@ export default function Emprise() {
       // suite, sans quoi le joueur ne verrait jamais l'indice tant qu'il n'a pas
       // lui-même tapé la vignette de son Ordre. Sans effet si le groupe n'a qu'une
       // carte (déjà affichée directement, pas de vignette pour elle).
-      const suggestedCard = blueHand[move.cardIdx];
-      if (suggestedCard) setFanOpen({ owner: "blue", ability: suggestedCard.ability });
+      const suggestedCard = mainJoueur[move.cardIdx];
+      if (suggestedCard) setFanOpen({ owner: joueur, ability: suggestedCard.ability });
     }
   }
 
@@ -6424,6 +7922,11 @@ export default function Emprise() {
   // repli), pour ne jamais encombrer un écran de mobile avec deux éventails en même
   // temps. Toucher deux fois le même Ordre le referme sans en ouvrir d'autre.
   function toggleFan(owner, ability) {
+    // En ligne, l'éventail ADVERSE reste fermé : l'ouvrir révélerait les rotations
+    // restantes de l'adversaire — ses rangs exacts encore en main. Le médaillon et son
+    // compteur suffisent à savoir combien de cartes il lui reste par Ordre. En local et
+    // contre l'Écho, comportement inchangé (l'appareil est partagé, rien à cacher).
+    if (mode === "online" && owner !== onlineRole) return;
     setFanOpen((cur) => {
       const isSame = cur && cur.owner === owner && cur.ability === ability;
       if (cur) {
@@ -6759,16 +8262,104 @@ export default function Emprise() {
 
   useEffect(() => {
     setTimeLeft(TURN_SECONDS);
+    autoForfaitRef.current = false;
   }, [turn, phase]);
+
+  // Garde-fou d'inactivité en ligne : le minuteur de l'adversaire tourne sur SON appareil.
+  // S'il ferme l'application ou verrouille son téléphone, rien n'auto-joue pour lui et la
+  // partie resterait figée à jamais. Le joueur qui attend compte donc de son côté : passé
+  // l'équivalent de 2 tours complets (plus une marge réseau), il constate le forfait et
+  // l'écrit dans le document — les deux appareils voient alors la partie se terminer.
+  const FORFAIT_APRES_S = TURN_SECONDS * 2 + 15;
+  useEffect(() => {
+    if (mode !== "online" || phase !== "play" || gameOver || turn === onlineRole || !onlineGameId) {
+      setAttenteAdv(0);
+      forfaitEcritRef.current = false;
+      return;
+    }
+    const debut = Date.now();
+    const t = setInterval(() => {
+      const ecoulees = Math.floor((Date.now() - debut) / 1000);
+      setAttenteAdv(ecoulees);
+      if (ecoulees >= FORFAIT_APRES_S && !forfaitEcritRef.current) {
+        forfaitEcritRef.current = true;
+        // Précondition dans la transaction : le fautif n'a toujours pas joué (c'est
+        // encore son tour). S'il a joué pendant notre attente, on ne touche à rien.
+        deposerAbandon(onlineGameId, turn, "forfait", (d) => d.turn === turn)
+          .then((fait) => { if (!fait) forfaitEcritRef.current = false; });
+      }
+    }, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, phase, gameOver, turn, onlineGameId]);
+
+  // Forfait d'AVANT-match : je suis prêt (mes Ordres confirmés, écran d'attente), les
+  // deux sièges sont pris, mais l'adversaire ne choisit pas les siens. Passé le même
+  // délai que le forfait de jeu, on constate son absence — la précondition est revérifiée
+  // dans la transaction (ses Ordres toujours manquants). C'est ce qui permet de GAGNER
+  // contre un inscrit fantôme en tournoi au lieu de devoir lui offrir la victoire.
+  useEffect(() => {
+    const enAttente = mode === "online" && !!onlineGameId && phase === "online-waiting"
+      && !fileAttente && advPresent && !advPret && !gameOver;
+    if (!enAttente) { setAttentePreMatch(0); preForfaitEcritRef.current = false; return; }
+    const debut = Date.now();
+    const cleAdv = onlineRole === "blue" ? "redOrderKeys" : "blueOrderKeys";
+    const fautif = onlineRole === "blue" ? "red" : "blue";
+    const t = setInterval(() => {
+      const ecoulees = Math.floor((Date.now() - debut) / 1000);
+      setAttentePreMatch(ecoulees);
+      if (ecoulees >= FORFAIT_APRES_S && !preForfaitEcritRef.current) {
+        preForfaitEcritRef.current = true;
+        deposerAbandon(onlineGameId, fautif, "forfait", (d) => !d[cleAdv])
+          .then((fait) => { if (!fait) preForfaitEcritRef.current = false; });
+      }
+    }, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, onlineGameId, phase, fileAttente, advPresent, advPret, gameOver]);
+
+  // Minuteur du choix des Ordres. Reserve au jeu en ligne : en solo, personne n'attend
+  // en face, et imposer une horloge la ou le joueur reflechit tranquillement n'aurait
+  // aucun sens.
+  const minuteurOrdresActif = mode === "online" && phase === "select-blue" && !gameOver;
+  useEffect(() => {
+    if (!minuteurOrdresActif) { setTempsOrdres(ORDRES_SECONDS); ordresAutoRef.current = false; return; }
+    if (tempsOrdres <= 0) {
+      if (ordresAutoRef.current) return;
+      ordresAutoRef.current = true;
+      // On respecte le choix en cours s'il est complet, sinon on tire au sort : mieux
+      // vaut une main choisie au hasard qu'une partie qui ne demarre jamais.
+      if (pickerChoice.length === 2) confirmOrders();
+      else chooseRandomOrders();
+      return;
+    }
+    const t = setTimeout(() => setTempsOrdres((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteurOrdresActif, tempsOrdres]);
 
   useEffect(() => {
     if (!isHumanTurn || testMode) return; // pas de minuteur en mode test
-    if (timeLeft <= 0) {
-      // Temps écoulé : un coup aléatoire est joué automatiquement pour ce joueur
+    if (timeLeft <= 0 && mode !== "online") {
+      // Hors ligne : temps écoulé, un coup aléatoire est joué automatiquement — les
+      // joueurs sont dans la même pièce, la partie ne doit jamais rester figée.
       const hand = turn === "blue" ? blueHand : redHand;
       const opponentHand = turn === "blue" ? redHand : blueHand;
       const move = botChooseMove(board, hand, opponentHand, turn, turn === "blue" ? "red" : "blue", "debutant", poisonedCells);
       if (move) placeCardAt(turn, move.cardIdx, move.cellIdx);
+      return;
+    }
+    // En ligne, AUCUN coup automatique : ne pas jouer est un choix qui se paie. Le
+    // décompte continue sous zéro pendant l'équivalent d'un second tour, affiché au
+    // joueur ; au bout de 2 tours complets sans jouer, son propre client constate le
+    // forfait (transaction, seulement si c'est toujours son tour). Le garde-fou de
+    // l'adversaire reste en secours si cet appareil a disparu.
+    if (mode === "online" && timeLeft <= -TURN_SECONDS) {
+      if (!autoForfaitRef.current) {
+        autoForfaitRef.current = true;
+        deposerAbandon(onlineGameId, onlineRole, "forfait", (d) => d.turn === onlineRole)
+          .then((fait) => { if (!fait) autoForfaitRef.current = false; });
+      }
       return;
     }
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
@@ -6796,41 +8387,269 @@ export default function Emprise() {
 
 
   return (
-    <div className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""}`}>
+    <div
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${vueTournee ? "vue-tournee" : ""}`}
+      style={vueTournee ? { transform: "rotate(180deg)" } : undefined}
+    >
       <style>{APP_STYLES}</style>
 
       {phase === "landing" && (
-        <div className={`landing intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
+        <div className={`landing hub intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
               apparaître l'illustration. Retiré du DOM une fois l'intro finie. */}
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
           <img className="landing-hero" src={ORDERS.find((l) => l.key === "devoreuse")?.portrait} alt="" />
 
-          <button
-            className="landing-gear"
-            onClick={() => setActiveModal("settings")}
-            aria-label="Paramètres"
-            title="Paramètres"
-          >⚙</button>
+          {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
+          <header className="hub-haut">
+            <div className="hub-joueur">
+              {/* TODO : remplacer le pseudo en dur par un vrai profil joueur. */}
+              <span className="hub-pseudo">CARNAGE</span>
+              <span className="hub-trophees" title="Trophées">
+                <svg className="hub-icone-coupe" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+                </svg>
+                {/* TODO : brancher sur stats.trophies quand les profils seront synchronisés. */}
+                <span className="hub-trophees-nombre">0</span>
+              </span>
+            </div>
+            <span className="hub-haut-boutons">
+            <button
+              className="hub-rouage hub-horloge"
+              onClick={() => setActiveModal("historique")}
+              aria-label="Dernières parties classées"
+              title="Dernières parties classées"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.2l3.5 2.1-1 1.7L11 13.5V7h2z" />
+              </svg>
+            </button>
+            <button
+              className="hub-rouage"
+              onClick={() => setActiveModal("settings")}
+              aria-label="Réglages"
+              title="Réglages"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
+                <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
+              </svg>
+            </button>
+            </span>
+          </header>
 
-          <div className="landing-emblem">
-            <span className="landing-line-single" />
-          </div>
-          <h1 className="landing-title">EMPRISE</h1>
-          <p className="landing-subtitle">Un duel de cartes stratégique</p>
-          <div className="league-badge">
-            {HEROES_LEAGUES_ENABLED ? `🏆 ${getLeague(stats.trophies || 0).name} · ${stats.trophies || 0} trophées` : "Le multijoueur arrive prochainement"}
-          </div>
+          {/* ---------- Pages du hub ---------- */}
+          <main className="hub-pages">
+            {hubPage === "boutique" && (
+              <section key="boutique" className={`hub-page hub-glisse-${hubSens}`} aria-label="Boutique">
+                <div className="hub-boutique-vide" role="status">
+                  <svg className="hub-boutique-icone" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 8l1.5-4h11L19 8v12H5V8zm2.3-2l-.75 2h10.9l-.75-2H7.3zM7 10v8h10v-8H7zm3 2h4v2h-4v-2z" />
+                  </svg>
+                  <h2 className="hub-boutique-titre">Boutique</h2>
+                  <p className="hub-boutique-texte">Prochainement.</p>
+                  <p className="hub-boutique-sous">Les marchands de la Faille préparent leurs étals.</p>
+                </div>
+              </section>
+            )}
+            {hubPage === "jouer" && (
+              <section key="jouer" className={`hub-page hub-glisse-${hubSens}`} aria-label="Jouer">
+                <div className="landing-emblem"><span className="landing-line-single" /></div>
+                <h1 className="landing-title">EMPRISE</h1>
+                <p className="landing-subtitle">Un duel de cartes stratégique</p>
+                <div className="league-badge">Le multijoueur arrive prochainement</div>
 
-          <button className="landing-cta" onClick={startNewGameAnimated}>⚔ Nouvelle partie</button>
-          {hasSavedGame && (
-            <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
+                {/* Parties a reprendre : toujours au-dessus de tout, un adversaire attend. */}
+                {repriseEnLigne && (
+                  <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
+                    Reprendre la partie en ligne
+                  </button>
+                )}
+                {!repriseEnLigne && repriseTournoi && (
+                  <button className="landing-link reprise-en-ligne" onClick={reprendreTournoiEnLigne}>
+                    Reprendre le tournoi en ligne
+                  </button>
+                )}
+                {hasSavedGame && (
+                  <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
+                )}
+
+                {/* Bouton principal : le duel Classé, l'action phare du hub. */}
+                <button className="hub-jouer-classe" onClick={chercherAdversaire}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
+                  </svg>
+                  <span className="hub-jouer-classe-titre">Classé</span>
+                  <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
+                </button>
+
+                {/* Tuiles compactes : tout tient a l'ecran, aucun defilement vertical.
+                    La description complete de chaque mode reste portee par aria-label
+                    et title ; les ecrans suivants (difficulte, draft...) la detaillent. */}
+                <div className="hub-modes-grille">
+                  <button className="hub-mode-tuile" onClick={() => chooseMode("bot")} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
+                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
+                    <span>Contre un Écho</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => setPhase("chapters")} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>Mode Histoire</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={chooseConfluenceBot} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
+                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
+                    <span>Confluence (Écho)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => setPhase("tourney-menu")} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
+                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
+                    <span>Tournoi</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => chooseMode("local")} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>2 Commandants</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={chooseConfluenceLocal} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Confluence (à 2)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Jouer avec un ami</span>
+                  </button>
+                  <button className="hub-mode-tuile test" onClick={chooseTestMode} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
+                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
+                    <span>Mode test</span>
+                  </button>
+                </div>
+              </section>
+            )}
+            {hubPage === "ordres" && (
+              <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
+                <h2 className="hub-page-titre">Les Ordres</h2>
+                <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
+                {/* Carrousel : le seul geste du hub est le gauche-droite. */}
+                <div className="hub-ordres-carrousel">
+                  {ORDERS.map((order) => {
+                    const bientot = !isOrderAvailable(order);
+                    return (
+                      <div key={order.key} className={`order-option hub-ordre-fiche ${bientot ? "order-option-locked" : ""}`}>
+                        {order.portrait ? (
+                          bientot ? (
+                            <ComingSoonThumb order={order} />
+                          ) : (
+                            <div className="order-thumb-wrap">
+                              <img className="thumb" src={order.portrait} alt={order.name} />
+                            </div>
+                          )
+                        ) : (
+                          <div className="icon-frame">{order.icon}</div>
+                        )}
+                        <div className="info">
+                          <span className="name">{order.name}</span>
+                          <span className="desc">{bientot ? <CountdownLabel order={order} /> : order.desc}</span>
+                        </div>
+                        {bientot && <span className="coming-soon-badge">Bientôt disponible</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hub-carrousel-indice" aria-hidden="true">faites glisser vers le bas</div>
+              </section>
+            )}
+          </main>
+
+          {/* ---------- Navigation basse : Boutique, Jouer (central), Ordres ---------- */}
+          <nav className="hub-nav" aria-label="Navigation du hub">
+            {/* Degrade metallique partage par les trois icones. Un seul <defs> pour tout
+                le hub : les tracés y font référence par identifiant. */}
+            <svg className="hub-nav-defs" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="or-metal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f2dfae" />
+                  <stop offset="38%" stopColor="#e8c877" />
+                  <stop offset="100%" stopColor="#b89742" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <button
+              className={`hub-onglet ${hubPage === "boutique" ? "actif" : ""}`}
+              onClick={() => allerPageHub("boutique")}
+              aria-current={hubPage === "boutique" ? "page" : undefined}
+            >
+              <img className="hub-onglet-img" src="/nav/boutique.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
+                <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
+              </svg>
+              <span>Boutique</span>
+            </button>
+            <button
+              className={`hub-onglet hub-onglet-central ${hubPage === "jouer" ? "actif" : ""}`}
+              onClick={() => allerPageHub("jouer")}
+              aria-current={hubPage === "jouer" ? "page" : undefined}
+            >
+              <img className="hub-onglet-img" src="/nav/jouer.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
+                <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
+              </svg>
+              <span>Jouer</span>
+            </button>
+            <button
+              className={`hub-onglet ${hubPage === "ordres" ? "actif" : ""}`}
+              onClick={() => allerPageHub("ordres")}
+              aria-current={hubPage === "ordres" ? "page" : undefined}
+            >
+              <img className="hub-onglet-img" src="/nav/ordres.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
+                <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
+              </svg>
+              <span>Ordres</span>
+            </button>
+          </nav>
+
+          {activeModal === "historique" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Dernières parties classées</div>
+                {historique.length === 0 && (
+                  <div className="histo-vide" role="status">
+                    <p>Aucune partie classée terminée pour le moment.</p>
+                    <p className="histo-vide-sous">Vos 3 dernières parties classées apparaîtront ici. Les autres modes ne sont pas comptés.</p>
+                  </div>
+                )}
+                {historique.map((h, i) => {
+                  const resultat = h.camp
+                    ? (h.vainqueur === h.camp ? "Victoire" : "Défaite")
+                    : (h.vainqueur === "blue" ? "Azur l'emporte" : "Écarlate l'emporte");
+                  const gagnee = h.camp ? h.vainqueur === h.camp : null;
+                  return (
+                    <div key={h.t + "-" + i} className="histo-ligne">
+                      <div className={`histo-resultat ${gagnee === true ? "gagnee" : gagnee === false ? "perdue" : ""}`}>
+                        {resultat}
+                        {h.motif === "abandon" && <span className="histo-motif"> (abandon)</span>}
+                        {h.motif === "forfait" && <span className="histo-motif"> (forfait)</span>}
+                      </div>
+                      <div className="histo-detail">
+                        {/* Toutes les lignes etant classees, le nom du mode n'apprendrait
+                            rien : la variation de trophees, elle, est l'enjeu du mode. */}
+                        <span className="histo-mode">
+                          {typeof h.trophees === "number" && h.trophees !== 0
+                            ? `${h.trophees > 0 ? "+" : ""}${h.trophees} trophées`
+                            : "Classé"}
+                        </span>
+                        <span className="histo-score"><b className="histo-sb">{h.sb}</b> &middot; <b className="histo-sr">{h.sr}</b></span>
+                        <span className="histo-quand">{ilYa(h.t)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
           )}
 
           {activeModal === "settings" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="info-panel-title">Paramètres</div>
+                <div className="info-panel-title">Réglages</div>
                 <div className="settings-row" role="button" tabIndex={0} onClick={() => { setActiveModal(null); startTutorial(); }} onKeyDown={KEY_ACTIVATE(() => { setActiveModal(null); startTutorial(); })}>
                   <div className="settings-texte">
                     <div className="settings-nom">Tutoriel</div>
@@ -7058,84 +8877,6 @@ export default function Emprise() {
         </div>
       )}
 
-      {phase === "select-mode" && (
-        <div className="order-picker">
-          <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>Choisissez votre Voie</h2>
-          <div className="diff-grid">
-            <div className="diff-section-label">Contre un Écho</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("bot")} onKeyDown={KEY_ACTIVATE(() => chooseMode("bot"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Contre un Écho</div>
-                <div className="desc">Solo, 4 niveaux de difficulté</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("chapters")} onKeyDown={KEY_ACTIVATE(() => setPhase("chapters"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Mode Histoire</div>
-                <div className="desc">8 chapitres solo, un par Ordre, battez le Seigneur de Guerre pour débloquer son Héraut</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceBot} onKeyDown={KEY_ACTIVATE(chooseConfluenceBot)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Confluence (contre un Écho)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même main pour les deux</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-menu")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-menu"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Tournoi (8 Commandants)</div>
-                <div className="desc">Contre des Échos, difficulté croissante à chaque tour. Une victoire = un Ordre banni pour le suivant</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">Contre un Commandant</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => chooseMode("local")} onKeyDown={KEY_ACTIVATE(() => chooseMode("local"))}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">2 Commandants (même appareil)</div>
-                <div className="desc">Chacun son tour, sur le même téléphone</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chooseConfluenceLocal} onKeyDown={KEY_ACTIVATE(chooseConfluenceLocal)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Confluence (2 Commandants)</div>
-                <div className="desc">8 Ordres draftés à tour de rôle (4 choix chacun), même téléphone, même main pour les deux</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">En ligne</div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={chercherAdversaire} onKeyDown={KEY_ACTIVATE(chercherAdversaire)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "scribes")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Classé</div>
-                <div className="desc">Appariement automatique : vous êtes mis en duel avec le premier Commandant disponible</div>
-              </div>
-            </div>
-            <div className="diff-option" role="button" tabIndex={0} onClick={() => { setOnlineError(""); setPhase("online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setOnlineError(""); setPhase("online-menu"); })}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Jouer avec un ami</div>
-                <div className="desc">Chacun sur son appareil, à distance, avec un code de partie à partager</div>
-              </div>
-            </div>
-
-            <div className="diff-section-label">Bac à sable</div>
-            <div className="diff-option test-option" role="button" tabIndex={0} onClick={chooseTestMode} onKeyDown={KEY_ACTIVATE(chooseTestMode)}>
-              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-              <div className="diff-text">
-                <div className="name">Mode test</div>
-                <div className="desc">Bac à sable : les 2 camps, tous les Ordres, sans minuteur, capacités de base</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {phase === "chapters" && (() => {
         const chapter = STORY_CHAPTERS[storyMapIndex];
@@ -7476,6 +9217,13 @@ export default function Emprise() {
           <h2>Tournoi</h2>
           <div className="sub">Huit Commandants, un seul champion.</div>
           <div className="diff-grid">
+            <div className="diff-option" role="button" tabIndex={0} onClick={() => { setTournoiErreur(""); setPhase("tourney-online-menu"); }} onKeyDown={KEY_ACTIVATE(() => { setTournoiErreur(""); setPhase("tourney-online-menu"); })}>
+              <img className="diff-thumb" src={ORDERS.find((o) => o.key === "percee")?.portrait} alt="" />
+              <div className="diff-text">
+                <div className="name">Tournoi en ligne</div>
+                <div className="desc">Huit vrais Commandants, un code à partager : l'arbre se remplit à mesure qu'ils arrivent</div>
+              </div>
+            </div>
             <div className="diff-option" role="button" tabIndex={0} onClick={() => setPhase("tourney-bracket")} onKeyDown={KEY_ACTIVATE(() => setPhase("tourney-bracket"))}>
               <img className="diff-thumb" src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
               <div className="diff-text">
@@ -7486,6 +9234,195 @@ export default function Emprise() {
           </div>
         </div>
       )}
+
+      {phase === "tourney-online-menu" && (
+        <div className="order-picker">
+          <button className="back-btn" onClick={goBack}>← Retour</button>
+          <h2>Tournoi en ligne</h2>
+          <div className="sub">Huit Commandants, trois tours. Créez un tournoi et partagez son code, ou rejoignez avec celui d'un ami.</div>
+          <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
+          <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
+          <input
+            className="join-code-input"
+            placeholder="CODE"
+            maxLength={5}
+            value={codeTournoiInput}
+            onChange={(e) => setCodeTournoiInput(e.target.value.toUpperCase())}
+          />
+          <button className="reset-btn" disabled={!codeTournoiInput.trim()} onClick={rejoindreTournoiEnLigne}>Rejoindre</button>
+          {tournoiErreur && <div className="online-error">{tournoiErreur}</div>}
+        </div>
+      )}
+
+      {phase === "tourney-online" && (() => {
+        // Même géométrie que l'arbre du tournoi solo — c'est voulu, et c'est la demande :
+        // seul le CONTENU des plaques change. Un siège vide affiche "..." en attendant
+        // qu'un Commandant le prenne ; les tours suivants affichent "..." tant que leurs
+        // participants ne sont pas connus.
+        const CW = 60, CH = 78, PAIR_GAP = 16, MATCH_GAP = 46, ZONE_GAP = 22, TROPHY_H = 62, STROKE = 3;
+        const qfY = [0, CH + PAIR_GAP, 2 * CH + PAIR_GAP + MATCH_GAP, 3 * CH + 2 * PAIR_GAP + MATCH_GAP];
+        const m1 = (qfY[0] + CH / 2 + qfY[1] + CH / 2) / 2;
+        const m2 = (qfY[2] + CH / 2 + qfY[3] + CH / 2) / 2;
+        const sfY = [m1 - CH / 2, m2 - CH / 2];
+        const finalCenter = (m1 + m2) / 2;
+        const finalY = finalCenter - CH / 2;
+        const boardH = TROPHY_H + qfY[3] + CH;
+        const shift = (y) => y + TROPHY_H;
+        const xQF_L = 0, xSF_L = xQF_L + CW + ZONE_GAP, xFinal_L = xSF_L + CW + ZONE_GAP;
+        const xFinal_R = xFinal_L + CW, xSF_R = xFinal_R + CW + ZONE_GAP, xQF_R = xSF_R + CW + ZONE_GAP;
+        const boardW = xQF_R + CW;
+        const centerX = (xFinal_L + CW + xFinal_R) / 2;
+
+        const joueurs = (tournoiData && tournoiData.joueurs) || [];
+        const matches = (tournoiData && tournoiData.matches) || {};
+        const statut = (tournoiData && tournoiData.status) || "waiting";
+        // Un uid -> sa plaque (alias + portrait de son siège, "Vous" pour soi-même).
+        const plaqueDe = (uid) => {
+          const i = joueurs.indexOf(uid);
+          if (i === -1 || !SIEGES_TOURNOI[i]) return null;
+          return { nom: uid === myUid ? "Vous" : SIEGES_TOURNOI[i].nom, key: SIEGES_TOURNOI[i].key, vous: uid === myUid };
+        };
+        const vainqueurDe = (k) => (matches[k] && matches[k].vainqueur) || null;
+        // Éliminé : son match à ce tour est décidé et il ne l'a pas gagné.
+        const elimineEn = (uid, cleMatch) => {
+          const m = matches[cleMatch];
+          return !!(uid && m && m.vainqueur && m.vainqueur !== uid && (m.a === uid || m.b === uid));
+        };
+
+        const Slot = ({ x, y, uid, big, cleMatch }) => {
+          const p = uid ? plaqueDe(uid) : null;
+          const order = p && p.key ? ORDERS.find((o) => o.key === p.key) : null;
+          const elimine = uid ? elimineEn(uid, cleMatch) : false;
+          return (
+            <div
+              className={`tb-plaque ${p && p.vous ? "tb-vous" : ""} ${big ? "tb-grand" : ""} ${elimine ? "tb-elimine" : ""} ${!p ? "tb-attente" : ""}`}
+              style={{ left: x, top: y, width: CW, height: CH }}
+            >
+              <span className="tb-sceau">
+                {order
+                  ? <img src={order.portrait} alt="" className="tb-portrait" />
+                  : <span className="tb-blason" aria-hidden="true" />}
+              </span>
+              <span className="tb-nom">{p ? p.nom : "..."}</span>
+              {elimine && <span className="tb-balafre" aria-hidden="true" />}
+            </div>
+          );
+        };
+
+        const Brace = ({ sourceX, y1, y2, joinX, targetX, allume }) => {
+          const midY = (y1 + y2) / 2;
+          const d = `M ${sourceX} ${y1} L ${joinX} ${y1} L ${joinX} ${y2} L ${sourceX} ${y2} M ${joinX} ${midY} L ${targetX} ${midY}`;
+          return (
+            <>
+              <path d={d} className="tb-lien" strokeWidth={STROKE} />
+              {allume && <path d={d} className="tb-lien-allume" strokeWidth={STROKE} />}
+            </>
+          );
+        };
+
+        const qfEdgeL = xQF_L + CW, sfEdgeL_in = xSF_L, sfEdgeL_out = xSF_L + CW, finalEdgeL = xFinal_L;
+        const qfEdgeR = xQF_R, sfEdgeR_in = xSF_R + CW, sfEdgeR_out = xSF_R, finalEdgeR = xFinal_R + CW;
+
+        const monMatch = monMatchEnAttente();
+        const champion = tournoiData && tournoiData.champion ? plaqueDe(tournoiData.champion) : null;
+        // Éliminé = un de MES matchs a un vainqueur qui n'est pas moi. "Plus de match en
+        // attente" ne suffit pas : entre ma victoire de quart et la création des demies,
+        // je n'ai aucun match en cours sans être éliminé pour autant.
+        const suisElimine = statut !== "waiting" && myUid && joueurs.includes(myUid)
+          && Object.values((tournoiData && tournoiData.matches) || {}).some(
+            (m) => m && (m.a === myUid || m.b === myUid) && m.vainqueur && m.vainqueur !== myUid
+          );
+        const suisChampion = champion && tournoiData.champion === myUid;
+
+        return (
+          <div className="order-picker">
+            <button className="back-btn" onClick={goBack}>← Retour</button>
+            <h2>Tournoi en ligne</h2>
+            {statut === "waiting" && (
+              <>
+                <div className="sub">Partagez ce code : le tournoi démarre dès que les 8 sièges sont pris.</div>
+                <div className="code-tournoi">{tournoiOnlineId}</div>
+                <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
+              </>
+            )}
+            {statut === "running" && (
+              <div className="sub">
+                {monMatch
+                  ? "Votre duel est prêt, les autres se jouent en parallèle."
+                  : suisElimine
+                  ? "Vous êtes éliminé. Vous pouvez suivre la fin du tournoi, ou revenir plus tard."
+                  : "Duel gagné ! En attente des autres résultats..."}
+              </div>
+            )}
+            {champion && (
+              <div className="sub tb-champion-annonce">
+                🏆 {suisChampion ? "Vous remportez le tournoi !" : `${champion.nom} remporte le tournoi !`}
+              </div>
+            )}
+            <div className="tb-scene">
+              <div
+                className="tb-arbre"
+                style={{ width: boardW, height: boardH }}
+                ref={(el) => {
+                  if (!el || !el.parentElement) return;
+                  const dispo = el.parentElement.clientWidth;
+                  const haut = el.parentElement.getBoundingClientRect().top;
+                  const libre = Math.max(180, window.innerHeight - haut - 118);
+                  const e = Math.max(0.5, Math.min(1.9, dispo / boardW, libre / boardH));
+                  el.style.setProperty("--brk-echelle", e);
+                  el.parentElement.style.height = `${boardH * e}px`;
+                }}
+              >
+                <div className="tb-trophee" style={{ left: centerX - 30, width: 60 }}>
+                  <svg className="tb-coupe" viewBox="0 0 24 24" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="tb-or-online" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#f2dda2" />
+                        <stop offset="45%" stopColor="#e8c877" />
+                        <stop offset="100%" stopColor="#b8944a" />
+                      </linearGradient>
+                    </defs>
+                    <path fill="url(#tb-or-online)" d="M8 4 H16 V10.5 C16 12.5 14.2 14 12 14 C9.8 14 8 12.5 8 10.5 Z" />
+                    <path fill="url(#tb-or-online)" d="M11 14 H13 V17 H15.5 V19 H8.5 V17 H11 Z" />
+                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M8 5.5 C5.5 5.5 4.5 7 5.2 9 C5.8 10.6 7.2 11.2 8 11" />
+                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M16 5.5 C18.5 5.5 19.5 7 18.8 9 C18.2 10.6 16.8 11.2 16 11" />
+                  </svg>
+                  <div className="tb-trophee-nom">Champion</div>
+                </div>
+                <div
+                  className="tb-arene"
+                  style={{ left: xFinal_L - 13, top: shift(finalY) - 13, width: CW * 2 + 26, height: CH + 26 }}
+                  aria-hidden="true"
+                />
+                <svg className="tb-liens" style={{ width: boardW, height: boardH }}>
+                  <Brace sourceX={qfEdgeL} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} allume={!!vainqueurDe("qf0")} />
+                  <Brace sourceX={qfEdgeL} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeL + ZONE_GAP / 2} targetX={sfEdgeL_in} allume={!!vainqueurDe("qf1")} />
+                  <Brace sourceX={sfEdgeL_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeL_out + ZONE_GAP / 2} targetX={finalEdgeL} allume={!!vainqueurDe("sf0")} />
+                  <Brace sourceX={qfEdgeR} y1={shift(qfY[0] + CH / 2)} y2={shift(qfY[1] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} allume={!!vainqueurDe("qf2")} />
+                  <Brace sourceX={qfEdgeR} y1={shift(qfY[2] + CH / 2)} y2={shift(qfY[3] + CH / 2)} joinX={qfEdgeR - ZONE_GAP / 2} targetX={sfEdgeR_in} allume={!!vainqueurDe("qf3")} />
+                  <Brace sourceX={sfEdgeR_out} y1={shift(sfY[0] + CH / 2)} y2={shift(sfY[1] + CH / 2)} joinX={sfEdgeR_out - ZONE_GAP / 2} targetX={finalEdgeR} allume={!!vainqueurDe("sf1")} />
+                </svg>
+                {[0, 1, 2, 3].map((i) => <Slot key={"ql" + i} x={xQF_L} y={shift(qfY[i])} uid={joueurs[i] || null} cleMatch={`qf${Math.floor(i / 2)}`} />)}
+                {[4, 5, 6, 7].map((i, j) => <Slot key={"qr" + j} x={xQF_R} y={shift(qfY[j])} uid={joueurs[i] || null} cleMatch={`qf${2 + Math.floor(j / 2)}`} />)}
+                <Slot x={xSF_L} y={shift(sfY[0])} uid={vainqueurDe("qf0")} cleMatch="sf0" />
+                <Slot x={xSF_L} y={shift(sfY[1])} uid={vainqueurDe("qf1")} cleMatch="sf0" />
+                <Slot x={xSF_R} y={shift(sfY[0])} uid={vainqueurDe("qf2")} cleMatch="sf1" />
+                <Slot x={xSF_R} y={shift(sfY[1])} uid={vainqueurDe("qf3")} cleMatch="sf1" />
+                <Slot x={xFinal_L} y={shift(finalY)} uid={vainqueurDe("sf0")} big cleMatch="f0" />
+                <Slot x={xFinal_R} y={shift(finalY)} uid={vainqueurDe("sf1")} big cleMatch="f0" />
+                <div className="tb-vs" style={{ left: centerX - 15, top: shift(finalCenter) - 11 }}>VS</div>
+              </div>
+            </div>
+            {tournoiErreur && <div className="online-error">{tournoiErreur}</div>}
+            {statut === "running" && monMatch && (
+              <button className="reset-btn" onClick={jouerMatchTournoi}>⚔ Jouer votre duel</button>
+            )}
+            {champion && (
+              <button className="reset-btn" onClick={reset}>Retour au menu</button>
+            )}
+          </div>
+        );
+      })()}
 
       {phase === "tourney-bracket" && (() => {
         // Geometrie en PIXELS, et c'est voulu : un arbre de tournoi est une geometrie,
@@ -7664,8 +9601,17 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
+          {/* Un Ordre en vedette occupe le haut de l'attente ; les messages descendent
+              en dessous, comme demande. */}
+          {fileAttente && ordreAttente && (
+            <div className="attente-ordre">
+              <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+              <div className="attente-ordre-nom">{ordreAttente.name}</div>
+              <div className="attente-ordre-desc">{ordreAttente.desc}</div>
+            </div>
+          )}
           {fileAttente && (
-            <div className="sub">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
+            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
@@ -7676,6 +9622,13 @@ export default function Emprise() {
             </>
           )}
           <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>
+          {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
+              Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
+              detourner l'attention d'une information qui, elle, demande une decision. */}
+          <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />
+          {attentePreMatch > TURN_SECONDS && (
+            <div className="sub">{`L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
+          )}
           {onlineError && <div className="online-error">{onlineError}</div>}
         </div>
       )}
@@ -7690,7 +9643,32 @@ export default function Emprise() {
               ? `${TOURNEY_ROUNDS[tourney.round].label} · Choisissez vos 2 Ordres`
               : phase === "select-blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres"}
           </h2>
-          {mode === "online" && onlineGameId && (
+          {/* Minuteur du choix des Ordres, en haut a droite, avec un sablier qui tourne
+              en continu (transform seule) pour dire d'un coup d'oeil que le temps court. */}
+          {minuteurOrdresActif && (
+            <div className={`ordres-minuteur ${tempsOrdres <= 10 ? "urgent" : ""}`} role="timer" aria-live="off">
+              <svg className="ordres-sablier" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2h10v2h-1v2.6c0 1.4-.7 2.7-1.8 3.5L12 12l-2.2 1.9A4.3 4.3 0 0 0 8 17.4V20h1v2H7v-2h1v-2.6c0-1.4.7-2.7 1.8-3.5L12 12l2.2-1.9A4.3 4.3 0 0 0 16 6.6V4h1V2H7zm3 4.6c0 .8.4 1.6 1 2.1l1 .9 1-.9c.6-.5 1-1.3 1-2.1V4h-4v2.6z" />
+              </svg>
+              <span className="ordres-temps">{Math.floor(tempsOrdres / 60)}:{String(tempsOrdres % 60).padStart(2, "0")}</span>
+            </div>
+          )}
+          {/* Etat de l'adversaire : savoir qu'il a fini change la facon dont on prend
+              son temps, et evite de croire la partie figee. */}
+          {mode === "online" && phase === "select-blue" && (
+            <div className={`ordres-adversaire ${advPret ? "pret" : ""}`} role="status">
+              {advPret ? (
+                <>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                  L'adversaire a choisi ses Ordres
+                </>
+              ) : "L'adversaire choisit ses Ordres..."}
+            </div>
+          )}
+          {/* Le code n'a de sens qu'entre amis : en Classé l'appariement est automatique,
+              en tournoi c'est l'arbre qui decide. L'afficher ailleurs laissait croire
+              qu'il fallait le transmettre a quelqu'un. */}
+          {mode === "online" && onlineGameId && !partieClassee && !tournoiOnlineId && (
             <div className="code-rappel">Code de partie :<b>{onlineGameId}</b></div>
           )}
           <div className="sub">
@@ -7891,8 +9869,33 @@ export default function Emprise() {
       {phase === "select-assist" && (
         <div className="diff-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>Options d'assistance</h2>
-          <div className="sub">Réglages valables pour cette partie contre l'Écho uniquement.</div>
+          <h2>{mode === "local" ? "Options de la partie" : "Options d'assistance"}</h2>
+          <div className="sub">{mode === "local" ? "Réglages du duel à deux sur cet appareil." : "Réglages valables pour cette partie contre l'Écho uniquement."}</div>
+          {mode === "local" ? (
+            <div className="assist-grid">
+              <label className={`assist-option ${allowUndo ? "checked" : ""}`}>
+                <input type="checkbox" checked={allowUndo} onChange={(e) => setAllowUndo(e.target.checked)} />
+                <div className="assist-text">
+                  <div className="name">Repentir</div>
+                  <div className="desc">Autorise à annuler le dernier coup joué (bouton "Annuler").</div>
+                </div>
+              </label>
+              <label className={`assist-option ${allowHint ? "checked" : ""}`}>
+                <input type="checkbox" checked={allowHint} onChange={(e) => setAllowHint(e.target.checked)} />
+                <div className="assist-text">
+                  <div className="name">Augure</div>
+                  <div className="desc">Un bouton révèle le meilleur coup du joueur dont c'est le tour.</div>
+                </div>
+              </label>
+              <label className={`assist-option ${rotationLocale ? "checked" : ""}`}>
+                <input type="checkbox" checked={rotationLocale} onChange={toggleRotationLocale} />
+                <div className="assist-text">
+                  <div className="name">Rotation de l'écran</div>
+                  <div className="desc">L'écran pivote vers le joueur dont c'est le tour, pour se passer l'appareil sans le retourner.</div>
+                </div>
+              </label>
+            </div>
+          ) : (
           <div className="assist-grid">
             <label className={`assist-option ${allowUndo ? "checked" : ""}`}>
               <input type="checkbox" checked={allowUndo} onChange={(e) => setAllowUndo(e.target.checked)} />
@@ -7909,6 +9912,7 @@ export default function Emprise() {
               </div>
             </label>
           </div>
+          )}
           <button className="reset-btn" onClick={confirmAssistOptions}>Continuer</button>
         </div>
       )}
@@ -7972,7 +9976,12 @@ export default function Emprise() {
               ? mode === "bot" ? (winner === "blue" ? "Victoire ! Vous l'emportez." : "L'Écho remporte la partie.")
                 : mode === "online" ? (winner === onlineRole ? "Victoire ! Vous l'emportez." : "Défaite cette fois.")
                 : `Victoire du camp ${winner === "blue" ? "Azur" : "Écarlate"} !`
-              : mode === "online" && turn !== onlineRole ? "En attente de l'adversaire..."
+              : mode === "online" && turn !== onlineRole
+                ? (attenteAdv > TURN_SECONDS
+                  ? `L'adversaire ne répond plus : victoire dans ${Math.max(1, FORFAIT_APRES_S - attenteAdv)}s...`
+                  : "En attente de l'adversaire...")
+              : mode === "online" && turn === onlineRole && timeLeft <= 0
+                ? `Temps écoulé : jouez un coup, forfait dans ${Math.max(1, TURN_SECONDS + timeLeft)}s...`
               : drag ? "Relâchez sur une case en surbrillance pour poser la carte."
               : selected ? "Cliquez sur une case du plateau pour poser la carte."
               : mode === "local" ? `Au camp ${turn === "blue" ? "Azur" : "Écarlate"} de jouer.`
@@ -7980,21 +9989,16 @@ export default function Emprise() {
           </div>
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
-          <div>
-            <div className={`turn-label red-t ${turn !== "red" || gameOver ? "en-attente" : ""}`}>
-              Écarlate{mode === "bot" ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : ""}{mode === "online" ? (onlineRole === "red" ? " (Vous)" : " (Adversaire)") : ""}
-            </div>
-            {redHand.length > 0 && (
-              <div className={`hand-row camp-red ${turn === "red" && !gameOver ? "active" : ""} ${turn !== "red" ? "disabled" : ""} ${redHand.length > 4 ? "compact" : ""}`}>
-                {renderHandGroups("red")}
-              </div>
-            )}
+          <div className="zone-main">
+            {pucesTrophees(campHaut)}
+            {labelCamp(campHaut)}
+            {mainCamp(campHaut)}
           </div>
 
-          {isHumanTurn && turn === "red" && !testMode && <TimerBar timeLeft={timeLeft} />}
+          {isHumanTurn && turn === campHaut && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           {/* ═══ TEMPORAIRE — sélecteur d'arène, à retirer avant publication ═══ */}
-          {(testMode || mode === "bot" || mode === "online") && (
+          {testMode && (
             <div className="arene-test">
               <button className={!areneTest ? "actif" : ""} onClick={() => setAreneTest(null)}>Aucune</button>
               {Object.keys(ARENES).map((nom) => (
@@ -8178,40 +10182,97 @@ export default function Emprise() {
             })}
           </div>
 
-          {isHumanTurn && turn === "blue" && !testMode && <TimerBar timeLeft={timeLeft} />}
+          {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           <div>
-            {blueHand.length > 0 && (
-              <div className={`hand-row camp-blue ${turn === "blue" && !gameOver ? "active" : ""} ${turn !== "blue" ? "disabled" : ""} ${blueHand.length > 4 ? "compact" : ""}`}>
-                {renderHandGroups("blue")}
-              </div>
-            )}
-            <div className={`turn-label blue-t ${turn !== "blue" || gameOver ? "en-attente" : ""}`}>Azur{mode === "bot" ? " (Vous)" : ""}{mode === "online" ? (onlineRole === "blue" ? " (Vous)" : " (Adversaire)") : ""}{tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}</div>
+            {pucesTrophees(campBas)}
+            {mainCamp(campBas)}
+            {labelCamp(campBas)}
           </div>
 
+          {mode === "online" && (
+            <>
+              {/* Messages en direct : un bouton flottant, un panneau ancré au-dessus de la
+                  main. Le badge compte les messages adverses arrivés panneau fermé. */}
+              {/* Message affiche directement au-dessus du plateau. Double-clic dessus
+                  (ou sur le bouton) pour couper ou remettre cet affichage. */}
+              {messageBulle && !chatOuvert && (
+                <div
+                  className={`chat-bulle-directe ${messageBulle.by === onlineRole ? "de-moi" : "de-lui"}`}
+                  role="button" tabIndex={0}
+                  onDoubleClick={basculerMessagesDirects}
+                  onClick={basculerChat}
+                  onKeyDown={KEY_ACTIVATE(basculerChat)}
+                  title="Toucher pour ouvrir les messages, double-toucher pour couper l'affichage direct"
+                >
+                  <span className="chat-bulle-auteur">{messageBulle.by === onlineRole ? "Vous" : "Adversaire"}</span>
+                  {String(messageBulle.texte || "").slice(0, 200)}
+                </div>
+              )}
+              {bulleAvis && <div className="chat-bulle-avis" role="status">{bulleAvis}</div>}
+              <button
+                className={`chat-bouton ${messagesDirects ? "" : "directs-coupes"}`}
+                onClick={basculerChat}
+                onDoubleClick={basculerMessagesDirects}
+                aria-label={`Messages. Affichage direct ${messagesDirects ? "activé" : "coupé"}. Double-toucher pour changer.`}
+                title={`Messages (double-toucher : affichage direct ${messagesDirects ? "activé" : "coupé"})`}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3c5 0 9 3.3 9 7.4 0 4-4 7.3-9 7.3-.9 0-1.7-.1-2.5-.3L5 20l1-3.4C4.1 15.2 3 13 3 10.4 3 6.3 7 3 12 3zm0 2c-3.9 0-7 2.4-7 5.4 0 1.9 1.2 3.6 3.1 4.6l.8.4-.4 1.3 2-1 .5.1c.6.2 1.3.2 2 .2 3.9 0 7-2.4 7-5.4S15.9 5 12 5z" />
+                </svg>
+                {chatNonLus > 0 && <span className="chat-badge">{chatNonLus > 9 ? "9+" : chatNonLus}</span>}
+              </button>
+              {chatOuvert && (
+                <div className="chat-panneau">
+                  <div className="chat-liste" ref={chatListeRef}>
+                    {chatMessages.length === 0 && <div className="chat-vide">Saluez votre adversaire !</div>}
+                    {chatMessages.map((m) => (
+                      <div key={m.id} className={`chat-msg ${m.by === onlineRole ? "chat-moi" : "chat-lui"}`}>{String(m.texte || "").slice(0, 200)}</div>
+                    ))}
+                  </div>
+                  <div className="chat-saisie-ligne">
+                    <input
+                      className="chat-saisie"
+                      maxLength={200}
+                      placeholder="Votre message..."
+                      value={chatSaisie}
+                      onChange={(e) => setChatSaisie(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") envoyerMessage(); }}
+                    />
+                    <button className="chat-envoyer" onClick={envoyerMessage} disabled={!chatSaisie.trim()} aria-label="Envoyer">➤</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {drag && draggedCard && !liveDragPreviewBoard && (
-            <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
+            // Sous rotation (duel local), la racine est pivotée : les coordonnées du
+            // pointeur (repère de l'écran) doivent être inversées pour que le fantôme
+            // suive le doigt au lieu de fuir à l'opposé.
+            <div className="drag-ghost" style={{ left: vueTournee ? window.innerWidth - drag.x : drag.x, top: vueTournee ? window.innerHeight - drag.y : drag.y }}>
               <Card card={draggedCard} owner={drag.owner} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
             </div>
           )}
 
           <div className="action-row">
-            {mode !== "online" && (mode !== "bot" || allowUndo) && (
+            {mode !== "online" && (testMode || allowUndo) && (
               <button className="reset-btn undo-btn" onClick={undo} disabled={history.length === 0 || !!drag}>
                 <svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
                 Annuler
               </button>
             )}
-            {mode === "bot" && allowHint && (
-              <button className="reset-btn hint-btn" onClick={toggleHint} disabled={gameOver || turn !== "blue"}>
+            {(mode === "bot" || mode === "local") && allowHint && (
+              <button className="reset-btn hint-btn" onClick={toggleHint} disabled={gameOver || (mode === "bot" && turn !== "blue")}>
                 🔮 {hint ? "Masquer l'augure" : "Augure"}
               </button>
             )}
+            {gameOver && boutonRevanche()}
             <button
               className={`reset-btn ${gameOver ? "" : "quitter-discret"}`}
-              onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : reset)) : () => setConfirmQuit(true)}
+              onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : tournoiOnlineId ? retournerAuTournoi : reset)) : () => setConfirmQuit(true)}
             >
-              {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
+              {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : tournoiOnlineId ? "Retour au tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
             </button>
           </div>
 
@@ -8262,7 +10323,12 @@ export default function Emprise() {
             </div>
             <div className="cer-trait" aria-hidden="true" />
             <div className="cer-sous-titre">
-              {mode === "bot" ? "L'Écho est repoussé" : mode === "online" ? "Vous l'emportez" : `Le camp ${winner === "blue" ? "Azur" : "Écarlate"} l'emporte`}
+              {mode === "bot" ? "L'Écho est repoussé"
+                : mode === "online"
+                  ? (finMotif === "abandon" ? "L'adversaire a abandonné"
+                    : finMotif === "forfait" ? "L'adversaire n'a plus donné signe de vie"
+                    : "Vous l'emportez")
+                  : `Le camp ${winner === "blue" ? "Azur" : "Écarlate"} l'emporte`}
             </div>
             <div className="cer-recap" onClick={(e) => e.stopPropagation()}>
               <div className="cer-score">
@@ -8273,7 +10339,10 @@ export default function Emprise() {
                 <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
-              <button className="reset-btn cer-continuer" onClick={() => { setCeremonieFin(null); setCerPose(false); }}>Continuer</button>
+              {boutonRevanche()}
+              <button className="reset-btn cer-continuer" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); }}>
+                {tournoiOnlineId ? "Retour au tournoi" : "Continuer"}
+              </button>
             </div>
           </div>
         </div>
@@ -8302,8 +10371,9 @@ export default function Emprise() {
               <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
-            <button className="defeat-button" onClick={() => { setCeremonieFin(null); setCerPose(false); reset(); }}>
-              Recommencer
+            {boutonRevanche()}
+            <button className="defeat-button" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); reset(); }}>
+              {tournoiOnlineId ? "Retour au tournoi" : mode === "online" ? "Retour au menu" : "Recommencer"}
             </button>
             <button className="defeat-lien" onClick={() => { setCeremonieFin(null); setCerPose(false); }}>
               Revoir le plateau
@@ -8315,15 +10385,21 @@ export default function Emprise() {
       {confirmQuit && (
         <div className="info-overlay" onClick={() => setConfirmQuit(false)}>
           <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="info-panel-title">{tourney.active ? "Abandonner le tournoi ?" : "Quitter la partie ?"}</div>
+            <div className="info-panel-title">{tourney.active ? "Abandonner le tournoi ?" : mode === "online" && !gameOver ? "Abandonner la partie ?" : "Quitter la partie ?"}</div>
             <div className="confirm-text">
               {tourney.active
                 ? "Le tournoi en cours sera perdu et vous reviendrez au menu principal."
+                : mode === "online" && !gameOver && tournoiOnlineId
+                ? "L'adversaire remportera le duel et vous serez éliminé du tournoi. Vous reviendrez à l'arbre."
+                : mode === "online" && !gameOver
+                ? `L'adversaire remportera la victoire${partieClassee ? " et vous perdrez des trophées" : ""}. Vous reviendrez au menu principal.`
                 : "La partie en cours sera perdue et vous reviendrez au menu principal."}
             </div>
             <div className="confirm-actions">
               <button className="reset-btn" onClick={() => setConfirmQuit(false)}>Continuer</button>
-              <button className="reset-btn quit-confirm" onClick={reset}>Retour au menu</button>
+              <button className="reset-btn quit-confirm" onClick={mode === "online" && !gameOver ? quitterPartieEnLigne : reset}>
+                {mode === "online" && !gameOver ? "Abandonner" : "Retour au menu"}
+              </button>
             </div>
           </div>
         </div>
