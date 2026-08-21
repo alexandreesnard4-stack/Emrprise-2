@@ -147,7 +147,7 @@ function CountdownLabel({ order }) {
 // s'affiche en clair. Aucune image à remplacer.
 // Fait defiler les textes d'attente. Une seule animation, sur opacity et transform,
 // relancee a chaque changement par la cle React : rien ne tourne en boucle.
-function RecitsAttente({ actif }) {
+function RecitsAttente({ actif, surImage }) {
   const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
   useEffect(() => {
     if (!actif) return;
@@ -160,7 +160,7 @@ function RecitsAttente({ actif }) {
   if (!actif) return null;
   const recit = RECITS_ATTENTE[i];
   return (
-    <div className="recit-attente" role="status" aria-live="polite">
+    <div className={`recit-attente ${surImage ? "sur-image" : ""}`} role="status" aria-live="polite">
       <div className="recit-genre">{recit.genre === "histoire" ? "L'Histoire" : "Astuce"}</div>
       <p key={i} className="recit-texte">{recit.texte}</p>
     </div>
@@ -4260,17 +4260,35 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: center; gap: 4px;
           margin-top: 12px; width: 100%; max-width: 250px;
         }
-        .attente-ordre img {
-          width: min(58vw, 210px); aspect-ratio: 3 / 4; object-fit: cover;
+        /* Cadre du portrait : reference de position pour le texte incruste. */
+        .attente-ordre-cadre {
+          position: relative; display: block; overflow: hidden;
           border-radius: 14px; border: 1px solid rgba(203,164,86,0.45);
           box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+        }
+        .attente-ordre-cadre img {
+          display: block; width: min(72vw, 300px); aspect-ratio: 3 / 4; object-fit: cover;
         }
         .attente-ordre-nom {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
           margin-top: 6px;
         }
-        .attente-message { margin-top: 4px; max-width: 300px; }
+        /* Textes poses SUR l'illustration : un voile monte du bas, opaque sous le texte
+           pour le rendre lisible quel que soit le portrait, transparent en haut pour ne
+           pas masquer le personnage. */
+        .recit-attente.sur-image {
+          position: absolute; left: 0; right: 0; bottom: 0;
+          width: auto; max-width: none; margin: 0;
+          padding: 26px 14px 12px;
+          background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.72) 32%, rgba(8,6,12,0.93) 100%);
+          border: none; border-radius: 0; min-height: 0; gap: 5px;
+        }
+        .recit-attente.sur-image .recit-genre { font-size: 9px; letter-spacing: 0.24em; }
+        .recit-attente.sur-image .recit-texte {
+          font-size: 11.5px; line-height: 1.45;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+        }
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
           margin-top: 12px;
@@ -9600,16 +9618,15 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
-          {/* La consigne d'abord, l'illustration ensuite : c'est le texte qui dit quoi
-              faire, l'Ordre en vedette n'est que de l'habillage. Sa description de
-              capacite est retiree, elle n'apprend rien d'actionnable pendant une
-              recherche et surchargeait le bloc. */}
-          {fileAttente && (
-            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
-          )}
+          {/* Pendant la recherche, l'illustration porte tout : les textes d'Histoire et
+              d'astuces s'incrustent en bas du portrait, sur un voile sombre. La consigne
+              et la ligne d'etat ont ete retirees, le titre de l'ecran les disait deja. */}
           {fileAttente && ordreAttente && (
             <div className="attente-ordre">
-              <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+              <div className="attente-ordre-cadre">
+                <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+                <RecitsAttente actif surImage />
+              </div>
               <div className="attente-ordre-nom">{ordreAttente.name}</div>
             </div>
           )}
@@ -9621,11 +9638,11 @@ export default function Emprise() {
               <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
             </>
           )}
-          <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>
+          {!fileAttente && <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
               detourner l'attention d'une information qui, elle, demande une decision. */}
-          <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />
+          {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />}
           {attentePreMatch > TURN_SECONDS && (
             <div className="sub">{`L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
           )}
