@@ -2740,7 +2740,7 @@ const APP_STYLES = `
           border: 1px solid rgba(203,164,86,0.5);
         }
         .arene-page-fleche {
-          position: absolute; left: 0; right: 0; bottom: 16px;
+          position: absolute; left: 0; right: 0; top: 14px;
           display: flex; flex-direction: column; align-items: center; gap: 2px;
           font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
           animation: arene-fleche-respire 2.2s ease-in-out infinite;
@@ -2750,8 +2750,8 @@ const APP_STYLES = `
           stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
         }
         @keyframes arene-fleche-respire {
-          0%, 100% { opacity: 0.45; transform: translateY(2px); }
-          50% { opacity: 1; transform: translateY(-2px); }
+          0%, 100% { opacity: 0.45; transform: translateY(3px); }
+          50% { opacity: 1; transform: translateY(-3px); }
         }
         .arenes-fermer {
           position: fixed; top: 14px; right: 14px; z-index: 5;
@@ -9155,12 +9155,29 @@ export default function Emprise() {
 
           {activeModal === "arenes" && (() => {
             const ligue = getLeague(stats.trophies || 0);
+            // Une echelle se gravit : le Bronze occupe le bas, la Legende le sommet. On
+            // renverse donc l'ordre des ligues, et l'on ouvre la galerie sur l'arene ou
+            // le joueur se trouve — sinon il tomberait sur la Legende, qu'il n'a pas.
+            const echelle = LEAGUES.slice().reverse();
+            const rang = Math.max(0, echelle.findIndex((l) => l.name === ligue.name));
             return (
               <div className="info-overlay arenes-voile" onClick={() => setActiveModal(null)}>
-                {/* Une arene par ecran, calee au defilement : on glisse vers le haut et la
-                    suivante vient se poser. Le voile se ferme au clic a cote. */}
-                <div className="arenes-defile" onClick={(e) => e.stopPropagation()}>
-                  {LEAGUES.map((l, i) => {
+                {/* Une arene par ecran, calee au defilement : on part de la sienne et l'on
+                    monte vers les suivantes. Le voile se ferme au clic a cote. */}
+                <div
+                  className="arenes-defile"
+                  ref={(el) => {
+                    // Une seule fois par ouverture : la fonction de ref est rappelee a
+                    // chaque rendu, et recaler le defilement a chaque fois empecherait le
+                    // joueur de bouger.
+                    if (!el || el.dataset.cale) return;
+                    el.dataset.cale = "1";
+                    const page = el.children[rang];
+                    if (page) el.scrollTop = page.offsetTop;
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {echelle.map((l, i) => {
                     const ici = l.name === ligue.name;
                     return (
                       <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
@@ -9177,10 +9194,10 @@ export default function Emprise() {
                           {l.min === 0 ? "Dès votre premier duel" : `À partir de ${l.min} trophées`}
                         </div>
                         {ici && <span className="arene-page-ici">Vous êtes ici</span>}
-                        {i < LEAGUES.length - 1 && (
+                        {i > 0 && (
                           <span className="arene-page-fleche" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><path d="M12 4v14M6 10l6-6 6 6" /></svg>
-                            glissez vers le haut
+                            arène supérieure
                           </span>
                         )}
                       </section>
