@@ -2674,7 +2674,7 @@ const APP_STYLES = `
         .hub-arene {
           flex: 1 1 auto; min-height: 0; width: 100%;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
-          gap: 2px; margin-top: 2px;
+          gap: 5px; margin-top: 2px;
         }
         .hub-arene-img {
           max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
@@ -3311,7 +3311,15 @@ const APP_STYLES = `
            calent maintenant sur la plus contraignante des deux dimensions. */
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
-          height: 100dvh; max-height: 100dvh; overflow: hidden;
+          height: 100dvh; max-height: 100dvh;
+          /* Filet de securite : une partie normale tient dans l'ecran et ne defile
+             jamais. Mais le bac a sable ajoute le choix d'arene, celui des Herauts et
+             deux mains de onze vignettes ; en coupant net, on rendait le bouton Quitter
+             inatteignable. Mieux vaut un defilement qu'un joueur enferme. Pendant qu'une
+             carte est tenue, le glissement natif reste bloque (voir bloqueDefilement),
+             le geste de pose n'est donc pas confondu avec un defilement. */
+          overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
+          -webkit-overflow-scrolling: touch;
           display: flex; flex-direction: column; justify-content: space-between;
           padding-top: 4px; padding-bottom: 4px; gap: 2px;
         }
@@ -8938,13 +8946,13 @@ export default function Emprise() {
                     même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
                     Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
                 <div className="hub-arene">
+                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
                   <img
                     className="hub-arene-img"
                     src="/arenes/bronze-hub.webp"
                     alt=""
                     onError={(e) => { e.currentTarget.style.display = "none"; }}
                   />
-                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
                 </div>
 
                 {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
@@ -10817,9 +10825,6 @@ export default function Emprise() {
           )}
 
           {drag && draggedCard && !liveDragPreviewBoard && (
-            // Sous rotation (duel local), la racine est pivotée : les coordonnées du
-            // pointeur (repère de l'écran) doivent être inversées pour que le fantôme
-            // suive le doigt au lieu de fuir à l'opposé.
             <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
               <Card card={draggedCard} owner={drag.owner} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
             </div>
@@ -10838,12 +10843,19 @@ export default function Emprise() {
               </button>
             )}
             {gameOver && boutonRevanche()}
+            {/* En Classe, tant que la partie n'est pas finie, aucun bouton pour partir :
+                un duel classe se joue jusqu'au bout. Le bouton reparait des la fin, ou il
+                sert a lancer la partie suivante. Un adversaire qui cesse de jouer ne peut
+                pas nous retenir pour autant : le forfait tranche tout seul apres deux
+                tours sans coup. */}
+            {!(partieClassee && !gameOver) && (
             <button
               className={`reset-btn ${gameOver ? "" : "quitter-discret"}`}
               onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : tournoiOnlineId ? retournerAuTournoi : reset)) : () => setConfirmQuit(true)}
             >
               {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : tournoiOnlineId ? "Retour au tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
             </button>
+            )}
           </div>
 
           {infoAbility && (
