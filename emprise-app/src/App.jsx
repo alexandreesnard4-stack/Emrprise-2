@@ -4269,11 +4269,6 @@ const APP_STYLES = `
         .attente-ordre-cadre img {
           display: block; width: min(72vw, 300px); aspect-ratio: 3 / 4; object-fit: cover;
         }
-        .attente-ordre-nom {
-          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
-          letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
-          margin-top: 6px;
-        }
         /* Textes poses SUR l'illustration : un voile monte du bas, opaque sous le texte
            pour le rendre lisible quel que soit le portrait, transparent en haut pour ne
            pas masquer le personnage. */
@@ -9627,7 +9622,6 @@ export default function Emprise() {
                 <img src={ordreAttente.portrait} alt={ordreAttente.name} />
                 <RecitsAttente actif surImage />
               </div>
-              <div className="attente-ordre-nom">{ordreAttente.name}</div>
             </div>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
