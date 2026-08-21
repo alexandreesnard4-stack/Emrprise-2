@@ -4258,7 +4258,7 @@ const APP_STYLES = `
         /* L'Ordre en vedette pendant la recherche d'adversaire. */
         .attente-ordre {
           display: flex; flex-direction: column; align-items: center; gap: 4px;
-          margin-top: 10px; width: 100%; max-width: 250px;
+          margin-top: 12px; width: 100%; max-width: 250px;
         }
         .attente-ordre img {
           width: min(58vw, 210px); aspect-ratio: 3 / 4; object-fit: cover;
@@ -4270,8 +4270,7 @@ const APP_STYLES = `
           letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
           margin-top: 6px;
         }
-        .attente-ordre-desc { font-size: 11px; color: var(--muted); text-align: center; }
-        .attente-message { margin-top: 8px; }
+        .attente-message { margin-top: 4px; max-width: 300px; }
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
           margin-top: 12px;
@@ -9601,17 +9600,18 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
-          {/* Un Ordre en vedette occupe le haut de l'attente ; les messages descendent
-              en dessous, comme demande. */}
+          {/* La consigne d'abord, l'illustration ensuite : c'est le texte qui dit quoi
+              faire, l'Ordre en vedette n'est que de l'habillage. Sa description de
+              capacite est retiree, elle n'apprend rien d'actionnable pendant une
+              recherche et surchargeait le bloc. */}
+          {fileAttente && (
+            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
+          )}
           {fileAttente && ordreAttente && (
             <div className="attente-ordre">
               <img src={ordreAttente.portrait} alt={ordreAttente.name} />
               <div className="attente-ordre-nom">{ordreAttente.name}</div>
-              <div className="attente-ordre-desc">{ordreAttente.desc}</div>
             </div>
-          )}
-          {fileAttente && (
-            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
