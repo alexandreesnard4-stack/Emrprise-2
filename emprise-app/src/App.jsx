@@ -2733,6 +2733,9 @@ const APP_STYLES = `
           transition: border-color .2s, transform .35s ease;
         }
         .hub-rouage svg { width: 19px; height: 19px; fill: rgba(203,164,86,0.75); }
+        /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
+           l'illustration suit le mouvement. */
+        .hub-rouage-img { width: 26px; height: 26px; object-fit: contain; display: block; }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
         .hub-pages {
@@ -2959,6 +2962,12 @@ const APP_STYLES = `
           width: 100%; max-width: 340px; margin-top: auto; padding-top: 6px;
         }
         .hub-jouer-rang .hub-jouer-classe { margin-top: 0; flex: 1.6; max-width: none; }
+        /* Les haches croisees remplacent le pictogramme : illustration detouree, posee
+           sans cadre, elle porte le bouton a elle seule. */
+        .hub-jouer-classe-img {
+          width: 40px; height: 40px; object-fit: contain; display: block;
+          filter: drop-shadow(0 3px 7px rgba(0,0,0,0.75));
+        }
         .hub-jouer-modes-btn {
           flex: 1; box-sizing: border-box;
           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
@@ -5100,15 +5109,19 @@ const APP_STYLES = `
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
           box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
+        /* Le sablier est une illustration : plus haut que large, on ne le rogne pas. Il
+           se RETOURNE au lieu de tourner sans fin — un sablier qui tourne en continu ne
+           veut rien dire, un sablier qu'on retourne, si. */
         .ordres-sablier {
-          width: 19px; height: 19px; fill: var(--gold-bright);
-          filter: drop-shadow(0 0 4px rgba(232,200,119,0.55));
-          animation: sablier-tourne 2.4s linear infinite;
+          width: 18px; height: 26px; object-fit: contain; display: block;
+          filter: drop-shadow(0 0 5px rgba(232,200,119,0.5));
+          animation: sablier-retourne 4.8s ease-in-out infinite;
         }
-        /* Seul transform est anime : le sablier tourne sans rien recalculer. */
-        @keyframes sablier-tourne {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        /* Seul transform est anime : le sablier se retourne sans rien recalculer. */
+        @keyframes sablier-retourne {
+          0%, 42% { transform: rotate(0deg); }
+          50%, 92% { transform: rotate(180deg); }
+          100% { transform: rotate(360deg); }
         }
         .ordres-temps {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
@@ -5116,8 +5129,11 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums;
         }
         .ordres-minuteur.urgent { border-color: var(--red-bright); }
-        .ordres-minuteur.urgent .ordres-temps,
-        .ordres-minuteur.urgent .ordres-sablier { color: var(--red-bright); fill: var(--red-bright); }
+        .ordres-minuteur.urgent .ordres-temps { color: var(--red-bright); }
+        /* Sur une illustration, l'alerte passe par la teinte : on la fait virer au rouge. */
+        .ordres-minuteur.urgent .ordres-sablier {
+          filter: drop-shadow(0 0 5px rgba(224,101,90,0.6)) hue-rotate(-35deg) saturate(1.5);
+        }
         .ordres-adversaire {
           display: inline-flex; align-items: center; gap: 6px;
           font-size: 11.5px; color: var(--muted); margin-top: -2px;
@@ -9338,7 +9354,8 @@ export default function Emprise() {
               aria-label="Réglages"
               title="Réglages"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <img className="hub-rouage-img" src="/nav/rouage.webp" alt="" />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
                 <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
               </svg>
@@ -9403,9 +9420,7 @@ export default function Emprise() {
                     epuree comme un ecran d'accueil de jeu mobile. */}
                 <div className="hub-jouer-rang">
                   <button className="hub-jouer-classe" onClick={chercherAdversaire}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
-                    </svg>
+                    <img className="hub-jouer-classe-img" src="/nav/classe.webp" alt="" />
                     <span className="hub-jouer-classe-titre">Classé</span>
                     <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
                   </button>
@@ -10786,9 +10801,7 @@ export default function Emprise() {
               en continu (transform seule) pour dire d'un coup d'oeil que le temps court. */}
           {minuteurOrdresActif && (
             <div className={`ordres-minuteur ${tempsOrdres <= 10 ? "urgent" : ""}`} role="timer" aria-live="off">
-              <svg className="ordres-sablier" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 2h10v2h-1v2.6c0 1.4-.7 2.7-1.8 3.5L12 12l-2.2 1.9A4.3 4.3 0 0 0 8 17.4V20h1v2H7v-2h1v-2.6c0-1.4.7-2.7 1.8-3.5L12 12l2.2-1.9A4.3 4.3 0 0 0 16 6.6V4h1V2H7zm3 4.6c0 .8.4 1.6 1 2.1l1 .9 1-.9c.6-.5 1-1.3 1-2.1V4h-4v2.6z" />
-              </svg>
+              <img className="ordres-sablier" src="/nav/sablier.webp" alt="" />
               <span className="ordres-temps">{Math.floor(tempsOrdres / 60)}:{String(tempsOrdres % 60).padStart(2, "0")}</span>
             </div>
           )}
