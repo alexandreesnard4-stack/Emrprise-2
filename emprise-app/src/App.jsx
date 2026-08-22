@@ -2861,7 +2861,7 @@ const APP_STYLES = `
            pas de pastille derriere : il se suffit. */
         .arene-cadenas {
           position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-          width: auto; height: min(34dvh, 150px); object-fit: contain;
+          width: auto; height: min(13dvh, 64px); object-fit: contain;
           filter: drop-shadow(0 10px 22px rgba(0,0,0,0.75));
           animation: arene-cadenas-pose 0.5s cubic-bezier(.22,1,.36,1) both;
         }
