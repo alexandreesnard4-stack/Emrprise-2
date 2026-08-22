@@ -75,7 +75,7 @@ const NEXT_ORDER_RELEASE = new Date("2026-09-01T00:00:00");
 const ORDERS = [
   { key: "eveil", ability: "eveil", name: "Dorés", icon: "✨", portrait: PORTRAITS.eveil, ranks: [2, 6, 5, 7], status: ORDER_STATUS.AVAILABLE, desc: "Échange son rang exposé avec celui de chaque ennemie adjacente" },
   { key: "cendres", ability: "attraction", name: "Cendres", icon: "🔥", portrait: PORTRAITS.fureur, ranks: [6, 4, 5, 3], status: ORDER_STATUS.AVAILABLE, desc: "Attire la carte la plus proche de chaque côté, alliée ou ennemie" },
-  { key: "percee", ability: "percee", name: "Piques", icon: "🗡️", portrait: PORTRAITS.percee, ranks: [6, 5, 4, 6], status: ORDER_STATUS.AVAILABLE, desc: "Transperce jusqu'à 2 cartes alignées par direction" },
+  { key: "percee", ability: "percee", name: "Piques", icon: "🗡️", portrait: PORTRAITS.percee, ranks: [6, 5, 4, 6], status: ORDER_STATUS.AVAILABLE, desc: "Transperce les cartes alignées par direction" },
   { key: "portee", ability: "portee", name: "Archers", icon: "🏹", portrait: PORTRAITS.portee, ranks: [9, 6, 4, 1], status: ORDER_STATUS.AVAILABLE, desc: "Capture en ligne droite, même à distance" },
   { key: "devoreuse", ability: "devoreuse", name: "Abysses", icon: "🐙", portrait: PORTRAITS.devoreuse, ranks: [6, 5, 3, 2], status: ORDER_STATUS.AVAILABLE, desc: "Chaque Abysse en jeu renforce les autres de +1" },
   { key: "mue", ability: "mue", name: "Chimères", icon: "🌀", portrait: PORTRAITS.mue, ranks: [4, 6, 5, 5], status: ORDER_STATUS.AVAILABLE, desc: "Retourne le rang de chaque ennemie adjacente sur son axe" },
