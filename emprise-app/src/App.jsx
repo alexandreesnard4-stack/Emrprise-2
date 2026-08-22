@@ -2622,7 +2622,6 @@ const APP_STYLES = `
           .landing-voile { display: none; }
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
-        .landing-line { width: 46px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
         .landing-line-single { width: 110px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
         .landing-title {
           font-family: 'Cinzel', serif; font-weight: 700; font-size: 44px; letter-spacing: 0.14em; margin: 0;
@@ -3355,8 +3354,6 @@ const APP_STYLES = `
           -webkit-background-clip: text; background-clip: text; color: transparent;
           animation: title-shine 9s ease-in-out infinite; }
 
-        .inline-score.blue { color: var(--blue-bright); border-color: var(--blue-bright); }
-        .inline-score.red { color: var(--red-bright); border-color: var(--red-bright); }
 
         /* ---------- Bras de fer : les deux camps poussent vers le centre ----------
            Remplace les deux pastilles .inline-score, qui etaient aux extremites de
@@ -4169,14 +4166,6 @@ const APP_STYLES = `
           box-shadow: 0 0 0 1px rgba(111,164,230,0.15), 0 6px 14px rgba(0,0,0,0.4); }
         .card.hand.red { background: linear-gradient(160deg, #7c332c, #4e1f1a 65%); border: 1px solid var(--red-bright);
           box-shadow: 0 0 0 1px rgba(224,101,90,0.15), 0 6px 14px rgba(0,0,0,0.4); }
-        @keyframes neon-pulse-blue {
-          0%, 100% { box-shadow: 0 0 3px rgba(127,200,255,0.6), 0 0 8px rgba(90,170,255,0.4), 0 0 14px rgba(70,150,255,0.25), 0 6px 14px rgba(0,0,0,0.4); }
-          50% { box-shadow: 0 0 4px rgba(127,200,255,0.75), 0 0 11px rgba(90,170,255,0.55), 0 0 18px rgba(70,150,255,0.35), 0 6px 14px rgba(0,0,0,0.4); }
-        }
-        @keyframes neon-pulse-red {
-          0%, 100% { box-shadow: 0 0 3px rgba(255,122,104,0.6), 0 0 8px rgba(255,90,70,0.4), 0 0 14px rgba(255,70,50,0.25), 0 6px 14px rgba(0,0,0,0.4); }
-          50% { box-shadow: 0 0 4px rgba(255,122,104,0.75), 0 0 11px rgba(255,90,70,0.55), 0 0 18px rgba(255,70,50,0.35), 0 6px 14px rgba(0,0,0,0.4); }
-        }
 
         .card .portrait-frame { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center;
           background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.14), transparent 70%);
@@ -4606,17 +4595,9 @@ const APP_STYLES = `
           70%  { transform: scaleY(1); opacity: 0.85; }
           100% { transform: scaleY(0); opacity: 0; }
         }
-        @keyframes spikes-pop-x {
-          0%   { transform: scaleX(0); opacity: 0; }
-          22%  { transform: scaleX(1.2); opacity: 1; }
-          42%  { transform: scaleX(0.92); opacity: 1; }
-          70%  { transform: scaleX(1); opacity: 0.85; }
-          100% { transform: scaleX(0); opacity: 0; }
-        }
 
         /* Archers, impact en anneau, façon flèche qui frappe */
         @keyframes portee-impact { 0%{transform:scale(0.4); opacity:0.4; filter:brightness(1)} 50%{transform:scale(1.18); opacity:1; filter:brightness(2.1)} 70%{filter:brightness(1.3)} 100%{transform:scale(1); filter:brightness(1)} }
-        @keyframes portee-ring { 0%{opacity:0.9; transform:scale(1)} 100%{opacity:0; transform:scale(11)} }
 
         /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
         @keyframes devoreuse-void { 0%,100%{transform:scale(1); filter:drop-shadow(0 0 0 var(--devour))} 40%{transform:scale(0.8); box-shadow:0 0 34px var(--devour); filter:drop-shadow(0 0 14px var(--devour))} 70%{transform:scale(1.28); filter:drop-shadow(0 0 10px var(--devour))} 88%{transform:scale(0.96)} }
@@ -5237,9 +5218,6 @@ const APP_STYLES = `
           border-color: var(--gold-bright); color: var(--gold-bright);
           animation: hint-pulse 1.4s ease-in-out infinite;
         }
-        /* Reprise d'une partie en ligne : un adversaire attend en face, donc elle passe
-           devant la reprise d'une partie solo, qui peut attendre. */
-        .landing-link.reprise-en-ligne { color: var(--gold-bright); font-weight: 600; }
         .order-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; width: 100%; }
         .order-option { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.15); cursor: pointer;
@@ -5965,18 +5943,6 @@ const APP_STYLES = `
         .imposed-order-desc { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
         /* Déblocage de Héraut (écran de récompense) : entrée en fanfare + halo qui pulse
            deux fois autour du portrait, pour marquer le coup sans être trop long. */
-        .imposed-order-box.hero-reveal { animation: hero-reveal-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        @keyframes hero-reveal-in {
-          0%   { transform: scale(0.6); opacity: 0; }
-          60%  { transform: scale(1.06); opacity: 1; }
-          80%  { transform: scale(0.98); }
-          100% { transform: scale(1); }
-        }
-        .imposed-order-box.hero-reveal .imposed-order-thumb { animation: hero-halo-pulse 1.8s ease-in-out 0.9s 2; }
-        @keyframes hero-halo-pulse {
-          0%, 100% { box-shadow: 0 0 12px rgba(203,164,86,0.4); }
-          50% { box-shadow: 0 0 12px rgba(203,164,86,0.4), 0 0 30px rgba(203,164,86,0.9), 0 0 50px rgba(203,164,86,0.5); }
-        }
         /* Option B : révélation en deux temps, flash doré sur portrait+nom d'abord
            (le "quoi"), puis la description se dévoile juste après (le "pourquoi"). */
         .imposed-order-box.hero-reveal-b .imposed-order-thumb,
@@ -6001,8 +5967,6 @@ const APP_STYLES = `
 
 
         .diff-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .diff-section-label:first-child { margin-top: 2px; }
-        .diff-section-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(203,164,86,0.35), transparent); }
         .diff-option { padding: 13px 16px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(203,164,86,0.15);
           cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s;
           display: flex; align-items: center; gap: 12px; }
@@ -6012,9 +5976,6 @@ const APP_STYLES = `
         .diff-option .diff-text { flex: 1; min-width: 0; }
         .diff-option .name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.05em; color: var(--gold-bright); }
         .diff-option .desc { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
-        .diff-option.test-option { border-color: rgba(120,190,120,0.35); background: linear-gradient(160deg, rgba(60,90,60,0.25), var(--panel)); }
-        .diff-option.test-option:hover { border-color: #8fce8f; box-shadow: 0 8px 18px rgba(0,0,0,0.35), 0 0 14px rgba(120,190,120,0.2); }
-        .diff-option.test-option .name { color: #b6e0b6; }
         .confirm-panel { max-width: 300px; gap: 16px; }
         .confirm-text { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
         .confirm-actions { display: flex; flex-direction: column; gap: 9px; }
