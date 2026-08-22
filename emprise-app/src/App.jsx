@@ -192,12 +192,15 @@ function VagueMaitrise({ order, taux, grand }) {
     return () => { if (ro) ro.disconnect(); };
   }, []);
   const couleur = MAITRISE_COULEURS[order.key] || "rgba(203,164,86,0.8)";
-  // Une seule partie vaut deja une lame d'eau visible : a 1 % on ne voyait rien.
-  const hauteur = niveau === 0 ? 0 : Math.max(4, Math.round(niveau * 100));
+  // Une seule partie vaut deja une lame d'eau visible : a 1 % on ne voyait rien. Et a
+  // 100 %, la crete passe AU-DESSUS du cadre : le portrait est entierement en couleur,
+  // sans bande grise ni vague qui derive en haut d'un Ordre pourtant acheve.
+  const plein = niveau >= 1;
+  const hauteur = niveau === 0 ? 0 : plein ? 130 : Math.max(6, Math.round(niveau * 100));
   return (
-    <div ref={ref} className={`vague-maitrise ${grand ? "grand" : ""} ${taux === 0 ? "vide" : ""}`}
+    <div ref={ref} className={`vague-maitrise ${grand ? "grand" : ""} ${taux === 0 ? "vide" : ""} ${plein ? "pleine" : ""}`}
          style={{ "--vague-couleur": couleur, "--vague-cote": cote ? `${cote}px` : "100%" }}>
-      <img className="vague-gris" src={order.portrait} alt={order.name} />
+      <img className="vague-gris" src={order.portrait} alt="" />
       <div className="vague-pleine" style={{ height: `${hauteur}%` }}>
         <img className="vague-couleur" src={order.portrait} alt="" />
         <div className="vague-teinte" />
@@ -547,7 +550,9 @@ const MAITRISE_COULEURS = {
 };
 
 function maitriseOrdre(stats, cle) {
-  const parties = Math.max(0, (stats && stats.orderPlays && stats.orderPlays[cle]) || 0);
+  // Number() : un vieux stockage pourrait porter autre chose qu'un nombre, et un NaN
+  // s'afficherait tel quel ("NaN %").
+  const parties = Math.max(0, Number((stats && stats.orderPlays && stats.orderPlays[cle]) || 0) || 0);
   const taux = Math.min(1, parties / MAITRISE_PARTIES_MAX);
   let rang = 0;
   for (let i = 0; i < MAITRISE_RANGS.length; i++) if (parties >= MAITRISE_RANGS[i].min) rang = i;
@@ -555,7 +560,9 @@ function maitriseOrdre(stats, cle) {
   return {
     parties,
     taux,
-    pourcent: parties === 0 ? 0 : Math.max(1, Math.round(taux * 100)), // 1 partie = deja 1 %, pas 0
+    // 1 partie = deja 1 %, pas 0 ; et 100 % est reserve au dernier rang : arrondir
+    // 6 499 parties a 100 % alors qu'on est encore Archonte se contredisait a l'ecran.
+    pourcent: parties === 0 ? 0 : parties >= MAITRISE_PARTIES_MAX ? 100 : Math.min(99, Math.max(1, Math.round(taux * 100))),
     rang: MAITRISE_RANGS[rang],
     numero: rang + 1,
     suivant,
@@ -563,7 +570,12 @@ function maitriseOrdre(stats, cle) {
   };
 }
 
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0 };
+// Version du compteur orderPlays. Avant la page de maitrise, il additionnait les Ordres
+// des DEUX camps, les miens et ceux d'en face : impossible, apres coup, d'en retirer la
+// part de l'adversaire. On l'oublie donc une fois pour toutes, plutot que d'afficher
+// "Initie" sur un Ordre jamais tenu en main. A incrementer si son sens change encore.
+const MAITRISE_VERSION = 1;
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
@@ -1021,7 +1033,10 @@ async function loadStats() {
   if (!raw) return { ...DEFAULT_STATS };
   try {
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_STATS, ...parsed, orderPlays: parsed.orderPlays || {}, combos: parsed.combos || {} };
+    // Compteur d'une version anterieure (ou sans version) : il melangeait les Ordres d'en
+    // face aux miens, on repart de zero. Les autres stats sont gardees telles quelles.
+    const orderPlays = parsed.maitriseVersion === MAITRISE_VERSION ? (parsed.orderPlays || {}) : {};
+    return { ...DEFAULT_STATS, ...parsed, orderPlays, combos: parsed.combos || {}, maitriseVersion: MAITRISE_VERSION };
   } catch (e) {
     return { ...DEFAULT_STATS };
   }
@@ -2982,9 +2997,8 @@ const APP_STYLES = `
           letter-spacing: 0.04em; line-height: 1.3;
         }
         .hub-mode-tuile.test { opacity: 0.72; }
-        /* Liste des Ordres : 4 fiches visibles, glissement VERTICAL aimante. Chaque
-           fiche est une rangee (vignette a gauche, texte a droite) pour que quatre
-           tiennent a l'ecran sans rien ecraser. */
+        /* Page de maitrise : 4 Ordres par ligne, chacun avec sa vague et son
+           pourcentage. Trois lignes tiennent sous le titre sans defiler. */
         .hub-ordres-grille4 {
           display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px 8px;
           width: 100%; max-width: 420px; padding: 4px 2px 8px; box-sizing: border-box;
@@ -3026,13 +3040,15 @@ const APP_STYLES = `
         .hub-ordres-grille4 .hub-ordre-vignette:not(:disabled):active { transform: scale(1.08); z-index: 2; }
         .hub-ordres-grille4 .hub-ordre-vignette:disabled { cursor: default; }
         /* Le pourcentage, en haut a droite de la carte, sur le meme voile que le nom. */
+        /* Le pourcentage vit en BAS de la carte, sur un voile qui monte : a cote du nom, il
+           lui volait 30 px et coupait "Pestiférés" sur les ecrans de 390 px et moins. */
         .hub-ordre-pourcent {
-          position: absolute; top: 3px; right: 4px; z-index: 6; pointer-events: none;
-          font-family: 'Cinzel', serif; font-size: 9px; font-weight: 700;
+          position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; pointer-events: none;
+          padding: 9px 4px 3px; border-radius: 0 0 10px 10px;
+          background: linear-gradient(0deg, rgba(8,6,12,0.88) 0%, rgba(8,6,12,0.5) 60%, rgba(8,6,12,0) 100%);
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700; text-align: center;
           color: var(--gold-bright); text-shadow: 0 1px 3px rgba(0,0,0,0.95);
         }
-        /* Le nom laisse la place au pourcentage a sa droite. */
-        .hub-ordres-grille4 .hub-ordre-vignette-nom { padding-right: 30px; padding-left: 3px; text-align: left; }
 
         /* ---------- La vague de maitrise ---------- */
         .vague-maitrise {
@@ -3048,6 +3064,8 @@ const APP_STYLES = `
            couleur y est cale sur le BAS, pour rester aligne avec le gris en dessous. */
         .vague-pleine {
           position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden;
+          /* Sous la crete, un socle plein : sans lui, une lame de 6 px n'avait que des
+             bosses, la couche pleine du masque ne commencant qu'a 13 px. */
           transition: height 1.6s cubic-bezier(.22,.9,.3,1);
           /* La crete : une vague repetee sur 14 px en haut, plein en dessous. Le masque
              derive vers la gauche sans fin, c'est ce qui fait la maree. */
@@ -3057,8 +3075,8 @@ const APP_STYLES = `
           mask-image:
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 13 0, 27 0, 40 8 S 67 16, 80 8 V14 H0 Z' fill='%23000'/%3E%3C/svg%3E"),
             linear-gradient(#000, #000);
-          -webkit-mask-size: 80px 14px, 100% calc(100% - 13px);
-          mask-size: 80px 14px, 100% calc(100% - 13px);
+          -webkit-mask-size: 80px 14px, 100% 100%;
+          mask-size: 80px 14px, 100% 100%;
           -webkit-mask-position: 0 0, 0 13px;
           mask-position: 0 0, 0 13px;
           -webkit-mask-repeat: repeat-x, no-repeat;
@@ -3068,6 +3086,10 @@ const APP_STYLES = `
         @keyframes vague-derive {
           from { -webkit-mask-position: 0 0, 0 13px; mask-position: 0 0, 0 13px; }
           to { -webkit-mask-position: 80px 0, 0 13px; mask-position: 80px 0, 0 13px; }
+        }
+        /* Ordre acheve : la vague depasse le cadre (hauteur 130 %), le masque ne sert plus. */
+        .vague-maitrise.pleine .vague-pleine {
+          -webkit-mask-image: none; mask-image: none; animation: none;
         }
         /* Le portrait couleur est cale en BAS et mesure la hauteur de la carte entiere
            (pas celle de la zone remplie) : ainsi il se superpose exactement au gris, et la
@@ -3091,8 +3113,8 @@ const APP_STYLES = `
           box-shadow: 0 14px 34px rgba(0,0,0,0.6);
         }
         .vague-maitrise.grand .vague-pleine {
-          -webkit-mask-size: 120px 20px, 100% calc(100% - 19px);
-          mask-size: 120px 20px, 100% calc(100% - 19px);
+          -webkit-mask-size: 120px 20px, 100% 100%;
+          mask-size: 120px 20px, 100% 100%;
           -webkit-mask-position: 0 0, 0 19px;
           mask-position: 0 0, 0 19px;
           animation-name: vague-derive-grand;
@@ -3106,8 +3128,8 @@ const APP_STYLES = `
         }
 
         /* ---------- Detail d'un Ordre ---------- */
-        .ordre-detail-voile { padding: 18px; }
         .ordre-detail {
+          position: relative;
           display: flex; align-items: flex-start; gap: 14px;
           width: 100%; max-width: 400px; box-sizing: border-box;
           padding: 16px; border-radius: 18px;
@@ -3146,6 +3168,7 @@ const APP_STYLES = `
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
         }
+        .ordre-detail-fermer { position: absolute; top: -14px; right: -14px; width: 34px; height: 34px; }
         @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
         .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
         .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
@@ -6619,6 +6642,12 @@ export default function Emprise() {
   }
   const [activeModal, setActiveModal] = useState(null);
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
+  useEffect(() => {
+    if (!ordreDetail) return;
+    const onKey = (e) => { if (e.key === "Escape") setOrdreDetail(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ordreDetail]);
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
@@ -6964,8 +6993,6 @@ export default function Emprise() {
   useEffect(() => {
     if (gameOver && !statsRecordedRef.current) {
       statsRecordedRef.current = true;
-      // En Confluence, seuls les Ordres réellement piochés (draft.pool) comptent — pas les
-      // 10 Ordres du roster complet, dont 2 n'ont jamais été joués cette partie.
       // Seuls les Ordres que J'AI joues nourrissent ma maitrise. Compter aussi ceux de
       // l'adversaire (c'etait le cas) faisait progresser des Ordres qu'on n'avait jamais
       // tenus en main. En duel local, les deux camps sont humains sur ce meme appareil :
@@ -7033,7 +7060,15 @@ export default function Emprise() {
   // Au chargement de l'appli : est-ce qu'il existe une partie sauvegardée à proposer ?
   useEffect(() => {
     try {
-      if (sessionStorage.getItem("emprise-save")) setHasSavedGame(true);
+      // Une sauvegarde de partie FINIE (laissee par une version anterieure) ne vaut pas un
+      // bouton "Reprendre" : on la jette au lieu de la proposer.
+      const brute = sessionStorage.getItem("emprise-save");
+      if (brute) {
+        let finie = false;
+        try { finie = !!JSON.parse(brute).gameOver; } catch (e) { finie = true; }
+        if (finie) sessionStorage.removeItem("emprise-save");
+        else setHasSavedGame(true);
+      }
     } catch (e) { /* stockage indisponible (mode privé, etc.) : tant pis, pas de sauvegarde */ }
   }, []);
 
@@ -7042,6 +7077,9 @@ export default function Emprise() {
       const raw = sessionStorage.getItem("emprise-save");
       if (!raw) return;
       const data = JSON.parse(raw);
+      // Sauvegarde d'une partie deja finie, laissee par une version anterieure : rien a
+      // reprendre, et la reprendre recompterait ses statistiques. On la jette.
+      if (data.gameOver) { clearSavedGame(); return; }
       const isConfluence = !!data.confluenceActive;
       setBoard(data.board.map(hydrateFromSave));
       setBlueHand(data.blueHand.map(hydrateFromSave));
@@ -9045,6 +9083,13 @@ export default function Emprise() {
     // Les parties en ligne ne sont pas sauvegardées localement : Firestore fait déjà foi,
     // et la reprise locale ne connaît pas le code de partie / le rôle en ligne.
     if (phase !== "play" || mode === "online") return;
+    // Une partie TERMINEE n'a rien a reprendre. La garder en sauvegarde faisait
+    // reapparaitre "Reprendre la partie en cours" apres un rechargement, et la reprise
+    // rejouait l'enregistrement des statistiques (le verrou est neuf a chaque
+    // chargement) : chaque aller-retour recharger -> Reprendre offrait une partie de
+    // maitrise a chaque Ordre de la main, sans jouer un coup. On efface des que l'issue
+    // tombe.
+    if (gameOver) { clearSavedGame(); return; }
     try {
       const data = {
         board: board.map(stripForSave),
@@ -9454,6 +9499,8 @@ export default function Emprise() {
                     <div className="ordre-detail-parties">
                       {m.parties === 0
                         ? "Jamais joué"
+                        : m.parties >= MAITRISE_PARTIES_MAX
+                        ? `${m.parties} parties · maîtrise complète`
                         : `${m.parties} partie${m.parties > 1 ? "s" : ""} sur ${MAITRISE_PARTIES_MAX}`}
                     </div>
                     {m.suivant && (
@@ -9463,6 +9510,9 @@ export default function Emprise() {
                     )}
                     <p className="ordre-detail-desc">{order.desc}</p>
                   </div>
+                  <button className="arenes-fermer ordre-detail-fermer" onClick={() => setOrdreDetail(null)} aria-label="Fermer">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
                 </div>
               </div>
             );
