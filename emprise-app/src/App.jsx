@@ -2543,8 +2543,6 @@ const APP_STYLES = `
         .landing.intro-e0 .landing-title, .landing.intro-e1 .landing-title,
         .landing.intro-e0 .landing-subtitle, .landing.intro-e1 .landing-subtitle,
         .landing.intro-e0 .league-badge, .landing.intro-e1 .league-badge,
-        .landing.intro-e0 .landing-cta, .landing.intro-e1 .landing-cta,
-        .landing.intro-e0 .landing-gear, .landing.intro-e1 .landing-gear,
         .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
         .landing.intro-e0 .hub-jouer-rang, .landing.intro-e1 .hub-jouer-rang,
         .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
@@ -2556,8 +2554,6 @@ const APP_STYLES = `
         .landing.intro-e2 .landing-title, .landing.intro-e3 .landing-title,
         .landing.intro-e2 .landing-subtitle, .landing.intro-e3 .landing-subtitle,
         .landing.intro-e2 .league-badge, .landing.intro-e3 .league-badge,
-        .landing.intro-e2 .landing-cta, .landing.intro-e3 .landing-cta,
-        .landing.intro-e2 .landing-gear, .landing.intro-e3 .landing-gear,
         .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
         .landing.intro-e2 .hub-jouer-rang, .landing.intro-e3 .hub-jouer-rang,
         .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
@@ -2571,8 +2567,6 @@ const APP_STYLES = `
         .landing.intro-e2 .landing-title { transition-delay: .1s; }
         .landing.intro-e2 .landing-subtitle { transition-delay: .24s; }
         .landing.intro-e2 .league-badge { transition-delay: .36s; }
-        .landing.intro-e2 .landing-cta { transition-delay: .48s; }
-        .landing.intro-e2 .landing-gear { transition-delay: .6s; }
         .landing.intro-e2 .hub-haut { transition-delay: 0s; }
         .landing.intro-e2 .hub-jouer-rang { transition-delay: .34s; }
         .landing.intro-e2 .hub-nav { transition-delay: .5s; }
@@ -2588,23 +2582,6 @@ const APP_STYLES = `
            La discretion passe par la COULEUR et la BORDURE, jamais par opacity : la
            sequence d'intro pilote deja opacity sur cet element (.landing.intro-e3 ...),
            regle plus specifique qui ecraserait toute valeur posee ici. */
-        /* L'engrenage doit se poser DANS l'image, pas dessus : opacite basse, bordure
-           quasi effacee, et un leger assombrissement pour qu'il ne brille jamais sur un
-           fond clair. Il reste trouvable, il cesse d'attirer l'oeil. */
-        .landing-gear {
-          position: absolute; top: 20px; right: 20px; z-index: 35;
-          width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
-          font-size: 15px; line-height: 1; padding: 0;
-          color: rgba(203,164,86,0.16); background: transparent;
-          border: 1px solid rgba(203,164,86,0.03);
-          filter: brightness(0.75) contrast(0.85);
-          transition: color .2s, border-color .2s, background .2s, filter .2s, transform .35s ease;
-        }
-        .landing-gear:hover {
-          color: var(--gold-bright); border-color: rgba(203,164,86,0.4);
-          background: rgba(203,164,86,0.1); transform: rotate(60deg); filter: none;
-        }
-        .landing-gear:active { transform: rotate(60deg) scale(0.94); }
 
         /* Modale Parametres : lignes cliquables, avec une bascule pour les reglages. */
         /* 380 px et pas plus : le voile qui entoure le panneau a 24 px de marge
@@ -2643,7 +2620,6 @@ const APP_STYLES = `
 
         @media (prefers-reduced-motion: reduce) {
           .landing-voile { display: none; }
-          .landing-gear:hover { transform: none; }
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
         .landing-line { width: 46px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
@@ -2994,10 +2970,6 @@ const APP_STYLES = `
           display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
         }
         .modes-panel .reset-btn { margin-top: 14px; }
-        .hub-modes-grille {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-          width: 100%; max-width: 400px; margin-top: 4px;
-        }
         .hub-mode-tuile {
           display: flex; align-items: center; gap: 9px;
           padding: 8px 10px; min-height: 46px; box-sizing: border-box;
@@ -3195,24 +3167,12 @@ const APP_STYLES = `
           background: rgba(203,164,86,0.25);
         }
         .ordre-detail-parties { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
-        .ordre-detail-suivant { font-size: 11px; color: var(--muted); }
-        .ordre-detail-suivant b { color: var(--gold); font-weight: 700; }
         .ordre-detail-desc {
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
         }
         .ordre-detail-fermer { position: absolute; top: -14px; right: -14px; width: 34px; height: 34px; }
         @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
-        .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
-        .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-        }
-        .hub-carrousel-indice {
-          font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
-          color: var(--muted); flex: none; padding-bottom: 2px;
-        }
-        .hub-ordre-fiche { cursor: default; }
-        .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
         /* ---------- Barre de navigation : socle de pierre et metal ----------
            Le rendu vise une barre d'interface de jeu, pas une barre d'onglets de site :
            un socle sombre borde d'un liseré clair en haut (l'arete captant la lumiere),
@@ -3337,13 +3297,6 @@ const APP_STYLES = `
            l'arene sort du noir la premiere, le reste la rejoint a l'etape 2. Cacher ici
            toute la page (.hub-pages) empechait justement l'arene de paraitre avant. */
 
-        .landing-cta {
-          font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 14px; text-transform: uppercase;
-          color: #2a2413; background: linear-gradient(180deg, #cba456, #8f7238); border: none;
-          padding: 13px 34px; border-radius: 999px; cursor: pointer;
-          box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 0 1px rgba(203,164,86,0.3);
-        }
-        .landing-cta:hover { filter: brightness(1.08); }
         .landing-link {
           margin-top: 14px; background: none; border: none; cursor: pointer;
           font-family: 'Spectral', Georgia, serif; font-size: 12.5px; color: var(--muted);
@@ -3371,7 +3324,6 @@ const APP_STYLES = `
         }
         .back-btn:hover { color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(203,164,86,0.14); }
 
-        .landing-links { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
 
         .tut-text { text-align: center; max-width: 380px; margin: 0 0 4px; }
         .tut-board-wrap {
@@ -3389,40 +3341,7 @@ const APP_STYLES = `
           50% { box-shadow: 0 0 0 5px rgba(232,200,119,0.45), 0 0 22px rgba(232,200,119,0.55); }
         }
 
-        .landing.landing-exit { animation: landing-shake 0.5s ease; }
-        @keyframes landing-shake {
-          0%,100% { transform: translate(0,0); filter: brightness(1); }
-          20% { transform: translate(-2px, 1px); }
-          40% { transform: translate(2px, -1px); filter: brightness(1.15); }
-          60% { transform: translate(-1px, -1px); }
-          80% { transform: translate(1px, 1px); filter: brightness(1.3); }
-        }
 
-        .rift-overlay {
-          position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
-          pointer-events: none; overflow: hidden;
-        }
-        .rift-ring {
-          position: absolute; border-radius: 50%; border: 2px solid var(--gold-bright);
-          opacity: 0; box-shadow: 0 0 30px rgba(203,164,86,0.6);
-        }
-        .ring-1 { width: 20px; height: 20px; animation: rift-expand 1.2s ease-out forwards; }
-        .ring-2 { width: 20px; height: 20px; border-color: var(--combo); animation: rift-expand 1.2s ease-out 0.08s forwards; }
-        .ring-3 { width: 20px; height: 20px; border-color: var(--blue-bright); animation: rift-expand 1.2s ease-out 0.16s forwards; }
-        @keyframes rift-expand {
-          0% { width: 10px; height: 10px; opacity: 0.9; }
-          70% { opacity: 0.6; }
-          100% { width: 900px; height: 900px; opacity: 0; }
-        }
-        .rift-flash {
-          position: absolute; inset: 0; background: radial-gradient(circle, rgba(232,200,119,0.9), rgba(232,200,119,0) 55%);
-          animation: rift-flash-anim 1.2s ease-out forwards;
-        }
-        @keyframes rift-flash-anim {
-          0% { opacity: 0; }
-          15% { opacity: 1; }
-          100% { opacity: 0; }
-        }
 
         .rules-panel { max-height: 78vh; overflow-y: auto; }
         .rules-section { text-align: left; margin-bottom: 12px; }
@@ -3436,12 +3355,6 @@ const APP_STYLES = `
           -webkit-background-clip: text; background-clip: text; color: transparent;
           animation: title-shine 9s ease-in-out infinite; }
 
-        .inline-score {
-          display: inline-flex; align-items: center; justify-content: center; margin-left: 8px;
-          min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; vertical-align: middle;
-          background: var(--panel); border: 1px solid rgba(203,164,86,0.25);
-        }
         .inline-score.blue { color: var(--blue-bright); border-color: var(--blue-bright); }
         .inline-score.red { color: var(--red-bright); border-color: var(--red-bright); }
 
@@ -5221,13 +5134,6 @@ const APP_STYLES = `
           background: linear-gradient(90deg, #b89742, #e8c877);
         }
         .profil-ligne-nombre { flex: none; min-width: 18px; text-align: right; font-size: 11px; font-weight: 700; color: var(--gold); }
-        .trophees-chip {
-          margin-left: 7px; padding: 1px 7px 1px 8px; border-radius: 999px;
-          font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
-          color: var(--gold-bright); background: rgba(203,164,86,0.12);
-          border: 1px solid rgba(203,164,86,0.35); vertical-align: 1px;
-        }
-        .trophees-icone { font-size: 10px; }
         .revanche-attente { font-size: 11px; color: var(--muted); text-align: center; font-style: italic; }
         /* Code du tournoi : lisible sans crier — l'arbre au-dessous est la vraie vedette,
            contrairement au mode "Jouer avec un ami" où le code occupe l'écran. */
@@ -5720,7 +5626,6 @@ const APP_STYLES = `
            un pseudo-element SANS masque (::after est masque avec son parent, ::before non
            puisqu'on le sort du cadre), sinon le halo serait lui aussi decoupe a la forme
            du rocher et ne rayonnerait pas. */
-        /* Etape en cours : c'est le halo separe (.sm-halo-courant) qui la signale. */
         /* Le halo autour du rocher courant : un calque separe, place juste derriere le
            noeud et non masque, pour rayonner au-dela de la pierre. */
         /* Etape en cours : un ANNEAU pose autour du rocher. Il est rond, volontairement :
@@ -6093,38 +5998,9 @@ const APP_STYLES = `
           to   { opacity: 1; transform: translateY(0); }
         }
 
-        .chapter-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 
-        /* Tournoi : voir le bloc de rendu pour le détail, géométrie calculée en JS,
-           traits en SVG, cartes en style inline (positions précises nécessaires). */
-        .chapter-card {
-          position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 14px;
-          border-radius: 12px; background: var(--panel); border: 1px solid rgba(203,164,86,0.15);
-          cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s;
-        }
-        .chapter-card:hover { border-color: var(--gold); transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
-        .chapter-card.completed { border-color: rgba(120,190,120,0.4); background: linear-gradient(160deg, rgba(60,90,60,0.18), var(--panel)); }
-        .chapter-card.locked { opacity: 0.85; cursor: not-allowed; }
-        .chapter-card.locked:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
-        .chapter-thumb {
-          width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-          border: 1px solid rgba(203,164,86,0.3); box-shadow: 0 0 10px rgba(0,0,0,0.4);
-        }
-        .chapter-thumb.thumb-teaser { filter: grayscale(0.85) brightness(0.55) blur(2px); }
-        .chapter-info { flex: 1; min-width: 0; text-align: left; }
-        .chapter-number { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-        .chapter-name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.04em; color: var(--gold-bright); margin-top: 1px; }
-        .chapter-lock-msg { font-size: 10.5px; color: var(--muted); font-style: italic; margin-top: 4px; }
-        .chapter-done-msg { font-size: 10.5px; color: #b6e0b6; margin-top: 4px; }
-        .chapter-progress-text { font-size: 10px; color: var(--muted); margin-top: 4px; }
-        .chapter-progress-bar { width: 100%; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.08); margin-top: 4px; overflow: hidden; }
-        .chapter-progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); border-radius: 999px; transition: width .3s; }
 
         .diff-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .diff-section-label {
-          font-family: 'Cinzel', serif; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
-          color: var(--gold); display: flex; align-items: center; gap: 8px; margin: 14px 0 2px;
-        }
         .diff-section-label:first-child { margin-top: 2px; }
         .diff-section-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(203,164,86,0.35), transparent); }
         .diff-option { padding: 13px 16px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(203,164,86,0.15);
@@ -6633,14 +6509,12 @@ export default function Emprise() {
   const shakeTimerRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
-  const riftTimerRef = useRef(null);
   useEffect(() => {
     return () => {
       clearTimeout(flashTimerRef.current);
       clearTimeout(shakeTimerRef.current);
       clearTimeout(shakeBigTimerRef.current);
       clearTimeout(poisonTimerRef.current);
-      clearTimeout(riftTimerRef.current);
       clearTimeout(bannerTimerRef.current);
       clearTimeout(bannerTimer2Ref.current);
     };
@@ -6896,7 +6770,6 @@ export default function Emprise() {
   // commençait toujours, ce +1 pouvait être écrit en dur ; depuis le tirage au sort, il
   // doit suivre le tirage, sinon Azur cumule l'avantage de position ET le bonus.
   const [firstPlayer, setFirstPlayer] = useState("blue");
-  const [transitioning, setTransitioning] = useState(false);
   const [tut, setTut] = useState({ stepIdx: 0, board: null, resolved: false, flashes: {} });
 
   const { blueCount, redCount, blueScore, redScore } = useMemo(() => {
@@ -8115,14 +7988,6 @@ export default function Emprise() {
     return unsub;
   }, [fileAttente, myUid]);
 
-  function withRift(action, duration = 500) {
-    setTransitioning(true);
-    clearTimeout(riftTimerRef.current);
-    riftTimerRef.current = setTimeout(() => {
-      setTransitioning(false);
-      action();
-    }, duration);
-  }
 
   // (L'ancien bouton "Nouvelle partie" ouvrait un ecran de choix de Voie ; le hub
   // presente ces choix directement sur la page Jouer.)
@@ -9313,7 +9178,7 @@ export default function Emprise() {
       <style>{APP_STYLES}</style>
 
       {phase === "landing" && (
-        <div className={`landing hub intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
+        <div className={`landing hub intro-e${introEtape}`}>
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
               apparaître l'illustration. Retiré du DOM une fois l'intro finie. */}
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
@@ -9949,14 +9814,6 @@ export default function Emprise() {
         </div>
       )}
 
-      {transitioning && (
-        <div className="rift-overlay">
-          <span className="rift-ring ring-1" />
-          <span className="rift-ring ring-2" />
-          <span className="rift-ring ring-3" />
-          <span className="rift-flash" />
-        </div>
-      )}
 
       {/* La carte du mode Histoire ("chapters") s'affiche en plein ecran, comme l'accueil
           et le plateau : le bandeau global mangerait 180 px de haut sur une carte qu'on
