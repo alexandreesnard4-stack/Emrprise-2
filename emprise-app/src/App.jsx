@@ -538,7 +538,7 @@ const ARENES = {
 const LEAGUES = [
   { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp" },
   { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp" },
-  { name: "Or", min: 800 },
+  { name: "Or", min: 800, hub: "/arenes/or-hub.webp" },
   { name: "Platine", min: 1500 },
   { name: "Légende", min: 2500 },
 ];
