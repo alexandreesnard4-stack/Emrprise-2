@@ -532,15 +532,15 @@ const ARENES = {
   Légende: { img: "/arenes/legende.webp", marge: 13, braise: "rgba(255,95,35,0.85)" },
 };
 
-// hub : l'illustration de l'arene, quand elle existe. Les ligues qui n'en ont pas encore
-// s'affichent en chantier plutot que de laisser un trou : le joueur voit ainsi ce qui
-// l'attend, et que ca se construit.
+// hub : l'illustration de l'arene. Les cinq en ont une desormais ; le rendu sait toujours
+// afficher une ligue en chantier, au cas ou une nouvelle viendrait s'ajouter avant son
+// decor.
 const LEAGUES = [
   { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp" },
   { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp" },
   { name: "Or", min: 800, hub: "/arenes/or-hub.webp" },
   { name: "Platine", min: 1500, hub: "/arenes/platine-hub.webp" },
-  { name: "Légende", min: 2500 },
+  { name: "Légende", min: 2500, hub: "/arenes/legende-hub.webp" },
 ];
 function getLeague(trophies) {
   let current = LEAGUES[0];
@@ -2395,17 +2395,37 @@ const APP_STYLES = `
            proprietes que le navigateur sait traiter sans repeindre : l'entree reste fluide
            meme sur un telephone modeste. L'etape 3 ne porte aucune regle : c'est l'etat
            normal de l'accueil, une fois l'intro finie. */
+        /* Le voile est le noir d'ou tout sort. Il passe DERRIERE l'arene (z-index 40
+           contre 41) : l'arene se detache ainsi sur le noir pendant qu'il s'efface, au
+           lieu d'attendre qu'il ait fini. */
         .landing-voile {
           position: absolute; inset: 0; z-index: 40; pointer-events: none;
           background: #000000;
-          transition: opacity 1.6s ease;
+          transition: opacity 2.1s ease;
         }
         .landing.intro-e0 .landing-voile { opacity: 1; }
         .landing.intro-e1 .landing-voile { opacity: 0; }
+        .landing.intro-e0 .hub-arene, .landing.intro-e1 .hub-arene { position: relative; z-index: 41; }
 
-        /* L'illustration : part legerement agrandie et invisible, puis se pose. */
-        .landing.intro-e0 .landing-hero { opacity: 0; transform: translateX(-50%) scale(1.05); }
-        .landing.intro-e1 .landing-hero,
+        /* L'ARENE ouvre la marche : elle sort du noir pendant que tout le reste attend.
+           Aucune regle a l'etape 3 — l'accueil y est dans son etat normal, et l'arene y
+           retrouve sa transition courte, celle qui la fait avancer sous le doigt. */
+        .landing.intro-e0 .hub-arene { opacity: 0; transform: translateY(18px) scale(0.94); }
+        .landing.intro-e1 .hub-arene,
+        .landing.intro-e2 .hub-arene {
+          opacity: 1; transform: none;
+          transition: opacity 1.5s ease, transform 1.9s cubic-bezier(.22,.9,.3,1);
+        }
+        /* Le nom de l'arene suit son illustration, sans decalage : ils ne font qu'un. */
+        .landing.intro-e0 .hub-arene-nom { opacity: 0; }
+        .landing.intro-e1 .hub-arene-nom, .landing.intro-e2 .hub-arene-nom {
+          opacity: 1; transition: opacity 1.5s ease .2s;
+        }
+
+        /* L'illustration de fond : elle montait des l'etape 1, elle attend maintenant
+           l'etape 2 pour ne pas voler la vedette a l'arene. */
+        .landing.intro-e0 .landing-hero,
+        .landing.intro-e1 .landing-hero { opacity: 0; transform: translateX(-50%) scale(1.05); }
         .landing.intro-e2 .landing-hero,
         .landing.intro-e3 .landing-hero {
           opacity: 1; transform: translateX(-50%) scale(1);
@@ -2419,7 +2439,12 @@ const APP_STYLES = `
         .landing.intro-e0 .landing-subtitle, .landing.intro-e1 .landing-subtitle,
         .landing.intro-e0 .league-badge, .landing.intro-e1 .league-badge,
         .landing.intro-e0 .landing-cta, .landing.intro-e1 .landing-cta,
-        .landing.intro-e0 .landing-gear, .landing.intro-e1 .landing-gear {
+        .landing.intro-e0 .landing-gear, .landing.intro-e1 .landing-gear,
+        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
+        .landing.intro-e0 .hub-jouer-rang, .landing.intro-e1 .hub-jouer-rang,
+        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
+        .landing.intro-e0 .hub-avis, .landing.intro-e1 .hub-avis,
+        .landing.intro-e0 .landing-link, .landing.intro-e1 .landing-link {
           opacity: 0; transform: translateY(18px);
         }
         .landing.intro-e2 .landing-emblem, .landing.intro-e3 .landing-emblem,
@@ -2427,7 +2452,12 @@ const APP_STYLES = `
         .landing.intro-e2 .landing-subtitle, .landing.intro-e3 .landing-subtitle,
         .landing.intro-e2 .league-badge, .landing.intro-e3 .league-badge,
         .landing.intro-e2 .landing-cta, .landing.intro-e3 .landing-cta,
-        .landing.intro-e2 .landing-gear, .landing.intro-e3 .landing-gear {
+        .landing.intro-e2 .landing-gear, .landing.intro-e3 .landing-gear,
+        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
+        .landing.intro-e2 .hub-jouer-rang, .landing.intro-e3 .hub-jouer-rang,
+        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
+        .landing.intro-e2 .hub-avis, .landing.intro-e3 .hub-avis,
+        .landing.intro-e2 .landing-link, .landing.intro-e3 .landing-link {
           opacity: 1; transform: translateY(0);
           transition: opacity .85s ease, transform .85s cubic-bezier(.22,.9,.3,1);
         }
@@ -2438,6 +2468,9 @@ const APP_STYLES = `
         .landing.intro-e2 .league-badge { transition-delay: .36s; }
         .landing.intro-e2 .landing-cta { transition-delay: .48s; }
         .landing.intro-e2 .landing-gear { transition-delay: .6s; }
+        .landing.intro-e2 .hub-haut { transition-delay: 0s; }
+        .landing.intro-e2 .hub-jouer-rang { transition-delay: .34s; }
+        .landing.intro-e2 .hub-nav { transition-delay: .5s; }
         /* Le titre garde son reflet dore, mais seulement une fois pose : sinon les deux
            animations (reflet + glissement) se disputent la meme propriete. */
         .landing.intro-e0 .landing-title, .landing.intro-e1 .landing-title,
@@ -2711,9 +2744,26 @@ const APP_STYLES = `
         }
         /* L'illustration prend toute la hauteur qui reste sous le nom. */
         .arene-page-corps {
-          flex: 1; min-height: 0; width: 100%;
+          flex: 1; min-height: 0; width: 100%; position: relative;
           display: flex; align-items: center; justify-content: center;
         }
+        /* Arene pas encore atteinte : on la voit, mais eteinte, et le cadenas tranche. */
+        .arene-page-corps.verrouillee .arene-page-img,
+        .arene-page-corps.verrouillee .arene-page-chantier {
+          filter: grayscale(0.75) brightness(0.42) contrast(0.9);
+        }
+        .arene-cadenas {
+          position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+          width: 62px; height: 62px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.72); border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+        }
+        .arene-cadenas svg {
+          width: 30px; height: 30px; fill: var(--gold-bright);
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
+        .arene-page-seuil.a-conquerir { color: var(--gold); font-weight: 700; }
         .arene-page-img {
           max-width: min(84vw, 380px); max-height: 100%; width: auto; height: auto;
           object-fit: contain; display: block;
@@ -3005,19 +3055,9 @@ const APP_STYLES = `
         @media (prefers-reduced-motion: reduce) {
           .hub-onglet-central.actif::after { animation: none; opacity: 0.5; }
         }
-        /* La sequence d'entree existante revele aussi le hub : memes etapes que
-           l'ancien bouton Nouvelle partie. */
-        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
-        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
-        .landing.intro-e0 .hub-pages, .landing.intro-e1 .hub-pages { opacity: 0; }
-        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
-        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
-        .landing.intro-e2 .hub-pages, .landing.intro-e3 .hub-pages {
-          opacity: 1; transition: opacity .55s ease;
-        }
-        .landing.intro-e2 .hub-pages { transition-delay: .48s; }
-        .landing.intro-e2 .hub-haut { transition-delay: .6s; }
-        .landing.intro-e2 .hub-nav { transition-delay: .6s; }
+        /* La sequence d'entree du hub est decrite plus haut, avec celle de l'accueil :
+           l'arene sort du noir la premiere, le reste la rejoint a l'etape 2. Cacher ici
+           toute la page (.hub-pages) empechait justement l'arene de paraitre avant. */
 
         .landing-cta {
           font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 14px; text-transform: uppercase;
@@ -6384,9 +6424,9 @@ export default function Emprise() {
   const [introEtape, setIntroEtape] = useState(0);
   useEffect(() => {
     if (reducedMotion) { setIntroEtape(3); return; } // animations réduites : accueil complet tout de suite
-    const t1 = setTimeout(() => setIntroEtape(1), 700);   // l'illustration monte du noir
-    const t2 = setTimeout(() => setIntroEtape(2), 2400);  // titre, sous-titre, bouton
-    const t3 = setTimeout(() => setIntroEtape(3), 3800);  // fin : tout est en place
+    const t1 = setTimeout(() => setIntroEtape(1), 650);   // l'arene sort du noir, seule
+    const t2 = setTimeout(() => setIntroEtape(2), 2600);  // le reste de l'accueil la rejoint
+    const t3 = setTimeout(() => setIntroEtape(3), 4100);  // fin : tout est en place
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -9187,6 +9227,10 @@ export default function Emprise() {
                 >
                   {echelle.map((l, i) => {
                     const ici = l.name === ligue.name;
+                    // Verrouillee tant que les trophees n'atteignent pas son seuil. On la
+                    // montre quand meme, assombrie : savoir ce qu'on vise vaut mieux qu'une
+                    // case vide, et le cadenas dit clairement que ce n'est pas encore a soi.
+                    const verrouillee = (stats.trophies || 0) < l.min;
                     return (
                       <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
                         {i > 0 && (
@@ -9199,12 +9243,16 @@ export default function Emprise() {
                             l'arene se pose, sans avoir a descendre le regard. */}
                         <div className="arene-page-entete">
                           <div className="arene-page-nom">Arène {l.name}</div>
-                          <div className="arene-page-seuil">
-                            {l.min === 0 ? "Dès votre premier duel" : `À partir de ${l.min} trophées`}
+                          <div className={`arene-page-seuil ${verrouillee ? "a-conquerir" : ""}`}>
+                            {l.min === 0
+                              ? "Dès votre premier duel"
+                              : verrouillee
+                              ? `Encore ${l.min - (stats.trophies || 0)} trophées`
+                              : `À partir de ${l.min} trophées`}
                           </div>
                           {ici && <span className="arene-page-ici">Vous êtes ici</span>}
                         </div>
-                        <div className="arene-page-corps">
+                        <div className={`arene-page-corps ${verrouillee ? "verrouillee" : ""}`}>
                           {l.hub ? (
                             <img className="arene-page-img" src={l.hub} alt="" />
                           ) : (
@@ -9212,6 +9260,13 @@ export default function Emprise() {
                               <svg viewBox="0 0 24 24"><path d="M12 2 2 20h20L12 2zm0 5 6 11H6l6-11zm-1 3v4h2v-4h-2zm0 5v2h2v-2h-2z" /></svg>
                               <span>En construction</span>
                             </div>
+                          )}
+                          {verrouillee && (
+                            <span className="arene-cadenas" aria-label="Arène verrouillée">
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 10V7a5 5 0 0 1 10 0v3h1.5A1.5 1.5 0 0 1 20 11.5v8A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-8A1.5 1.5 0 0 1 5.5 10H7zm2 0h6V7a3 3 0 0 0-6 0v3zm3 4.5a1.6 1.6 0 0 0-.8 3v1.3a.8.8 0 0 0 1.6 0V17.5a1.6 1.6 0 0 0-.8-3z" />
+                              </svg>
+                            </span>
                           )}
                         </div>
                       </section>
