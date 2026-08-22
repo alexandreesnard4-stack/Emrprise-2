@@ -3224,8 +3224,10 @@ const APP_STYLES = `
         .hub-onglet {
           flex: 1; max-width: 150px; position: relative;
           display: flex; flex-direction: column; align-items: center; gap: 4px;
-          padding: 8px 6px; background: transparent; cursor: pointer;
-          border: 1px solid transparent; border-radius: 13px;
+          padding: 8px 6px; cursor: pointer;
+          background: linear-gradient(180deg, rgba(24,19,34,0.96), rgba(8,6,12,0.94));
+          border: 1px solid rgba(203,164,86,0.16); border-radius: 13px;
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.05);
           color: var(--muted);
           transition: color .22s, transform .18s, background .22s, border-color .22s;
         }
@@ -3238,30 +3240,25 @@ const APP_STYLES = `
            barre sans artifice. object-fit: contain, jamais cover — le bouclier est plus
            haut que large, on ne le rogne pas. */
         .hub-onglet-img {
-          width: 30px; height: 30px; object-fit: contain; border: none;
+          width: 34px; height: 34px; object-fit: contain; border: none;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
           transition: filter .22s, opacity .22s, transform .22s;
         }
-        /* Le disque sombre derriere l'icone : meme famille que le cadenas des arenes. Il
-           assied l'illustration detouree, qui flottait sur la barre. */
-        .hub-onglet-img {
-          border-radius: 50%; padding: 6px; box-sizing: content-box;
-          background: radial-gradient(circle at 50% 38%, rgba(24,19,34,0.95) 60%, rgba(8,6,12,0.92) 100%);
-          box-shadow: 0 3px 10px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,240,205,0.06);
-        }
-        .hub-onglet.actif .hub-onglet-img {
-          box-shadow: 0 3px 12px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,240,205,0.12),
-                      0 0 0 1px rgba(203,164,86,0.45);
-        }
+        /* Pas de pastille ronde derriere l'icone : c'est le BOUTON entier qui porte le
+           fond sombre, d'un bord a l'autre de sa surface. */
         .hub-onglet:not(.actif) .hub-onglet-img {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.5) brightness(0.62);
           opacity: 0.85;
+        }
+        .hub-onglet.actif {
+          border-color: rgba(203,164,86,0.55);
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.12), 0 0 14px rgba(203,164,86,0.16);
         }
         .hub-onglet.actif .hub-onglet-img {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(232,200,119,0.55)) brightness(1.08);
           transform: scale(1.06);
         }
-        .hub-onglet-central .hub-onglet-img { width: 40px; height: 40px; padding: 7px; }
+        .hub-onglet-central .hub-onglet-img { width: 44px; height: 44px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
