@@ -167,6 +167,45 @@ function RecitsAttente({ actif, surImage }) {
   );
 }
 
+// Portrait d'un Ordre dont la couleur monte comme une maree, a la hauteur de la maitrise.
+// Deux couches : le portrait grise en dessous, le portrait en couleur par-dessus, decoupe
+// a la hauteur voulue avec une crete ondulee qui derive sans fin. Un voile de la couleur
+// de l'Ordre teinte la partie remplie, pour que la vague soit bien LA couleur de la carte.
+// Le niveau monte depuis zero a l'apparition : on voit la maree arriver.
+function VagueMaitrise({ order, taux, grand }) {
+  const [niveau, setNiveau] = useState(0);
+  const [cote, setCote] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => setNiveau(taux), 60);
+    return () => clearTimeout(t);
+  }, [taux]);
+  // Le portrait couleur doit mesurer la carte entiere : on lit son cote et on le suit
+  // si la fenetre change.
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    // clientWidth : l interieur du cadre, bordure exclue — c est la que vivent les portraits.
+    const lire = () => setCote(el.clientWidth);
+    lire();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(lire) : null;
+    if (ro) ro.observe(el);
+    return () => { if (ro) ro.disconnect(); };
+  }, []);
+  const couleur = MAITRISE_COULEURS[order.key] || "rgba(203,164,86,0.8)";
+  // Une seule partie vaut deja une lame d'eau visible : a 1 % on ne voyait rien.
+  const hauteur = niveau === 0 ? 0 : Math.max(4, Math.round(niveau * 100));
+  return (
+    <div ref={ref} className={`vague-maitrise ${grand ? "grand" : ""} ${taux === 0 ? "vide" : ""}`}
+         style={{ "--vague-couleur": couleur, "--vague-cote": cote ? `${cote}px` : "100%" }}>
+      <img className="vague-gris" src={order.portrait} alt={order.name} />
+      <div className="vague-pleine" style={{ height: `${hauteur}%` }}>
+        <img className="vague-couleur" src={order.portrait} alt="" />
+        <div className="vague-teinte" />
+      </div>
+    </div>
+  );
+}
+
 function ComingSoonThumb({ order }) {
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef(null);
@@ -473,6 +512,55 @@ function titresDuProfil(stats) {
 function titrePrincipal(stats) {
   const t = titresDuProfil(stats);
   return t.titres.length ? t.titres[0].combo.nom : null;
+}
+
+// ---------- Maitrise des Ordres ----------
+// Un Ordre se maitrise en le jouant : 6 500 parties pour en faire le tour. La progression
+// se lit en pourcentage de ce total, et franchit sept rangs en chemin. Les paliers ne
+// sont pas espaces egalement : les premiers viennent vite, pour que l'on sente tout de
+// suite que l'on avance, les derniers se meritent — 6 500 parties, c'est une vie de jeu.
+const MAITRISE_PARTIES_MAX = 6500;
+const MAITRISE_RANGS = [
+  { nom: "Recrue", min: 0 },
+  { nom: "Initié", min: 25 },
+  { nom: "Disciple", min: 100 },
+  { nom: "Vétéran", min: 350 },
+  { nom: "Maître", min: 1000 },
+  { nom: "Archonte", min: 2500 },
+  { nom: "Éminence", min: MAITRISE_PARTIES_MAX },
+];
+// Couleur propre a chaque Ordre, pour la vague qui monte dans son portrait. Les Ordres
+// qui ont un chapitre d'Histoire reprennent la teinte de ce chapitre ; les deux autres
+// recoivent la leur ici : l'or des Dores, le cyan des Chimeres.
+const MAITRISE_COULEURS = {
+  eveil: "rgba(232,200,119,0.85)",
+  cendres: "rgba(255,120,40,0.85)",
+  percee: "rgba(200,220,255,0.9)",
+  portee: "rgba(110,200,90,0.85)",
+  devoreuse: "rgba(80,160,255,0.7)",
+  mue: "rgba(75,201,201,0.8)",
+  poison: "rgba(120,220,80,0.7)",
+  guardian: "rgba(170,180,200,0.8)",
+  scribes: "rgba(205,120,255,0.75)",
+  maudits: "rgba(150,80,220,0.75)",
+  geolier: "rgba(180,180,180,0.6)",
+};
+
+function maitriseOrdre(stats, cle) {
+  const parties = Math.max(0, (stats && stats.orderPlays && stats.orderPlays[cle]) || 0);
+  const taux = Math.min(1, parties / MAITRISE_PARTIES_MAX);
+  let rang = 0;
+  for (let i = 0; i < MAITRISE_RANGS.length; i++) if (parties >= MAITRISE_RANGS[i].min) rang = i;
+  const suivant = MAITRISE_RANGS[rang + 1] || null;
+  return {
+    parties,
+    taux,
+    pourcent: parties === 0 ? 0 : Math.max(1, Math.round(taux * 100)), // 1 partie = deja 1 %, pas 0
+    rang: MAITRISE_RANGS[rang],
+    numero: rang + 1,
+    suivant,
+    manque: suivant ? suivant.min - parties : 0,
+  };
 }
 
 const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0 };
@@ -2929,6 +3017,136 @@ const APP_STYLES = `
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .hub-ordre-vignette.scellee .hub-ordre-vignette-nom { color: var(--muted); }
+        /* La vignette est un bouton : on neutralise le style natif et on lui donne une
+           reponse au doigt — elle grossit, puis s'ouvre. */
+        .hub-ordres-grille4 .hub-ordre-vignette {
+          background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+          transition: transform .18s cubic-bezier(.22,.9,.3,1);
+        }
+        .hub-ordres-grille4 .hub-ordre-vignette:not(:disabled):active { transform: scale(1.08); z-index: 2; }
+        .hub-ordres-grille4 .hub-ordre-vignette:disabled { cursor: default; }
+        /* Le pourcentage, en haut a droite de la carte, sur le meme voile que le nom. */
+        .hub-ordre-pourcent {
+          position: absolute; top: 3px; right: 4px; z-index: 6; pointer-events: none;
+          font-family: 'Cinzel', serif; font-size: 9px; font-weight: 700;
+          color: var(--gold-bright); text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+        }
+        /* Le nom laisse la place au pourcentage a sa droite. */
+        .hub-ordres-grille4 .hub-ordre-vignette-nom { padding-right: 30px; padding-left: 3px; text-align: left; }
+
+        /* ---------- La vague de maitrise ---------- */
+        .vague-maitrise {
+          position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+          border: 1px solid rgba(203,164,86,0.28);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+          background: #0b0910;
+        }
+        .vague-maitrise img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Le portrait grise : ce qui reste a conquerir. Entierement gris si jamais joue. */
+        .vague-gris { filter: grayscale(1) brightness(0.42) contrast(0.95); }
+        /* La partie remplie : un cadre ancre en bas, qui grandit vers le haut. Le portrait en
+           couleur y est cale sur le BAS, pour rester aligne avec le gris en dessous. */
+        .vague-pleine {
+          position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden;
+          transition: height 1.6s cubic-bezier(.22,.9,.3,1);
+          /* La crete : une vague repetee sur 14 px en haut, plein en dessous. Le masque
+             derive vers la gauche sans fin, c'est ce qui fait la maree. */
+          -webkit-mask-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 13 0, 27 0, 40 8 S 67 16, 80 8 V14 H0 Z' fill='%23000'/%3E%3C/svg%3E"),
+            linear-gradient(#000, #000);
+          mask-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 13 0, 27 0, 40 8 S 67 16, 80 8 V14 H0 Z' fill='%23000'/%3E%3C/svg%3E"),
+            linear-gradient(#000, #000);
+          -webkit-mask-size: 80px 14px, 100% calc(100% - 13px);
+          mask-size: 80px 14px, 100% calc(100% - 13px);
+          -webkit-mask-position: 0 0, 0 13px;
+          mask-position: 0 0, 0 13px;
+          -webkit-mask-repeat: repeat-x, no-repeat;
+          mask-repeat: repeat-x, no-repeat;
+          animation: vague-derive 3.2s linear infinite;
+        }
+        @keyframes vague-derive {
+          from { -webkit-mask-position: 0 0, 0 13px; mask-position: 0 0, 0 13px; }
+          to { -webkit-mask-position: 80px 0, 0 13px; mask-position: 80px 0, 0 13px; }
+        }
+        /* Le portrait couleur est cale en BAS et mesure la hauteur de la carte entiere
+           (pas celle de la zone remplie) : ainsi il se superpose exactement au gris, et la
+           crete revele l'image au lieu de la decaler. Le conteneur est carre : la hauteur
+           de la carte, c'est sa largeur. */
+        .vague-maitrise .vague-pleine .vague-couleur {
+          top: auto; bottom: 0; height: var(--vague-cote); inset: auto 0 0 0;
+        }
+        /* Le voile de couleur : dense sur la crete, il s'eclaircit en descendant pour
+           laisser respirer le portrait. C'est lui qui fait la vague "de la couleur de la
+           carte". */
+        .vague-teinte {
+          position: absolute; inset: 0;
+          background: linear-gradient(180deg, var(--vague-couleur) 0%, transparent 38%);
+          mix-blend-mode: screen;
+        }
+        .vague-maitrise.vide .vague-pleine { display: none; }
+        /* Version agrandie, dans le panneau de detail. */
+        .vague-maitrise.grand {
+          border-radius: 14px; border-color: rgba(203,164,86,0.5);
+          box-shadow: 0 14px 34px rgba(0,0,0,0.6);
+        }
+        .vague-maitrise.grand .vague-pleine {
+          -webkit-mask-size: 120px 20px, 100% calc(100% - 19px);
+          mask-size: 120px 20px, 100% calc(100% - 19px);
+          -webkit-mask-position: 0 0, 0 19px;
+          mask-position: 0 0, 0 19px;
+          animation-name: vague-derive-grand;
+        }
+        @keyframes vague-derive-grand {
+          from { -webkit-mask-position: 0 0, 0 19px; mask-position: 0 0, 0 19px; }
+          to { -webkit-mask-position: 120px 0, 0 19px; mask-position: 120px 0, 0 19px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .vague-pleine { animation: none; transition: none; }
+        }
+
+        /* ---------- Detail d'un Ordre ---------- */
+        .ordre-detail-voile { padding: 18px; }
+        .ordre-detail {
+          display: flex; align-items: flex-start; gap: 14px;
+          width: 100%; max-width: 400px; box-sizing: border-box;
+          padding: 16px; border-radius: 18px;
+          background: var(--panel); border: 1px solid var(--gold);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+          animation: ordre-detail-zoom .34s cubic-bezier(.22,1,.36,1) both;
+        }
+        @keyframes ordre-detail-zoom {
+          from { opacity: 0; transform: scale(0.72); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .ordre-detail-carte { flex: 0 0 42%; max-width: 170px; }
+        .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .ordre-detail-pourcent {
+          font-family: 'Cinzel', serif; font-size: 30px; font-weight: 700; line-height: 1;
+          color: var(--gold-bright); text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        .ordre-detail-nom {
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
+          letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone);
+        }
+        .ordre-detail-rang {
+          display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+          margin-top: 3px; padding: 2px 9px 2px 4px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+          color: var(--gold-bright); background: rgba(203,164,86,0.14); border: 1px solid rgba(203,164,86,0.45);
+        }
+        .ordre-detail-rang-num {
+          padding: 1px 6px; border-radius: 999px; font-size: 9.5px;
+          background: rgba(203,164,86,0.25);
+        }
+        .ordre-detail-parties { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+        .ordre-detail-suivant { font-size: 11px; color: var(--muted); }
+        .ordre-detail-suivant b { color: var(--gold); font-weight: 700; }
+        .ordre-detail-desc {
+          margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
+          padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
+        }
+        @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
         .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
         .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -6400,6 +6618,7 @@ export default function Emprise() {
     });
   }
   const [activeModal, setActiveModal] = useState(null);
+  const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
@@ -6747,9 +6966,13 @@ export default function Emprise() {
       statsRecordedRef.current = true;
       // En Confluence, seuls les Ordres réellement piochés (draft.pool) comptent — pas les
       // 10 Ordres du roster complet, dont 2 n'ont jamais été joués cette partie.
-      const orderKeys = confluenceActive
-        ? [...draft.pool, ...draft.pool] // les deux camps jouent avec les mêmes 8, comme en mode standard où chaque camp compte pour lui
-        : [...blueOrders, ...redOrders].map((l) => l.key);
+      // Seuls les Ordres que J'AI joues nourrissent ma maitrise. Compter aussi ceux de
+      // l'adversaire (c'etait le cas) faisait progresser des Ordres qu'on n'avait jamais
+      // tenus en main. En duel local, les deux camps sont humains sur ce meme appareil :
+      // on garde les deux. En Confluence, on dispose des dix Ordres pour quelques coups
+      // chacun : ca ne vaut pas une partie de maitrise, on ne compte rien.
+      const mesOrdresJoues = monCampCombos === "red" ? redOrders : monCampCombos === "blue" ? blueOrders : [...blueOrders, ...redOrders];
+      const orderKeys = confluenceActive ? [] : mesOrdresJoues.map((l) => l.key);
       // Trophées : UNIQUEMENT en mode Classé. Les parties contre un Écho, les duels locaux,
       // mais aussi "Jouer avec un ami" et le tournoi en ligne ne rapportent ni ne coûtent
       // rien : deux amis pourraient sinon se faire monter mutuellement dans les ligues en
@@ -7578,7 +7801,8 @@ export default function Emprise() {
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
       if (partieClassee && !statsRecordedRef.current) {
         statsRecordedRef.current = true;
-        const orderKeys = [...blueOrders, ...redOrders].map((l) => l.key);
+        // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
+        const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
         recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
       }
     }
@@ -9126,26 +9350,34 @@ export default function Emprise() {
             {hubPage === "ordres" && (
               <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
                 <h2 className="hub-page-titre">Les Ordres</h2>
-                <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
-                {/* Une galerie, pas une encyclopedie : 4 Ordres par ligne, portrait et
-                    nom seulement. Les descriptions vivent la ou l'on choisit ses Ordres.
-                    Le Geolier garde son portrait scelle : le cadenas dit tout. */}
+                <p className="hub-page-sous">Votre maîtrise de chaque maison, partie après partie.</p>
+                {/* Cette page dit quel joueur on est, Ordre par Ordre : chaque portrait se
+                    remplit de sa couleur a la hauteur de la maitrise, gris au-dessus. Un
+                    Ordre jamais joue est entierement gris. On appuie pour l'agrandir et
+                    lire le detail. Le Geolier garde son portrait scelle : le cadenas dit tout. */}
                 <div className="hub-ordres-grille4">
                   {ORDERS.map((order) => {
                     const bientot = !isOrderAvailable(order);
+                    const m = maitriseOrdre(stats, order.key);
                     return (
-                      <div key={order.key} className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`} title={bientot ? "Bientôt disponible" : order.desc}>
+                      <button
+                        key={order.key}
+                        type="button"
+                        className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`}
+                        title={bientot ? "Bientôt disponible" : `${order.name} · ${m.pourcent} %`}
+                        onClick={() => { if (!bientot) setOrdreDetail(order.key); }}
+                        disabled={bientot}
+                      >
                         <div className="hub-ordre-cadre">
                           {bientot ? (
                             <ComingSoonThumb order={order} />
                           ) : (
-                            <div className="order-thumb-wrap">
-                              <img className="thumb" src={order.portrait} alt={order.name} />
-                            </div>
+                            <VagueMaitrise order={order} taux={m.taux} />
                           )}
                           <span className="hub-ordre-vignette-nom">{order.name}</span>
+                          {!bientot && <span className="hub-ordre-pourcent">{m.pourcent} %</span>}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -9200,6 +9432,41 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+
+          {ordreDetail && (() => {
+            const order = ORDERS.find((o) => o.key === ordreDetail);
+            if (!order) return null;
+            const m = maitriseOrdre(stats, order.key);
+            return (
+              <div className="info-overlay ordre-detail-voile" onClick={() => setOrdreDetail(null)}>
+                <div className="ordre-detail" onClick={(e) => e.stopPropagation()}>
+                  {/* A gauche la carte, grossie ; a droite ce qu'elle dit de vous. */}
+                  <div className="ordre-detail-carte">
+                    <VagueMaitrise order={order} taux={m.taux} grand />
+                  </div>
+                  <div className="ordre-detail-texte">
+                    <div className="ordre-detail-pourcent">{m.pourcent} %</div>
+                    <div className="ordre-detail-nom">{order.name}</div>
+                    <div className="ordre-detail-rang">
+                      <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
+                      {m.rang.nom}
+                    </div>
+                    <div className="ordre-detail-parties">
+                      {m.parties === 0
+                        ? "Jamais joué"
+                        : `${m.parties} partie${m.parties > 1 ? "s" : ""} sur ${MAITRISE_PARTIES_MAX}`}
+                    </div>
+                    {m.suivant && (
+                      <div className="ordre-detail-suivant">
+                        Encore {m.manque} pour devenir <b>{m.suivant.nom}</b>
+                      </div>
+                    )}
+                    <p className="ordre-detail-desc">{order.desc}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {activeModal === "arenes" && (() => {
             const ligue = getLeague(stats.trophies || 0);
