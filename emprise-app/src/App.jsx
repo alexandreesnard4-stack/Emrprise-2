@@ -3234,9 +3234,9 @@ const APP_STYLES = `
           flex: 1; max-width: 150px; position: relative;
           display: flex; flex-direction: column; align-items: center; gap: 4px;
           padding: 8px 6px; cursor: pointer;
-          background: linear-gradient(180deg, rgba(24,19,34,0.96), rgba(8,6,12,0.94));
+          background: #000000;
           border: 1px solid rgba(203,164,86,0.16); border-radius: 13px;
-          box-shadow: inset 0 1px 0 rgba(255,240,205,0.05);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
           color: var(--muted);
           transition: color .22s, transform .18s, background .22s, border-color .22s;
         }
@@ -3291,9 +3291,10 @@ const APP_STYLES = `
         /* Onglet actif : cadre dore net, fond legerement eclaire, icone qui rayonne. */
         .hub-onglet.actif {
           color: var(--gold-bright);
-          background: linear-gradient(180deg, rgba(232,200,119,0.13), rgba(232,200,119,0.03));
+          background: #000000;
           border-color: rgba(232,200,119,0.65);
-          box-shadow: inset 0 1px 0 rgba(255,240,205,0.16), 0 3px 10px rgba(0,0,0,0.4);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 3px 10px rgba(0,0,0,0.4),
+                      0 0 14px rgba(203,164,86,0.16);
         }
         .hub-onglet.actif svg {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.6));
@@ -3302,7 +3303,7 @@ const APP_STYLES = `
            Royale, mais dans la sobriete du jeu. Socle en relief, arete claire en haut. */
         .hub-onglet-central {
           transform: translateY(-10px);
-          background: linear-gradient(180deg, #2c2340, #171221 70%);
+          background: #000000;
           border: 1px solid rgba(203,164,86,0.5);
           box-shadow:
             0 8px 18px rgba(0,0,0,0.55),
@@ -3314,7 +3315,7 @@ const APP_STYLES = `
         .hub-onglet-central span { font-size: 11px; }
         .hub-onglet-central.actif {
           border-color: var(--gold-bright);
-          background: linear-gradient(180deg, #3a2f52, #1d1730 72%);
+          background: #000000;
           box-shadow:
             0 8px 20px rgba(0,0,0,0.6),
             inset 0 1px 0 rgba(255,240,205,0.24),
