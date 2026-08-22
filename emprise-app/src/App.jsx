@@ -2857,13 +2857,20 @@ const APP_STYLES = `
         .arene-page-corps.verrouillee .arene-page-chantier {
           filter: grayscale(0.75) brightness(0.42) contrast(0.9);
         }
-        /* Le cadenas enchaine, pose au centre de l'arene eteinte. Illustration detouree,
-           pas de pastille derriere : il se suffit. */
-        .arene-cadenas {
+        /* Le cadenas enchaine, pose au centre de l'arene eteinte, dans un disque sombre :
+           sur une arene claire (Argent, Platine) il se perdait dans le decor. */
+        .arene-cadenas-rond {
           position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-          width: auto; height: min(13dvh, 64px); object-fit: contain;
-          filter: drop-shadow(0 10px 22px rgba(0,0,0,0.75));
+          width: 82px; height: 82px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: radial-gradient(circle at 50% 42%, rgba(20,16,28,0.94) 62%, rgba(8,6,12,0.9) 100%);
+          border: 1px solid rgba(203,164,86,0.35);
+          box-shadow: 0 10px 24px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,240,205,0.08);
           animation: arene-cadenas-pose 0.5s cubic-bezier(.22,1,.36,1) both;
+        }
+        .arene-cadenas-rond img {
+          width: auto; height: 54px; object-fit: contain; display: block;
+          filter: drop-shadow(0 3px 6px rgba(0,0,0,0.7));
         }
         @keyframes arene-cadenas-pose {
           from { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
@@ -3231,9 +3238,20 @@ const APP_STYLES = `
            barre sans artifice. object-fit: contain, jamais cover — le bouclier est plus
            haut que large, on ne le rogne pas. */
         .hub-onglet-img {
-          width: 36px; height: 36px; object-fit: contain; border: none;
+          width: 30px; height: 30px; object-fit: contain; border: none;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
           transition: filter .22s, opacity .22s, transform .22s;
+        }
+        /* Le disque sombre derriere l'icone : meme famille que le cadenas des arenes. Il
+           assied l'illustration detouree, qui flottait sur la barre. */
+        .hub-onglet-img {
+          border-radius: 50%; padding: 6px; box-sizing: content-box;
+          background: radial-gradient(circle at 50% 38%, rgba(24,19,34,0.95) 60%, rgba(8,6,12,0.92) 100%);
+          box-shadow: 0 3px 10px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,240,205,0.06);
+        }
+        .hub-onglet.actif .hub-onglet-img {
+          box-shadow: 0 3px 12px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,240,205,0.12),
+                      0 0 0 1px rgba(203,164,86,0.45);
         }
         .hub-onglet:not(.actif) .hub-onglet-img {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.5) brightness(0.62);
@@ -3243,7 +3261,7 @@ const APP_STYLES = `
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(232,200,119,0.55)) brightness(1.08);
           transform: scale(1.06);
         }
-        .hub-onglet-central .hub-onglet-img { width: 48px; height: 48px; }
+        .hub-onglet-central .hub-onglet-img { width: 40px; height: 40px; padding: 7px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
@@ -9591,7 +9609,9 @@ export default function Emprise() {
                             </div>
                           )}
                           {verrouillee && (
-                            <img className="arene-cadenas" src="/arenes/cadenas.webp" alt="Arène verrouillée" />
+                            <span className="arene-cadenas-rond" aria-label="Arène verrouillée">
+                              <img src="/arenes/cadenas.webp" alt="" />
+                            </span>
                           )}
                         </div>
                       </section>
