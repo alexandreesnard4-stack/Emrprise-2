@@ -180,12 +180,14 @@ function VagueMaitrise({ order, taux, grand }) {
     const t = setTimeout(() => setNiveau(taux), 60);
     return () => clearTimeout(t);
   }, [taux]);
-  // Le portrait couleur doit mesurer la carte entiere : on lit son cote et on le suit
+  // Le portrait couleur doit mesurer la carte entiere : on lit sa hauteur et on la suit
   // si la fenetre change.
   useEffect(() => {
     const el = ref.current; if (!el) return;
-    // clientWidth : l interieur du cadre, bordure exclue — c est la que vivent les portraits.
-    const lire = () => setCote(el.clientWidth);
+    // clientHeight : l interieur du cadre, bordure exclue — c est la que vivent les
+    // portraits. La HAUTEUR et non la largeur : la carte n est plus toujours carree (le
+    // detail l affiche en 3/4), et c est la hauteur que le portrait couleur doit epouser.
+    const lire = () => setCote(el.clientHeight);
     lire();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(lire) : null;
     if (ro) ro.observe(el);
@@ -2855,16 +2857,17 @@ const APP_STYLES = `
         .arene-page-corps.verrouillee .arene-page-chantier {
           filter: grayscale(0.75) brightness(0.42) contrast(0.9);
         }
+        /* Le cadenas enchaine, pose au centre de l'arene eteinte. Illustration detouree,
+           pas de pastille derriere : il se suffit. */
         .arene-cadenas {
           position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-          width: 62px; height: 62px; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          background: rgba(8,6,12,0.72); border: 1px solid rgba(203,164,86,0.45);
-          box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+          width: auto; height: min(34dvh, 150px); object-fit: contain;
+          filter: drop-shadow(0 10px 22px rgba(0,0,0,0.75));
+          animation: arene-cadenas-pose 0.5s cubic-bezier(.22,1,.36,1) both;
         }
-        .arene-cadenas svg {
-          width: 30px; height: 30px; fill: var(--gold-bright);
-          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        @keyframes arene-cadenas-pose {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         .arene-page-seuil.a-conquerir { color: var(--gold); font-weight: 700; }
         .arene-page-img {
@@ -3094,8 +3097,7 @@ const APP_STYLES = `
         }
         /* Le portrait couleur est cale en BAS et mesure la hauteur de la carte entiere
            (pas celle de la zone remplie) : ainsi il se superpose exactement au gris, et la
-           crete revele l'image au lieu de la decaler. Le conteneur est carre : la hauteur
-           de la carte, c'est sa largeur. */
+           crete revele l'image au lieu de la decaler. */
         .vague-maitrise .vague-pleine .vague-couleur {
           top: auto; bottom: 0; height: var(--vague-cote); inset: auto 0 0 0;
         }
@@ -3142,7 +3144,21 @@ const APP_STYLES = `
           from { opacity: 0; transform: scale(0.72); }
           to { opacity: 1; transform: scale(1); }
         }
-        .ordre-detail-carte { flex: 0 0 42%; max-width: 170px; }
+        /* La carte du detail : un portrait en HAUTEUR, plus grand qu'en grille, et en
+           fondu — pas de cadre, ses bords s'effacent dans le panneau. */
+        .ordre-detail-carte { flex: 0 0 46%; max-width: 190px; }
+        .ordre-detail-carte .vague-maitrise.grand {
+          aspect-ratio: 3 / 4; border: none; border-radius: 0; box-shadow: none; background: none;
+          -webkit-mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
+          mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
+          animation: ordre-detail-fondu 0.9s ease-out both;
+        }
+        @keyframes ordre-detail-fondu {
+          from { opacity: 0; transform: scale(1.05); }
+          to { opacity: 1; transform: none; }
+        }
+        .ordre-detail-carte .vague-maitrise.grand img { object-position: center 20%; }
+        @media (prefers-reduced-motion: reduce) { .ordre-detail-carte .vague-maitrise.grand { animation: none; } }
         .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .ordre-detail-pourcent {
           font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; line-height: 1;
@@ -3211,28 +3227,23 @@ const APP_STYLES = `
            les traces SVG de secours. */
         /* cover et non contain : les illustrations fournies sont paysage avec de
            larges marges sombres, le recadrage central isole l'icone elle-meme. */
-        /* Les trois icones sont des illustrations sur fond NOIR, pas des pictogrammes
-           detoures : affichees telles quelles, elles se lisaient comme des vignettes
-           carrees collees sur la barre. mix-blend-mode: lighten ne garde d'une image que
-           ce qui est plus clair que le fond — le noir disparait donc entierement et il ne
-           reste que le blason, qui se fond dans la barre. Le masque radial acheve les
-           coins, au cas ou une image aurait un fond moins sombre que les autres. */
+        /* Les trois icones sont detourees (fond transparent) : elles se posent sur la
+           barre sans artifice. object-fit: contain, jamais cover — le bouclier est plus
+           haut que large, on ne le rogne pas. */
         .hub-onglet-img {
-          width: 34px; height: 34px; object-fit: cover; border-radius: 9px;
-          border: none;
-          mix-blend-mode: lighten;
-          -webkit-mask-image: radial-gradient(64% 64% at 50% 48%, #000 62%, transparent 100%);
-          mask-image: radial-gradient(64% 64% at 50% 48%, #000 62%, transparent 100%);
-          transition: filter .22s, opacity .22s;
+          width: 36px; height: 36px; object-fit: contain; border: none;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+          transition: filter .22s, opacity .22s, transform .22s;
         }
         .hub-onglet:not(.actif) .hub-onglet-img {
-          filter: saturate(0.45) brightness(0.6);
-          opacity: 0.8;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.5) brightness(0.62);
+          opacity: 0.85;
         }
         .hub-onglet.actif .hub-onglet-img {
-          filter: brightness(1.12) drop-shadow(0 0 7px rgba(232,200,119,0.5));
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(232,200,119,0.55)) brightness(1.08);
+          transform: scale(1.06);
         }
-        .hub-onglet-central .hub-onglet-img { width: 44px; height: 44px; }
+        .hub-onglet-central .hub-onglet-img { width: 48px; height: 48px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
@@ -9449,7 +9460,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("boutique")}
               aria-current={hubPage === "boutique" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/boutique.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/boutique.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
               </svg>
@@ -9460,7 +9471,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("jouer")}
               aria-current={hubPage === "jouer" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/jouer.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/jouer.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
               </svg>
@@ -9471,7 +9482,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("ordres")}
               aria-current={hubPage === "ordres" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/ordres.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/ordres.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
               </svg>
@@ -9580,11 +9591,7 @@ export default function Emprise() {
                             </div>
                           )}
                           {verrouillee && (
-                            <span className="arene-cadenas" aria-label="Arène verrouillée">
-                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M7 10V7a5 5 0 0 1 10 0v3h1.5A1.5 1.5 0 0 1 20 11.5v8A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-8A1.5 1.5 0 0 1 5.5 10H7zm2 0h6V7a3 3 0 0 0-6 0v3zm3 4.5a1.6 1.6 0 0 0-.8 3v1.3a.8.8 0 0 0 1.6 0V17.5a1.6 1.6 0 0 0-.8-3z" />
-                              </svg>
-                            </span>
+                            <img className="arene-cadenas" src="/arenes/cadenas.webp" alt="Arène verrouillée" />
                           )}
                         </div>
                       </section>
