@@ -5109,19 +5109,16 @@ const APP_STYLES = `
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
           box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
-        /* Le sablier est une illustration : plus haut que large, on ne le rogne pas. Il
-           se RETOURNE au lieu de tourner sans fin — un sablier qui tourne en continu ne
-           veut rien dire, un sablier qu'on retourne, si. */
+        /* Le sablier est une illustration : plus haut que large, on ne le rogne pas. */
         .ordres-sablier {
           width: 18px; height: 26px; object-fit: contain; display: block;
           filter: drop-shadow(0 0 5px rgba(232,200,119,0.5));
-          animation: sablier-retourne 4.8s ease-in-out infinite;
+          animation: sablier-tourne 2.4s linear infinite;
         }
-        /* Seul transform est anime : le sablier se retourne sans rien recalculer. */
-        @keyframes sablier-retourne {
-          0%, 42% { transform: rotate(0deg); }
-          50%, 92% { transform: rotate(180deg); }
-          100% { transform: rotate(360deg); }
+        /* Seul transform est anime : le sablier tourne sans rien recalculer. */
+        @keyframes sablier-tourne {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         .ordres-temps {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
