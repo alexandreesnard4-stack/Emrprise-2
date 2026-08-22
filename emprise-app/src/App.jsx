@@ -2703,11 +2703,19 @@ const APP_STYLES = `
         .arenes-defile::-webkit-scrollbar { display: none; }
         .arene-page {
           height: 100dvh; scroll-snap-align: center; scroll-snap-stop: always;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          gap: 6px; padding: 40px 20px 28px; box-sizing: border-box; position: relative;
+          display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+          gap: 6px; padding: 52px 20px 30px; box-sizing: border-box; position: relative;
+        }
+        .arene-page-entete {
+          flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
+        }
+        /* L'illustration prend toute la hauteur qui reste sous le nom. */
+        .arene-page-corps {
+          flex: 1; min-height: 0; width: 100%;
+          display: flex; align-items: center; justify-content: center;
         }
         .arene-page-img {
-          max-width: min(84vw, 380px); max-height: 46dvh; width: auto; height: auto;
+          max-width: min(84vw, 380px); max-height: 100%; width: auto; height: auto;
           object-fit: contain; display: block;
           filter: drop-shadow(0 18px 30px rgba(0,0,0,0.65));
           animation: arene-page-monte 0.5s ease-out both;
@@ -2729,7 +2737,7 @@ const APP_STYLES = `
         .arene-page-nom {
           font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-bright);
-          text-shadow: 0 2px 8px rgba(0,0,0,0.9); margin-top: 8px;
+          text-shadow: 0 2px 8px rgba(0,0,0,0.9);
         }
         .arene-page-seuil { font-size: 12px; color: var(--muted); }
         .arene-page-ici {
@@ -9181,25 +9189,31 @@ export default function Emprise() {
                     const ici = l.name === ligue.name;
                     return (
                       <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
-                        {l.hub ? (
-                          <img className="arene-page-img" src={l.hub} alt="" />
-                        ) : (
-                          <div className="arene-page-chantier" aria-hidden="true">
-                            <svg viewBox="0 0 24 24"><path d="M12 2 2 20h20L12 2zm0 5 6 11H6l6-11zm-1 3v4h2v-4h-2zm0 5v2h2v-2h-2z" /></svg>
-                            <span>En construction</span>
-                          </div>
-                        )}
-                        <div className="arene-page-nom">Arène {l.name}</div>
-                        <div className="arene-page-seuil">
-                          {l.min === 0 ? "Dès votre premier duel" : `À partir de ${l.min} trophées`}
-                        </div>
-                        {ici && <span className="arene-page-ici">Vous êtes ici</span>}
                         {i > 0 && (
                           <span className="arene-page-fleche" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><path d="M12 4v14M6 10l6-6 6 6" /></svg>
                             arène supérieure
                           </span>
                         )}
+                        {/* Le nom coiffe la page : on doit savoir ou l'on est des que
+                            l'arene se pose, sans avoir a descendre le regard. */}
+                        <div className="arene-page-entete">
+                          <div className="arene-page-nom">Arène {l.name}</div>
+                          <div className="arene-page-seuil">
+                            {l.min === 0 ? "Dès votre premier duel" : `À partir de ${l.min} trophées`}
+                          </div>
+                          {ici && <span className="arene-page-ici">Vous êtes ici</span>}
+                        </div>
+                        <div className="arene-page-corps">
+                          {l.hub ? (
+                            <img className="arene-page-img" src={l.hub} alt="" />
+                          ) : (
+                            <div className="arene-page-chantier" aria-hidden="true">
+                              <svg viewBox="0 0 24 24"><path d="M12 2 2 20h20L12 2zm0 5 6 11H6l6-11zm-1 3v4h2v-4h-2zm0 5v2h2v-2h-2z" /></svg>
+                              <span>En construction</span>
+                            </div>
+                          )}
+                        </div>
                       </section>
                     );
                   })}
