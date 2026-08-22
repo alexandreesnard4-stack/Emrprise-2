@@ -75,7 +75,7 @@ const NEXT_ORDER_RELEASE = new Date("2026-09-01T00:00:00");
 const ORDERS = [
   { key: "eveil", ability: "eveil", name: "Dorés", icon: "✨", portrait: PORTRAITS.eveil, ranks: [2, 6, 5, 7], status: ORDER_STATUS.AVAILABLE, desc: "Échange son rang exposé avec celui de chaque ennemie adjacente" },
   { key: "cendres", ability: "attraction", name: "Cendres", icon: "🔥", portrait: PORTRAITS.fureur, ranks: [6, 4, 5, 3], status: ORDER_STATUS.AVAILABLE, desc: "Attire la carte la plus proche de chaque côté, alliée ou ennemie" },
-  { key: "percee", ability: "percee", name: "Piques", icon: "🗡️", portrait: PORTRAITS.percee, ranks: [6, 5, 4, 6], status: ORDER_STATUS.AVAILABLE, desc: "Transperce jusqu'à 2 cartes alignées par direction" },
+  { key: "percee", ability: "percee", name: "Piques", icon: "🗡️", portrait: PORTRAITS.percee, ranks: [6, 5, 4, 6], status: ORDER_STATUS.AVAILABLE, desc: "Transperce les cartes alignées par direction" },
   { key: "portee", ability: "portee", name: "Archers", icon: "🏹", portrait: PORTRAITS.portee, ranks: [9, 6, 4, 1], status: ORDER_STATUS.AVAILABLE, desc: "Capture en ligne droite, même à distance" },
   { key: "devoreuse", ability: "devoreuse", name: "Abysses", icon: "🐙", portrait: PORTRAITS.devoreuse, ranks: [6, 5, 3, 2], status: ORDER_STATUS.AVAILABLE, desc: "Chaque Abysse en jeu renforce les autres de +1" },
   { key: "mue", ability: "mue", name: "Chimères", icon: "🌀", portrait: PORTRAITS.mue, ranks: [4, 6, 5, 5], status: ORDER_STATUS.AVAILABLE, desc: "Retourne le rang de chaque ennemie adjacente sur son axe" },
@@ -147,7 +147,7 @@ function CountdownLabel({ order }) {
 // s'affiche en clair. Aucune image à remplacer.
 // Fait defiler les textes d'attente. Une seule animation, sur opacity et transform,
 // relancee a chaque changement par la cle React : rien ne tourne en boucle.
-function RecitsAttente({ actif }) {
+function RecitsAttente({ actif, surImage }) {
   const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
   useEffect(() => {
     if (!actif) return;
@@ -160,9 +160,53 @@ function RecitsAttente({ actif }) {
   if (!actif) return null;
   const recit = RECITS_ATTENTE[i];
   return (
-    <div className="recit-attente" role="status" aria-live="polite">
+    <div className={`recit-attente ${surImage ? "sur-image" : ""}`} role="status" aria-live="polite">
       <div className="recit-genre">{recit.genre === "histoire" ? "L'Histoire" : "Astuce"}</div>
       <p key={i} className="recit-texte">{recit.texte}</p>
+    </div>
+  );
+}
+
+// Portrait d'un Ordre dont la couleur monte comme une maree, a la hauteur de la maitrise.
+// Deux couches : le portrait grise en dessous, le portrait en couleur par-dessus, decoupe
+// a la hauteur voulue avec une crete ondulee qui derive sans fin. Un voile de la couleur
+// de l'Ordre teinte la partie remplie, pour que la vague soit bien LA couleur de la carte.
+// Le niveau monte depuis zero a l'apparition : on voit la maree arriver.
+function VagueMaitrise({ order, taux, grand }) {
+  const [niveau, setNiveau] = useState(0);
+  const [cote, setCote] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => setNiveau(taux), 60);
+    return () => clearTimeout(t);
+  }, [taux]);
+  // Le portrait couleur doit mesurer la carte entiere : on lit sa hauteur et on la suit
+  // si la fenetre change.
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    // clientHeight : l interieur du cadre, bordure exclue — c est la que vivent les
+    // portraits. La HAUTEUR et non la largeur : la carte n est plus toujours carree (le
+    // detail l affiche en 3/4), et c est la hauteur que le portrait couleur doit epouser.
+    const lire = () => setCote(el.clientHeight);
+    lire();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(lire) : null;
+    if (ro) ro.observe(el);
+    return () => { if (ro) ro.disconnect(); };
+  }, []);
+  const couleur = MAITRISE_COULEURS[order.key] || "rgba(203,164,86,0.8)";
+  // Une seule partie vaut deja une lame d'eau visible : a 1 % on ne voyait rien. Et a
+  // 100 %, la crete passe AU-DESSUS du cadre : le portrait est entierement en couleur,
+  // sans bande grise ni vague qui derive en haut d'un Ordre pourtant acheve.
+  const plein = niveau >= 1;
+  const hauteur = niveau === 0 ? 0 : plein ? 130 : Math.max(6, Math.round(niveau * 100));
+  return (
+    <div ref={ref} className={`vague-maitrise ${grand ? "grand" : ""} ${taux === 0 ? "vide" : ""} ${plein ? "pleine" : ""}`}
+         style={{ "--vague-couleur": couleur, "--vague-cote": cote ? `${cote}px` : "100%" }}>
+      <img className="vague-gris" src={order.portrait} alt="" />
+      <div className="vague-pleine" style={{ height: `${hauteur}%` }}>
+        <img className="vague-couleur" src={order.portrait} alt="" />
+        <div className="vague-teinte" />
+      </div>
     </div>
   );
 }
@@ -372,7 +416,168 @@ function hydrateFromSave(card) {
 // Préférence : window.storage (artefacts Claude, persiste entre sessions) >
 // localStorage (site web hébergé) > mémoire (dernier recours, non persistant).
 // Tout est asynchrone car window.storage l'est ; les stats transitent par un état React.
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, orderPlays: {}, trophies: 0 };
+// ---------- Combos d'Ordres : le style de jeu d'un joueur ----------
+// Chaque combo est une paire d'Ordres qui se repondent. On ne les declare pas comme des
+// theories : chacun correspond a une detection precise dans le moteur (voir combosDuCoup),
+// et le "signe" ci-dessous decrit en une phrase ce qu'il faut faire pour le declencher.
+// Le nom sert de TITRE sur le profil : c'est ainsi qu'on dit au joueur quel joueur il est.
+const COMBOS = [
+  {
+    key: "or-corrompu", nom: "L'Or Corrompu", ordres: ["poison", "eveil"],
+    recit: "Vous empoisonnez votre propre terrain pour y poser vos Dorés : plus la carte est affaiblie, meilleur est le troc.",
+    signe: "Un Doré posé sur une case que vous aviez vous-même empoisonnée.",
+  },
+  {
+    key: "rancon", nom: "La Rançon", ordres: ["maudits", "eveil"],
+    recit: "Vous laissez l'adversaire vous prendre un Maudit — il en sort plus fort — puis vous le rachetez.",
+    signe: "Un Maudit perdu, puis repris dans la même partie.",
+  },
+  {
+    key: "traine-venin", nom: "La Traîne au Venin", ordres: ["cendres", "poison"],
+    recit: "Vous empoisonnez le couloir, puis vous y traînez l'ennemie : elle arrive exsangue.",
+    signe: "Une carte attirée dont le trajet traverse au moins une case empoisonnée.",
+  },
+  {
+    key: "maree-montante", nom: "La Marée Montante", ordres: ["devoreuse"],
+    recit: "Chaque Abysse volée à l'adversaire rejoint votre banc et nourrit la suivante que vous posez.",
+    signe: "Une Abysse ennemie capturée alors que vous alignez des Abysses.",
+  },
+  {
+    key: "miroir-truque", nom: "Le Miroir Truqué", ordres: ["mue", "eveil"],
+    recit: "La Chimère retourne l'ennemie pour exposer son rang fort, puis le Doré vient le lui échanger.",
+    signe: "Un Éveil déclenché sur une carte déjà retournée par une mue.",
+  },
+  {
+    key: "trait-voile", nom: "Le Trait Voilé", ordres: ["scribes", "portee"],
+    recit: "Le voile du Scribe cache où se trouve le 1 de l'Archer : il tire sans exposer sa gorge.",
+    signe: "Un Archer posé pendant qu'un de vos voiles de Scribe est actif.",
+  },
+  {
+    key: "battue", nom: "La Battue", ordres: ["cendres", "portee"],
+    recit: "Les Cendres arrachent l'ennemie de sa poche protégée, la flèche l'abat en terrain ouvert.",
+    signe: "Une capture à distance dans les deux tours qui suivent une attirance.",
+  },
+  {
+    key: "breche", nom: "La Brèche", ordres: ["mue", "percee"],
+    recit: "La mue ouvre le flanc faible, la Pique s'enfonce dans l'alignement.",
+    signe: "Une percée réussie sur une carte retournée par une mue.",
+  },
+  {
+    key: "fosse", nom: "La Fosse", ordres: ["poison", "devoreuse"],
+    recit: "Le venin rend la zone invivable le temps que vos Abysses, les plus fragiles du jeu, deviennent intouchables.",
+    signe: "Une Abysse posée à côté d'une case que vous avez empoisonnée.",
+  },
+  {
+    key: "rempart-vicie", nom: "Le Rempart Vicié", ordres: ["guardian", "poison"],
+    recit: "Le Rempart verrouille les cases saines, le venin rend les autres inhabitables : l'adversaire n'a plus où se poser.",
+    signe: "Une victoire au score avec des Gardiens et au moins trois cases empoisonnées.",
+  },
+];
+
+// Un titre ne se donne pas sur un coup de chance : il faut un echantillon (10 parties) et
+// une vraie regularite (le combo dans 30 % d'entre elles). Au-dela, on affiche les trois
+// plus frequents, le premier faisant office de titre principal.
+const COMBOS_PARTIES_MIN = 10;
+const COMBOS_SEUIL = 0.3;
+const COMBOS_TITRES_MAX = 3;
+
+// Etat de suivi d'UNE partie : ce qu'il faut retenir d'un coup a l'autre pour reconnaitre
+// les combos qui se jouent en plusieurs temps.
+function nouveauSuiviCombos() {
+  return {
+    mesPoisons: new Set(),      // cases que J'AI empoisonnees
+    mues: new Set(),            // identifiants des cartes retournees par une mue
+    mauditsMiens: new Set(),    // Maudits vus sous mes couleurs a un moment de la partie
+    dernierAttraction: null,    // numero de mon coup ou une attirance a eu lieu
+    coups: 0,                   // nombre de coups que j'ai joues
+    reussis: new Set(),         // combos deja realises cette partie
+    disqualifie: false,         // une annulation a eu lieu : la partie ne compte plus
+  };
+}
+
+// Renvoie les titres merites par ces statistiques, du plus frequent au moins frequent.
+function titresDuProfil(stats) {
+  const parties = (stats && stats.combosParties) || 0;
+  const compte = (stats && stats.combos) || {};
+  const classement = COMBOS
+    .map((combo) => ({ combo, parties: compte[combo.key] || 0, taux: parties ? (compte[combo.key] || 0) / parties : 0 }))
+    .filter((t) => t.parties > 0)
+    .sort((a, b) => b.taux - a.taux || b.parties - a.parties);
+  const assez = parties >= COMBOS_PARTIES_MIN;
+  return {
+    pret: assez,
+    parties,
+    restantes: Math.max(0, COMBOS_PARTIES_MIN - parties),
+    titres: assez ? classement.filter((t) => t.taux >= COMBOS_SEUIL).slice(0, COMBOS_TITRES_MAX) : [],
+    classement, // tout, y compris sous le seuil : le profil montre la progression
+  };
+}
+
+// Le titre a afficher a cote d'un joueur, ou null s'il n'en a pas encore merite.
+function titrePrincipal(stats) {
+  const t = titresDuProfil(stats);
+  return t.titres.length ? t.titres[0].combo.nom : null;
+}
+
+// ---------- Maitrise des Ordres ----------
+// Un Ordre se maitrise en le jouant : 6 500 parties pour en faire le tour. La progression
+// se lit en pourcentage de ce total, et franchit sept rangs en chemin. Les paliers ne
+// sont pas espaces egalement : les premiers viennent vite, pour que l'on sente tout de
+// suite que l'on avance, les derniers se meritent — 6 500 parties, c'est une vie de jeu.
+const MAITRISE_PARTIES_MAX = 6500;
+const MAITRISE_RANGS = [
+  { nom: "Recrue", min: 0 },
+  { nom: "Initié", min: 25 },
+  { nom: "Disciple", min: 100 },
+  { nom: "Vétéran", min: 350 },
+  { nom: "Maître", min: 1000 },
+  { nom: "Archonte", min: 2500 },
+  { nom: "Éminence", min: MAITRISE_PARTIES_MAX },
+];
+// Couleur propre a chaque Ordre, pour la vague qui monte dans son portrait. Les Ordres
+// qui ont un chapitre d'Histoire reprennent la teinte de ce chapitre ; les deux autres
+// recoivent la leur ici : l'or des Dores, le cyan des Chimeres.
+const MAITRISE_COULEURS = {
+  eveil: "rgba(232,200,119,0.85)",
+  cendres: "rgba(255,120,40,0.85)",
+  percee: "rgba(200,220,255,0.9)",
+  portee: "rgba(110,200,90,0.85)",
+  devoreuse: "rgba(80,160,255,0.7)",
+  mue: "rgba(75,201,201,0.8)",
+  poison: "rgba(120,220,80,0.7)",
+  guardian: "rgba(170,180,200,0.8)",
+  scribes: "rgba(205,120,255,0.75)",
+  maudits: "rgba(150,80,220,0.75)",
+  geolier: "rgba(180,180,180,0.6)",
+};
+
+function maitriseOrdre(stats, cle) {
+  // Number() : un vieux stockage pourrait porter autre chose qu'un nombre, et un NaN
+  // s'afficherait tel quel ("NaN %").
+  const parties = Math.max(0, Number((stats && stats.orderPlays && stats.orderPlays[cle]) || 0) || 0);
+  const taux = Math.min(1, parties / MAITRISE_PARTIES_MAX);
+  let rang = 0;
+  for (let i = 0; i < MAITRISE_RANGS.length; i++) if (parties >= MAITRISE_RANGS[i].min) rang = i;
+  const suivant = MAITRISE_RANGS[rang + 1] || null;
+  return {
+    parties,
+    taux,
+    // 1 partie = deja 1 %, pas 0 ; et 100 % est reserve au dernier rang : arrondir
+    // 6 499 parties a 100 % alors qu'on est encore Archonte se contredisait a l'ecran.
+    pourcent: parties === 0 ? 0 : parties >= MAITRISE_PARTIES_MAX ? 100 : Math.min(99, Math.max(1, Math.round(taux * 100))),
+    rang: MAITRISE_RANGS[rang],
+    numero: rang + 1,
+    suivant,
+    manque: suivant ? suivant.min - parties : 0,
+  };
+}
+
+// Version du compteur orderPlays. Avant la page de maitrise, il additionnait les Ordres
+// des DEUX camps, les miens et ceux d'en face : impossible, apres coup, d'en retirer la
+// part de l'adversaire. On l'oublie donc une fois pour toutes, plutot que d'afficher
+// "Initie" sur un Ordre jamais tenu en main. A incrementer si son sens change encore.
+const MAITRISE_VERSION = 1;
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
@@ -429,12 +634,15 @@ const ARENES = {
   Légende: { img: "/arenes/legende.webp", marge: 13, braise: "rgba(255,95,35,0.85)" },
 };
 
+// hub : l'illustration de l'arene. Les cinq en ont une desormais ; le rendu sait toujours
+// afficher une ligue en chantier, au cas ou une nouvelle viendrait s'ajouter avant son
+// decor.
 const LEAGUES = [
-  { name: "Bronze", min: 0 },
-  { name: "Argent", min: 300 },
-  { name: "Or", min: 800 },
-  { name: "Platine", min: 1500 },
-  { name: "Légende", min: 2500 },
+  { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp" },
+  { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp" },
+  { name: "Or", min: 800, hub: "/arenes/or-hub.webp" },
+  { name: "Platine", min: 1500, hub: "/arenes/platine-hub.webp" },
+  { name: "Légende", min: 2500, hub: "/arenes/legende-hub.webp" },
 ];
 function getLeague(trophies) {
   let current = LEAGUES[0];
@@ -827,7 +1035,10 @@ async function loadStats() {
   if (!raw) return { ...DEFAULT_STATS };
   try {
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_STATS, ...parsed, orderPlays: parsed.orderPlays || {} };
+    // Compteur d'une version anterieure (ou sans version) : il melangeait les Ordres d'en
+    // face aux miens, on repart de zero. Les autres stats sont gardees telles quelles.
+    const orderPlays = parsed.maitriseVersion === MAITRISE_VERSION ? (parsed.orderPlays || {}) : {};
+    return { ...DEFAULT_STATS, ...parsed, orderPlays, combos: parsed.combos || {}, maitriseVersion: MAITRISE_VERSION };
   } catch (e) {
     return { ...DEFAULT_STATS };
   }
@@ -838,9 +1049,24 @@ async function loadStats() {
 // Seules les parties en ligne comptent pour le classement ; les Échos et le jeu local ne
 // rapportent rien. La valeur peut être négative (défaite en ligne).
 // Renvoie les stats mises à jour pour rafraîchir l'état React.
-async function recordGameStats(winner, orderKeys, trophyGain = 0) {
+// comboKeys : combos reconnus pendant cette partie (liste vide si la partie ne compte pas
+// pour le profil — bac a sable, Mode Histoire, duel local, ou annulation utilisee).
+// compteAuProfil : dit si cette partie entre dans le denominateur du profil. Une partie
+// hors-profil ne doit NI compter ses combos NI gonfler le total, sinon le taux baisserait.
+// monCamp : le camp que J'AI tenu cette partie (null en duel local, ou les deux joueurs
+// sont humains et aucune victoire n'est "la mienne"). blueWins et redWins comptent les
+// camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
+// et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
+// "victoires" que de parties jouees, defaites comprises.
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
+  if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
+  if (compteAuProfil) {
+    stats.combosParties = (stats.combosParties || 0) + 1;
+    if (!stats.combos) stats.combos = {};
+    comboKeys.forEach((key) => { stats.combos[key] = (stats.combos[key] || 0) + 1; });
+  }
   if (winner === "blue") stats.blueWins += 1;
   else if (winner === "red") stats.redWins += 1;
   orderKeys.forEach((key) => {
@@ -1322,6 +1548,163 @@ function poisonCount(poisonValue, cardOwner) {
 
 function poisonHarms(poisonValue, cardOwner) {
   return poisonCount(poisonValue, cardOwner) > 0;
+}
+
+// ---------- Poison et Firestore ----------
+// Une case empoisonnee porte une PILE de marques, donc poisonedCells est un tableau de
+// tableaux. Firestore refuse net les tableaux imbriques ("Nested arrays are not
+// supported") : sans encodage, la premiere case empoisonnee faisait echouer l'ecriture du
+// coup, et plus rien ne se synchronisait de la partie. On aplatit donc chaque case en une
+// chaine ("" si saine, "blue", "blue|red", "*" pour une marque de l'ancien format).
+function encoderPoison(valeur) {
+  const pile = poisonMarques(valeur);
+  if (!pile.length) return "";
+  return pile.map((m) => (m === true ? "*" : String(m))).join("|");
+}
+
+function decoderPoison(valeur) {
+  if (Array.isArray(valeur)) return valeur; // deja au bon format (sauvegarde locale)
+  if (typeof valeur !== "string") return valeur ? [true] : false;
+  if (!valeur) return false;
+  return valeur.split("|").map((m) => (m === "*" ? true : m));
+}
+
+function decoderPoisonPlateau(liste) {
+  if (!Array.isArray(liste)) return Array(CELLS).fill(false);
+  return liste.map(decoderPoison);
+}
+
+// ---------- Detection des combos pendant la partie ----------
+// Appelee UNE FOIS par coup reellement joue, depuis placeCardAt — jamais depuis
+// resolvePlacement, qui tourne aussi sur les survols et les simulations du bot et
+// compterait alors des combos qui n'ont jamais eu lieu.
+//
+// La fonction met a jour le suivi de partie (pour les deux camps : l'adversaire nourrit
+// certains combos, comme le Maudit qu'il vous prend) et renvoie les combos que CE coup
+// vient de realiser pour le camp du joueur.
+function combosDuCoup(ctx) {
+  const { card, position, owner, monCamp, mesOrdres, events,
+          plateauAvant, plateauApres, poisonAvant, poisonApres, suivi } = ctx;
+  const trouves = [];
+  const a = (cle) => mesOrdres.has(cle);
+  const marque = (cle) => { if (!suivi.reussis.has(cle)) { suivi.reussis.add(cle); trouves.push(cle); } };
+
+  // --- Suivi alimente par les DEUX camps ---
+
+  // Cases dont la pile de marques a grossi pendant ce coup : c'est owner qui les a
+  // empoisonnees. On ne peut pas le lire sur le plateau (une marque sans Heraut vaut
+  // "true" et ne dit pas qui l'a posee), d'ou ce releve au moment ou ca se produit.
+  for (let i = 0; i < poisonApres.length; i++) {
+    if (poisonMarques(poisonApres[i]).length > poisonMarques(poisonAvant[i]).length && owner === monCamp) {
+      suivi.mesPoisons.add(i);
+    }
+  }
+
+  // Cartes retournees par une mue : suivies par identifiant, car l'Attraction les deplace.
+  events.forEach((e) => {
+    if (e.kind === "mue" && plateauApres[e.index]) suivi.mues.add(plateauApres[e.index].id);
+  });
+
+  // Changements de camp de ce coup, par identifiant de carte (les index bougent).
+  // En ligne, les coups de l'adversaire n'arrivent pas par ici mais par l'ecouteur
+  // Firestore : on ne peut donc PAS reperer le vol au moment ou il se produit. On note
+  // plutot, apres chacun de mes coups, les Maudits qui sont alors sous mes couleurs ; si
+  // l'un d'eux revient plus tard chez moi apres etre passe chez l'adversaire, c'est une
+  // Rancon — et cette lecture vaut aussi bien contre un Echo qu'en ligne.
+  const campAvant = new Map();
+  plateauAvant.forEach((c) => { if (c) campAvant.set(c.id, c.owner); });
+  let mauditRachete = false, abysseVolee = false;
+  plateauApres.forEach((c) => {
+    if (!c) return;
+    const ancien = campAvant.get(c.id);
+    if (ancien === undefined || ancien === c.owner) return;
+    if (c.ability === "maudit" && c.owner === monCamp && suivi.mauditsMiens.has(c.id)) mauditRachete = true;
+    if (c.ability === "devoreuse" && c.owner === monCamp) abysseVolee = true;
+  });
+
+  // --- A partir d'ici, seuls MES coups peuvent creer un combo ---
+  if (owner !== monCamp) return trouves;
+  suivi.coups += 1;
+
+  // Une capture porte sur une AUTRE case que celle qu'on vient de jouer : plusieurs effets
+  // emettent aussi un evenement du meme nom sur la carte posee, en simple signal visuel.
+  const victimes = (kind) => events.filter((e) => e.kind === kind && e.index !== position);
+
+  // 1. L'Or Corrompu : un Dore pose sur une case que j'ai empoisonnee et qui me nuit
+  // vraiment (avec le Heraut des Pestiferes, le venin epargne mon camp : pas de combo).
+  if (a("eveil") && a("poison") && card.ability === "eveil"
+      && suivi.mesPoisons.has(position) && poisonHarms(poisonAvant[position], monCamp)) {
+    marque("or-corrompu");
+  }
+
+  // 2. La Rancon : un Maudit que l'adversaire m'avait pris revient chez moi.
+  if (a("maudits") && a("eveil") && mauditRachete) marque("rancon");
+
+  // 3. La Traine au Venin : une carte tiree par les Cendres a traverse du poison. Le moteur
+  // signale la penalite par un evenement "poison" negatif sur la case d'arrivee.
+  if (a("cendres") && a("poison")) {
+    const tirees = victimes("attraction-pull").map((e) => e.index);
+    if (events.some((e) => e.kind === "poison" && e.delta < 0 && tirees.includes(e.index))) {
+      marque("traine-venin");
+    }
+    if (tirees.length) suivi.dernierAttraction = suivi.coups;
+  } else if (a("cendres") && events.some((e) => e.kind === "attraction-pull")) {
+    suivi.dernierAttraction = suivi.coups;
+  }
+
+  // 4. La Maree Montante : voler une Abysse a l'adversaire quand on en aligne soi-meme.
+  if (a("devoreuse") && abysseVolee) marque("maree-montante");
+
+  // 5. Le Miroir Truque : l'Eveil frappe une carte deja retournee par une mue.
+  if (a("mue") && a("eveil")
+      && victimes("eveil").some((e) => plateauApres[e.index] && suivi.mues.has(plateauApres[e.index].id))) {
+    marque("miroir-truque");
+  }
+
+  // 6. Le Trait Voile : un Archer pose pendant qu'un de mes voiles de Scribe tient encore.
+  if (a("scribes") && a("portee") && card.ability === "portee"
+      && plateauAvant.some((c) => c && c.scribeJustPlaced && c.scribePlacedBy === monCamp)) {
+    marque("trait-voile");
+  }
+
+  // 7. La Battue : une capture a distance dans les deux coups qui suivent une attirance.
+  if (a("cendres") && a("portee") && victimes("portee").length
+      && suivi.dernierAttraction !== null && suivi.coups - suivi.dernierAttraction <= 2) {
+    marque("battue");
+  }
+
+  // 8. La Breche : une percee qui aboutit sur une carte retournee par une mue.
+  if (a("mue") && a("percee")
+      && victimes("percee").some((e) => plateauApres[e.index] && suivi.mues.has(plateauApres[e.index].id))) {
+    marque("breche");
+  }
+
+  // 9. La Fosse : une Abysse posee au contact d'une case que j'ai empoisonnee.
+  if (a("devoreuse") && a("poison") && card.ability === "devoreuse") {
+    const r = Math.floor(position / COLS), c = position % COLS;
+    const voisines = DIRS
+      .map((d) => (inBounds(r + d.dr, c + d.dc) ? idx(r + d.dr, c + d.dc) : null))
+      .filter((i) => i !== null);
+    if (voisines.some((i) => suivi.mesPoisons.has(i))) marque("fosse");
+  }
+
+  // Releve de fin de coup : les Maudits actuellement a moi. C'est la seule occasion de les
+  // voir sous mes couleurs avant que l'adversaire ne joue.
+  plateauApres.forEach((c) => {
+    if (c && c.ability === "maudit" && c.owner === monCamp) suivi.mauditsMiens.add(c.id);
+  });
+
+  return trouves;
+}
+
+// Le Rempart Vicie ne se lit qu'a la fin : c'est une facon de gagner, pas un coup.
+function comboDeFin(ctx) {
+  const { mesOrdres, gagne, poison, suivi } = ctx;
+  if (!gagne || !mesOrdres.has("guardian") || !mesOrdres.has("poison")) return null;
+  const actives = poison.filter((v) => poisonMarques(v).length > 0).length;
+  if (actives < 3 || suivi.reussis.has("rempart-vicie")) return null;
+  suivi.reussis.add("rempart-vicie");
+  return "rempart-vicie";
 }
 
 // Ajoute une marque à une case, sans dépasser POISON_MAX.
@@ -2117,17 +2500,37 @@ const APP_STYLES = `
            proprietes que le navigateur sait traiter sans repeindre : l'entree reste fluide
            meme sur un telephone modeste. L'etape 3 ne porte aucune regle : c'est l'etat
            normal de l'accueil, une fois l'intro finie. */
+        /* Le voile est le noir d'ou tout sort. Il passe DERRIERE l'arene (z-index 40
+           contre 41) : l'arene se detache ainsi sur le noir pendant qu'il s'efface, au
+           lieu d'attendre qu'il ait fini. */
         .landing-voile {
           position: absolute; inset: 0; z-index: 40; pointer-events: none;
           background: #000000;
-          transition: opacity 1.6s ease;
+          transition: opacity 2.1s ease;
         }
         .landing.intro-e0 .landing-voile { opacity: 1; }
         .landing.intro-e1 .landing-voile { opacity: 0; }
+        .landing.intro-e0 .hub-arene, .landing.intro-e1 .hub-arene { position: relative; z-index: 41; }
 
-        /* L'illustration : part legerement agrandie et invisible, puis se pose. */
-        .landing.intro-e0 .landing-hero { opacity: 0; transform: translateX(-50%) scale(1.05); }
-        .landing.intro-e1 .landing-hero,
+        /* L'ARENE ouvre la marche : elle sort du noir pendant que tout le reste attend.
+           Aucune regle a l'etape 3 — l'accueil y est dans son etat normal, et l'arene y
+           retrouve sa transition courte, celle qui la fait avancer sous le doigt. */
+        .landing.intro-e0 .hub-arene { opacity: 0; transform: translateY(18px) scale(0.94); }
+        .landing.intro-e1 .hub-arene,
+        .landing.intro-e2 .hub-arene {
+          opacity: 1; transform: none;
+          transition: opacity 1.5s ease, transform 1.9s cubic-bezier(.22,.9,.3,1);
+        }
+        /* Le nom de l'arene suit son illustration, sans decalage : ils ne font qu'un. */
+        .landing.intro-e0 .hub-arene-nom { opacity: 0; }
+        .landing.intro-e1 .hub-arene-nom, .landing.intro-e2 .hub-arene-nom {
+          opacity: 1; transition: opacity 1.5s ease .2s;
+        }
+
+        /* L'illustration de fond : elle montait des l'etape 1, elle attend maintenant
+           l'etape 2 pour ne pas voler la vedette a l'arene. */
+        .landing.intro-e0 .landing-hero,
+        .landing.intro-e1 .landing-hero { opacity: 0; transform: translateX(-50%) scale(1.05); }
         .landing.intro-e2 .landing-hero,
         .landing.intro-e3 .landing-hero {
           opacity: 1; transform: translateX(-50%) scale(1);
@@ -2140,16 +2543,22 @@ const APP_STYLES = `
         .landing.intro-e0 .landing-title, .landing.intro-e1 .landing-title,
         .landing.intro-e0 .landing-subtitle, .landing.intro-e1 .landing-subtitle,
         .landing.intro-e0 .league-badge, .landing.intro-e1 .league-badge,
-        .landing.intro-e0 .landing-cta, .landing.intro-e1 .landing-cta,
-        .landing.intro-e0 .landing-gear, .landing.intro-e1 .landing-gear {
+        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
+        .landing.intro-e0 .hub-jouer-rang, .landing.intro-e1 .hub-jouer-rang,
+        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
+        .landing.intro-e0 .hub-avis, .landing.intro-e1 .hub-avis,
+        .landing.intro-e0 .landing-link, .landing.intro-e1 .landing-link {
           opacity: 0; transform: translateY(18px);
         }
         .landing.intro-e2 .landing-emblem, .landing.intro-e3 .landing-emblem,
         .landing.intro-e2 .landing-title, .landing.intro-e3 .landing-title,
         .landing.intro-e2 .landing-subtitle, .landing.intro-e3 .landing-subtitle,
         .landing.intro-e2 .league-badge, .landing.intro-e3 .league-badge,
-        .landing.intro-e2 .landing-cta, .landing.intro-e3 .landing-cta,
-        .landing.intro-e2 .landing-gear, .landing.intro-e3 .landing-gear {
+        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
+        .landing.intro-e2 .hub-jouer-rang, .landing.intro-e3 .hub-jouer-rang,
+        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
+        .landing.intro-e2 .hub-avis, .landing.intro-e3 .hub-avis,
+        .landing.intro-e2 .landing-link, .landing.intro-e3 .landing-link {
           opacity: 1; transform: translateY(0);
           transition: opacity .85s ease, transform .85s cubic-bezier(.22,.9,.3,1);
         }
@@ -2158,8 +2567,9 @@ const APP_STYLES = `
         .landing.intro-e2 .landing-title { transition-delay: .1s; }
         .landing.intro-e2 .landing-subtitle { transition-delay: .24s; }
         .landing.intro-e2 .league-badge { transition-delay: .36s; }
-        .landing.intro-e2 .landing-cta { transition-delay: .48s; }
-        .landing.intro-e2 .landing-gear { transition-delay: .6s; }
+        .landing.intro-e2 .hub-haut { transition-delay: 0s; }
+        .landing.intro-e2 .hub-jouer-rang { transition-delay: .34s; }
+        .landing.intro-e2 .hub-nav { transition-delay: .5s; }
         /* Le titre garde son reflet dore, mais seulement une fois pose : sinon les deux
            animations (reflet + glissement) se disputent la meme propriete. */
         .landing.intro-e0 .landing-title, .landing.intro-e1 .landing-title,
@@ -2172,23 +2582,6 @@ const APP_STYLES = `
            La discretion passe par la COULEUR et la BORDURE, jamais par opacity : la
            sequence d'intro pilote deja opacity sur cet element (.landing.intro-e3 ...),
            regle plus specifique qui ecraserait toute valeur posee ici. */
-        /* L'engrenage doit se poser DANS l'image, pas dessus : opacite basse, bordure
-           quasi effacee, et un leger assombrissement pour qu'il ne brille jamais sur un
-           fond clair. Il reste trouvable, il cesse d'attirer l'oeil. */
-        .landing-gear {
-          position: absolute; top: 20px; right: 20px; z-index: 35;
-          width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
-          font-size: 15px; line-height: 1; padding: 0;
-          color: rgba(203,164,86,0.16); background: transparent;
-          border: 1px solid rgba(203,164,86,0.03);
-          filter: brightness(0.75) contrast(0.85);
-          transition: color .2s, border-color .2s, background .2s, filter .2s, transform .35s ease;
-        }
-        .landing-gear:hover {
-          color: var(--gold-bright); border-color: rgba(203,164,86,0.4);
-          background: rgba(203,164,86,0.1); transform: rotate(60deg); filter: none;
-        }
-        .landing-gear:active { transform: rotate(60deg) scale(0.94); }
 
         /* Modale Parametres : lignes cliquables, avec une bascule pour les reglages. */
         /* 380 px et pas plus : le voile qui entoure le panneau a 24 px de marge
@@ -2227,10 +2620,8 @@ const APP_STYLES = `
 
         @media (prefers-reduced-motion: reduce) {
           .landing-voile { display: none; }
-          .landing-gear:hover { transform: none; }
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
-        .landing-line { width: 46px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
         .landing-line-single { width: 110px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
         .landing-title {
           font-family: 'Cinzel', serif; font-weight: 700; font-size: 44px; letter-spacing: 0.14em; margin: 0;
@@ -2268,6 +2659,8 @@ const APP_STYLES = `
         }
         .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .hub-pseudo {
+          background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+          font: inherit;
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.12em; color: var(--bone);
           text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -2315,6 +2708,9 @@ const APP_STYLES = `
           transition: border-color .2s, transform .35s ease;
         }
         .hub-rouage svg { width: 19px; height: 19px; fill: rgba(203,164,86,0.75); }
+        /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
+           l'illustration suit le mouvement. */
+        .hub-rouage-img { width: 26px; height: 26px; object-fit: contain; display: block; }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
         .hub-pages {
@@ -2389,10 +2785,190 @@ const APP_STYLES = `
         .hub-jouer-classe-sous {
           font-size: 10.5px; letter-spacing: 0.08em; color: rgba(36,29,16,0.75);
         }
-        .hub-modes-grille {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-          width: 100%; max-width: 400px; margin-top: 4px;
+        .hub-avis {
+          max-width: 340px; margin: 8px 0 0; cursor: pointer;
         }
+        /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
+           reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
+        .hub-arene {
+          flex: 1 1 auto; min-height: 0; width: 100%;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 5px; margin-top: 2px;
+          background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+          transition: transform .16s ease-out;
+        }
+        /* On entre dans l'arene : elle avance vers le doigt avant de s'ouvrir. */
+        .hub-arene:active { transform: scale(1.05); }
+        .hub-arene:active .hub-arene-img { filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6)) brightness(1.15); }
+
+        /* ---------- Galerie des arenes ---------- */
+        .arenes-voile {
+          padding: 0; align-items: stretch; justify-content: stretch;
+          animation: arenes-ouvre 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes arenes-ouvre {
+          from { opacity: 0; backdrop-filter: blur(0); }
+          to { opacity: 1; }
+        }
+        .arenes-defile {
+          width: 100%; height: 100dvh; overflow-y: auto; overflow-x: hidden;
+          scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          scrollbar-width: none;
+        }
+        .arenes-defile::-webkit-scrollbar { display: none; }
+        .arene-page {
+          height: 100dvh; scroll-snap-align: center; scroll-snap-stop: always;
+          display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+          gap: 6px; padding: 52px 20px 30px; box-sizing: border-box; position: relative;
+        }
+        .arene-page-entete {
+          flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
+        }
+        /* L'illustration prend toute la hauteur qui reste sous le nom. */
+        .arene-page-corps {
+          flex: 1; min-height: 0; width: 100%; position: relative;
+          display: flex; align-items: center; justify-content: center;
+        }
+        /* Arene pas encore atteinte : on la voit, mais eteinte, et le cadenas tranche. */
+        .arene-page-corps.verrouillee .arene-page-img,
+        .arene-page-corps.verrouillee .arene-page-chantier {
+          filter: grayscale(0.75) brightness(0.42) contrast(0.9);
+        }
+        /* Le cadenas enchaine, pose au centre de l'arene eteinte, dans un disque sombre :
+           sur une arene claire (Argent, Platine) il se perdait dans le decor. */
+        .arene-cadenas-rond {
+          position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+          width: 82px; height: 82px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: radial-gradient(circle at 50% 42%, rgba(20,16,28,0.94) 62%, rgba(8,6,12,0.9) 100%);
+          border: 1px solid rgba(203,164,86,0.35);
+          box-shadow: 0 10px 24px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,240,205,0.08);
+          animation: arene-cadenas-pose 0.5s cubic-bezier(.22,1,.36,1) both;
+        }
+        .arene-cadenas-rond img {
+          width: auto; height: 54px; object-fit: contain; display: block;
+          filter: drop-shadow(0 3px 6px rgba(0,0,0,0.7));
+        }
+        @keyframes arene-cadenas-pose {
+          from { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        .arene-page-seuil.a-conquerir { color: var(--gold); font-weight: 700; }
+        .arene-page-img {
+          max-width: min(84vw, 380px); max-height: 100%; width: auto; height: auto;
+          object-fit: contain; display: block;
+          filter: drop-shadow(0 18px 30px rgba(0,0,0,0.65));
+          animation: arene-page-monte 0.5s ease-out both;
+        }
+        @keyframes arene-page-monte {
+          from { opacity: 0; transform: translateY(14px) scale(0.96); }
+          to { opacity: 1; transform: none; }
+        }
+        .arene-page-chantier {
+          width: min(70vw, 260px); aspect-ratio: 4 / 3; border-radius: 16px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+          background: rgba(255,255,255,0.03); border: 1px dashed rgba(203,164,86,0.3);
+        }
+        .arene-page-chantier svg { width: 34px; height: 34px; fill: var(--gold); opacity: 0.7; }
+        .arene-page-chantier span {
+          font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--muted);
+        }
+        .arene-page-nom {
+          font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700;
+          letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-bright);
+          text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+        }
+        .arene-page-seuil { font-size: 12px; color: var(--muted); }
+        .arene-page-ici {
+          margin-top: 6px; padding: 3px 12px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--gold-bright); background: rgba(203,164,86,0.16);
+          border: 1px solid rgba(203,164,86,0.5);
+        }
+        .arene-page-fleche {
+          position: absolute; left: 0; right: 0; top: 14px;
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+          animation: arene-fleche-respire 2.2s ease-in-out infinite;
+        }
+        .arene-page-fleche svg {
+          width: 16px; height: 16px; fill: none; stroke: var(--gold);
+          stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+        }
+        @keyframes arene-fleche-respire {
+          0%, 100% { opacity: 0.45; transform: translateY(3px); }
+          50% { opacity: 1; transform: translateY(-3px); }
+        }
+        .arenes-fermer {
+          position: fixed; top: 14px; right: 14px; z-index: 5;
+          width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+        }
+        .arenes-fermer svg {
+          width: 17px; height: 17px; fill: none; stroke: var(--bone);
+          stroke-width: 2; stroke-linecap: round;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .arenes-voile, .arene-page-img, .arene-page-fleche { animation: none; }
+        }
+        .hub-arene-img {
+          max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
+          object-fit: contain; display: block;
+          filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6));
+          animation: hub-arene-parait 0.7s ease-out both;
+        }
+        @keyframes hub-arene-parait {
+          from { opacity: 0; transform: translateY(10px) scale(0.97); }
+          to { opacity: 1; transform: none; }
+        }
+        .hub-arene-nom {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+          text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+        /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau.
+           margin-top: auto les colle au bas de la page, sous l'arene. */
+        .hub-jouer-rang {
+          display: flex; align-items: stretch; gap: 9px; flex: none;
+          width: 100%; max-width: 340px; margin-top: auto; padding-top: 6px;
+        }
+        .hub-jouer-rang .hub-jouer-classe { margin-top: 0; flex: 1.6; max-width: none; }
+        /* Les haches croisees remplacent le pictogramme : illustration detouree, posee
+           sans cadre, elle porte le bouton a elle seule. */
+        .hub-jouer-classe-img {
+          width: 40px; height: 40px; object-fit: contain; display: block;
+          filter: drop-shadow(0 3px 7px rgba(0,0,0,0.75));
+        }
+        .hub-jouer-modes-btn {
+          flex: 1; box-sizing: border-box;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+          padding: 10px 10px 8px;
+          background: linear-gradient(180deg, #2c2340, #171221 75%);
+          border: 1px solid rgba(203,164,86,0.5); border-radius: 14px; cursor: pointer;
+          box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,205,0.12);
+          transition: filter .15s, transform .12s ease-in, border-color .2s;
+        }
+        .hub-jouer-modes-btn:hover { border-color: var(--gold-bright); }
+        .hub-jouer-modes-btn:active { transform: scale(0.94); }
+        .hub-jouer-modes-btn svg { width: 16px; height: 16px; fill: var(--gold-bright); }
+        .hub-jouer-modes-btn .hub-jouer-classe-titre { color: var(--gold-bright); }
+        .hub-jouer-modes-btn .hub-jouer-classe-sous { color: var(--muted); }
+        /* Panneau des modes : les tuiles du hub, rangees par famille. */
+        .modes-groupe-titre {
+          width: 100%; text-align: left;
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+          margin: 10px 0 6px; padding-bottom: 4px;
+          border-bottom: 1px solid rgba(203,164,86,0.18);
+        }
+        .modes-groupe {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
+        }
+        .modes-panel .reset-btn { margin-top: 14px; }
         .hub-mode-tuile {
           display: flex; align-items: center; gap: 9px;
           padding: 8px 10px; min-height: 46px; box-sizing: border-box;
@@ -2411,38 +2987,191 @@ const APP_STYLES = `
           letter-spacing: 0.04em; line-height: 1.3;
         }
         .hub-mode-tuile.test { opacity: 0.72; }
-        /* Liste des Ordres : 4 fiches visibles, glissement VERTICAL aimante. Chaque
-           fiche est une rangee (vignette a gauche, texte a droite) pour que quatre
-           tiennent a l'ecran sans rien ecraser. */
-        .hub-ordres-carrousel {
-          display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px;
-          min-height: 0; flex: 1;
-          overflow-y: auto; overflow-x: hidden;
-          scroll-snap-type: y proximity; -webkit-overflow-scrolling: touch;
-          padding: 4px 4px 10px; box-sizing: border-box;
+        /* Page de maitrise : 4 Ordres par ligne, chacun avec sa vague et son
+           pourcentage. Trois lignes tiennent sous le titre sans defiler. */
+        .hub-ordres-grille4 {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px 8px;
+          width: 100%; max-width: 420px; padding: 4px 2px 8px; box-sizing: border-box;
         }
-        .hub-ordres-carrousel .hub-ordre-fiche {
-          flex: 0 0 calc(25% - 6px); min-height: 68px; width: 100%;
-          scroll-snap-align: start; box-sizing: border-box;
-          flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px;
+        .hub-ordre-vignette {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          min-width: 0;
         }
-        .hub-ordres-carrousel .hub-ordre-fiche .order-thumb-wrap,
-        .hub-ordres-carrousel .hub-ordre-fiche .teaser-wrap {
-          width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden;
+        /* Triple selecteur a dessein : la vignette de base du selecteur d'Ordres impose
+           height 200px plus loin dans la feuille, il faut la battre en specificite.
+           Carre et non 3/4 : trois lignes doivent tenir sous le titre sans defiler. */
+        .hub-ordres-grille4 .hub-ordre-vignette .order-thumb-wrap,
+        .hub-ordres-grille4 .hub-ordre-vignette .teaser-wrap {
+          width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+          border: 1px solid rgba(203,164,86,0.28);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
-        .hub-ordres-carrousel .hub-ordre-fiche .thumb {
-          width: 100%; height: 100%; object-fit: cover;
+        .hub-ordres-grille4 .hub-ordre-vignette .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Le cadre porte le nom : reference de position pour l'incrustation. */
+        .hub-ordres-grille4 .hub-ordre-cadre { position: relative; width: 100%; }
+        /* Nom pose EN HAUT de la carte, sur un voile qui descend : opaque derriere le
+           texte, transparent plus bas pour laisser voir le portrait. */
+        .hub-ordre-vignette-nom {
+          position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+          padding: 4px 3px 9px; border-radius: 10px 10px 0 0; pointer-events: none;
+          background: linear-gradient(180deg, rgba(8,6,12,0.92) 0%, rgba(8,6,12,0.62) 55%, rgba(8,6,12,0) 100%);
+          font-family: 'Cinzel', serif; font-size: 8.5px; font-weight: 700;
+          letter-spacing: 0.04em; text-transform: uppercase; color: var(--bone);
+          text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .hub-ordres-carrousel .hub-ordre-fiche .info { text-align: left; flex: 1; min-width: 0; }
-        .hub-ordres-carrousel .hub-ordre-fiche .info .desc {
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        .hub-ordre-vignette.scellee .hub-ordre-vignette-nom { color: var(--muted); }
+        /* La vignette est un bouton : on neutralise le style natif et on lui donne une
+           reponse au doigt — elle grossit, puis s'ouvre. */
+        .hub-ordres-grille4 .hub-ordre-vignette {
+          background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+          transition: transform .18s cubic-bezier(.22,.9,.3,1);
         }
-        .hub-carrousel-indice {
-          font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
-          color: var(--muted); flex: none; padding-bottom: 2px;
+        .hub-ordres-grille4 .hub-ordre-vignette:not(:disabled):active { transform: scale(1.08); z-index: 2; }
+        .hub-ordres-grille4 .hub-ordre-vignette:disabled { cursor: default; }
+        /* Le pourcentage, en haut a droite de la carte, sur le meme voile que le nom. */
+        /* Le pourcentage vit en BAS de la carte, sur un voile qui monte : a cote du nom, il
+           lui volait 30 px et coupait "Pestiférés" sur les ecrans de 390 px et moins. */
+        /* Discret : petit, cale a gauche en bas de la carte, sur un voile qui monte. */
+        .hub-ordre-pourcent {
+          position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; pointer-events: none;
+          padding: 9px 4px 3px 5px; border-radius: 0 0 10px 10px;
+          background: linear-gradient(0deg, rgba(8,6,12,0.88) 0%, rgba(8,6,12,0.5) 60%, rgba(8,6,12,0) 100%);
+          font-family: 'Cinzel', serif; font-size: 8px; font-weight: 700; text-align: left;
+          letter-spacing: 0.02em; color: var(--gold); text-shadow: 0 1px 3px rgba(0,0,0,0.95);
         }
-        .hub-ordre-fiche { cursor: default; }
-        .hub-ordre-fiche:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
+
+        /* ---------- La vague de maitrise ---------- */
+        .vague-maitrise {
+          position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+          border: 1px solid rgba(203,164,86,0.28);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+          background: #0b0910;
+        }
+        .vague-maitrise img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Le portrait grise : ce qui reste a conquerir. Entierement gris si jamais joue. */
+        .vague-gris { filter: grayscale(1) brightness(0.42) contrast(0.95); }
+        /* La partie remplie : un cadre ancre en bas, qui grandit vers le haut. Le portrait en
+           couleur y est cale sur le BAS, pour rester aligne avec le gris en dessous. */
+        .vague-pleine {
+          position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden;
+          /* Sous la crete, un socle plein : sans lui, une lame de 6 px n'avait que des
+             bosses, la couche pleine du masque ne commencant qu'a 13 px. */
+          transition: height 1.6s cubic-bezier(.22,.9,.3,1);
+          /* La crete : une vague repetee sur 14 px en haut, plein en dessous. Le masque
+             derive vers la gauche sans fin, c'est ce qui fait la maree. */
+          -webkit-mask-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 13 0, 27 0, 40 8 S 67 16, 80 8 V14 H0 Z' fill='%23000'/%3E%3C/svg%3E"),
+            linear-gradient(#000, #000);
+          mask-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 13 0, 27 0, 40 8 S 67 16, 80 8 V14 H0 Z' fill='%23000'/%3E%3C/svg%3E"),
+            linear-gradient(#000, #000);
+          -webkit-mask-size: 80px 14px, 100% 100%;
+          mask-size: 80px 14px, 100% 100%;
+          -webkit-mask-position: 0 0, 0 13px;
+          mask-position: 0 0, 0 13px;
+          -webkit-mask-repeat: repeat-x, no-repeat;
+          mask-repeat: repeat-x, no-repeat;
+          animation: vague-derive 3.2s linear infinite;
+        }
+        @keyframes vague-derive {
+          from { -webkit-mask-position: 0 0, 0 13px; mask-position: 0 0, 0 13px; }
+          to { -webkit-mask-position: 80px 0, 0 13px; mask-position: 80px 0, 0 13px; }
+        }
+        /* Ordre acheve : la vague depasse le cadre (hauteur 130 %), le masque ne sert plus. */
+        .vague-maitrise.pleine .vague-pleine {
+          -webkit-mask-image: none; mask-image: none; animation: none;
+        }
+        /* Le portrait couleur est cale en BAS et mesure la hauteur de la carte entiere
+           (pas celle de la zone remplie) : ainsi il se superpose exactement au gris, et la
+           crete revele l'image au lieu de la decaler. */
+        .vague-maitrise .vague-pleine .vague-couleur {
+          top: auto; bottom: 0; height: var(--vague-cote); inset: auto 0 0 0;
+        }
+        /* Le voile de couleur : dense sur la crete, il s'eclaircit en descendant pour
+           laisser respirer le portrait. C'est lui qui fait la vague "de la couleur de la
+           carte". */
+        .vague-teinte {
+          position: absolute; inset: 0;
+          background: linear-gradient(180deg, var(--vague-couleur) 0%, transparent 38%);
+          mix-blend-mode: screen;
+        }
+        .vague-maitrise.vide .vague-pleine { display: none; }
+        /* Version agrandie, dans le panneau de detail. */
+        .vague-maitrise.grand {
+          border-radius: 14px; border-color: rgba(203,164,86,0.5);
+          box-shadow: 0 14px 34px rgba(0,0,0,0.6);
+        }
+        .vague-maitrise.grand .vague-pleine {
+          -webkit-mask-size: 120px 20px, 100% 100%;
+          mask-size: 120px 20px, 100% 100%;
+          -webkit-mask-position: 0 0, 0 19px;
+          mask-position: 0 0, 0 19px;
+          animation-name: vague-derive-grand;
+        }
+        @keyframes vague-derive-grand {
+          from { -webkit-mask-position: 0 0, 0 19px; mask-position: 0 0, 0 19px; }
+          to { -webkit-mask-position: 120px 0, 0 19px; mask-position: 120px 0, 0 19px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .vague-pleine { animation: none; transition: none; }
+        }
+
+        /* ---------- Detail d'un Ordre ---------- */
+        .ordre-detail {
+          position: relative;
+          display: flex; align-items: flex-start; gap: 14px;
+          width: 100%; max-width: 400px; box-sizing: border-box;
+          padding: 16px; border-radius: 18px;
+          background: var(--panel); border: 1px solid var(--gold);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+          animation: ordre-detail-zoom .34s cubic-bezier(.22,1,.36,1) both;
+        }
+        @keyframes ordre-detail-zoom {
+          from { opacity: 0; transform: scale(0.72); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        /* La carte du detail : un portrait en HAUTEUR, plus grand qu'en grille, et en
+           fondu — pas de cadre, ses bords s'effacent dans le panneau. */
+        .ordre-detail-carte { flex: 0 0 46%; max-width: 190px; }
+        .ordre-detail-carte .vague-maitrise.grand {
+          aspect-ratio: 3 / 4; border: none; border-radius: 0; box-shadow: none; background: none;
+          -webkit-mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
+          mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
+          animation: ordre-detail-fondu 0.9s ease-out both;
+        }
+        @keyframes ordre-detail-fondu {
+          from { opacity: 0; transform: scale(1.05); }
+          to { opacity: 1; transform: none; }
+        }
+        .ordre-detail-carte .vague-maitrise.grand img { object-position: center 20%; }
+        @media (prefers-reduced-motion: reduce) { .ordre-detail-carte .vague-maitrise.grand { animation: none; } }
+        .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .ordre-detail-pourcent {
+          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; line-height: 1;
+          color: var(--gold-bright); text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        .ordre-detail-nom {
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
+          letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone);
+        }
+        .ordre-detail-rang {
+          display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+          margin-top: 3px; padding: 2px 9px 2px 4px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+          color: var(--gold-bright); background: rgba(203,164,86,0.14); border: 1px solid rgba(203,164,86,0.45);
+        }
+        .ordre-detail-rang-num {
+          padding: 1px 6px; border-radius: 999px; font-size: 9.5px;
+          background: rgba(203,164,86,0.25);
+        }
+        .ordre-detail-parties { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+        .ordre-detail-desc {
+          margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
+          padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
+        }
+        .ordre-detail-fermer { position: absolute; top: -14px; right: -14px; width: 34px; height: 34px; }
+        @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
         /* ---------- Barre de navigation : socle de pierre et metal ----------
            Le rendu vise une barre d'interface de jeu, pas une barre d'onglets de site :
            un socle sombre borde d'un liseré clair en haut (l'arete captant la lumiere),
@@ -2463,8 +3192,10 @@ const APP_STYLES = `
         .hub-onglet {
           flex: 1; max-width: 150px; position: relative;
           display: flex; flex-direction: column; align-items: center; gap: 4px;
-          padding: 8px 6px; background: transparent; cursor: pointer;
-          border: 1px solid transparent; border-radius: 13px;
+          padding: 8px 6px; cursor: pointer;
+          background: #000000;
+          border: 1px solid rgba(203,164,86,0.16); border-radius: 13px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
           color: var(--muted);
           transition: color .22s, transform .18s, background .22s, border-color .22s;
         }
@@ -2473,20 +3204,29 @@ const APP_STYLES = `
            les traces SVG de secours. */
         /* cover et non contain : les illustrations fournies sont paysage avec de
            larges marges sombres, le recadrage central isole l'icone elle-meme. */
+        /* Les trois icones sont detourees (fond transparent) : elles se posent sur la
+           barre sans artifice. object-fit: contain, jamais cover — le bouclier est plus
+           haut que large, on ne le rogne pas. */
         .hub-onglet-img {
-          width: 32px; height: 32px; object-fit: cover; border-radius: 9px;
-          border: 1px solid rgba(203,164,86,0.35);
+          width: 34px; height: 34px; object-fit: contain; border: none;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
-          transition: filter .22s, opacity .22s;
+          transition: filter .22s, opacity .22s, transform .22s;
         }
+        /* Pas de pastille ronde derriere l'icone : c'est le BOUTON entier qui porte le
+           fond sombre, d'un bord a l'autre de sa surface. */
         .hub-onglet:not(.actif) .hub-onglet-img {
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.4) brightness(0.62);
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) saturate(0.5) brightness(0.62);
           opacity: 0.85;
         }
-        .hub-onglet.actif .hub-onglet-img {
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.55));
+        .hub-onglet.actif {
+          border-color: rgba(203,164,86,0.55);
+          box-shadow: inset 0 1px 0 rgba(255,240,205,0.12), 0 0 14px rgba(203,164,86,0.16);
         }
-        .hub-onglet-central .hub-onglet-img { width: 42px; height: 42px; }
+        .hub-onglet.actif .hub-onglet-img {
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(232,200,119,0.55)) brightness(1.08);
+          transform: scale(1.06);
+        }
+        .hub-onglet-central .hub-onglet-img { width: 44px; height: 44px; }
         /* Le metal : degrade sur le trace lui-meme, ombre portee pour detacher l'icone
            du socle. Le filtre porte sur le SVG, donc l'ombre epouse la silhouette. */
         .hub-onglet svg path {
@@ -2510,9 +3250,10 @@ const APP_STYLES = `
         /* Onglet actif : cadre dore net, fond legerement eclaire, icone qui rayonne. */
         .hub-onglet.actif {
           color: var(--gold-bright);
-          background: linear-gradient(180deg, rgba(232,200,119,0.13), rgba(232,200,119,0.03));
+          background: #000000;
           border-color: rgba(232,200,119,0.65);
-          box-shadow: inset 0 1px 0 rgba(255,240,205,0.16), 0 3px 10px rgba(0,0,0,0.4);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 3px 10px rgba(0,0,0,0.4),
+                      0 0 14px rgba(203,164,86,0.16);
         }
         .hub-onglet.actif svg {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 7px rgba(232,200,119,0.6));
@@ -2521,7 +3262,7 @@ const APP_STYLES = `
            Royale, mais dans la sobriete du jeu. Socle en relief, arete claire en haut. */
         .hub-onglet-central {
           transform: translateY(-10px);
-          background: linear-gradient(180deg, #2c2340, #171221 70%);
+          background: #000000;
           border: 1px solid rgba(203,164,86,0.5);
           box-shadow:
             0 8px 18px rgba(0,0,0,0.55),
@@ -2533,7 +3274,7 @@ const APP_STYLES = `
         .hub-onglet-central span { font-size: 11px; }
         .hub-onglet-central.actif {
           border-color: var(--gold-bright);
-          background: linear-gradient(180deg, #3a2f52, #1d1730 72%);
+          background: #000000;
           box-shadow:
             0 8px 20px rgba(0,0,0,0.6),
             inset 0 1px 0 rgba(255,240,205,0.24),
@@ -2551,27 +3292,10 @@ const APP_STYLES = `
         @media (prefers-reduced-motion: reduce) {
           .hub-onglet-central.actif::after { animation: none; opacity: 0.5; }
         }
-        /* La sequence d'entree existante revele aussi le hub : memes etapes que
-           l'ancien bouton Nouvelle partie. */
-        .landing.intro-e0 .hub-haut, .landing.intro-e1 .hub-haut,
-        .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
-        .landing.intro-e0 .hub-pages, .landing.intro-e1 .hub-pages { opacity: 0; }
-        .landing.intro-e2 .hub-haut, .landing.intro-e3 .hub-haut,
-        .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
-        .landing.intro-e2 .hub-pages, .landing.intro-e3 .hub-pages {
-          opacity: 1; transition: opacity .55s ease;
-        }
-        .landing.intro-e2 .hub-pages { transition-delay: .48s; }
-        .landing.intro-e2 .hub-haut { transition-delay: .6s; }
-        .landing.intro-e2 .hub-nav { transition-delay: .6s; }
+        /* La sequence d'entree du hub est decrite plus haut, avec celle de l'accueil :
+           l'arene sort du noir la premiere, le reste la rejoint a l'etape 2. Cacher ici
+           toute la page (.hub-pages) empechait justement l'arene de paraitre avant. */
 
-        .landing-cta {
-          font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 14px; text-transform: uppercase;
-          color: #2a2413; background: linear-gradient(180deg, #cba456, #8f7238); border: none;
-          padding: 13px 34px; border-radius: 999px; cursor: pointer;
-          box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 0 1px rgba(203,164,86,0.3);
-        }
-        .landing-cta:hover { filter: brightness(1.08); }
         .landing-link {
           margin-top: 14px; background: none; border: none; cursor: pointer;
           font-family: 'Spectral', Georgia, serif; font-size: 12.5px; color: var(--muted);
@@ -2599,7 +3323,6 @@ const APP_STYLES = `
         }
         .back-btn:hover { color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(203,164,86,0.14); }
 
-        .landing-links { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
 
         .tut-text { text-align: center; max-width: 380px; margin: 0 0 4px; }
         .tut-board-wrap {
@@ -2617,40 +3340,7 @@ const APP_STYLES = `
           50% { box-shadow: 0 0 0 5px rgba(232,200,119,0.45), 0 0 22px rgba(232,200,119,0.55); }
         }
 
-        .landing.landing-exit { animation: landing-shake 0.5s ease; }
-        @keyframes landing-shake {
-          0%,100% { transform: translate(0,0); filter: brightness(1); }
-          20% { transform: translate(-2px, 1px); }
-          40% { transform: translate(2px, -1px); filter: brightness(1.15); }
-          60% { transform: translate(-1px, -1px); }
-          80% { transform: translate(1px, 1px); filter: brightness(1.3); }
-        }
 
-        .rift-overlay {
-          position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
-          pointer-events: none; overflow: hidden;
-        }
-        .rift-ring {
-          position: absolute; border-radius: 50%; border: 2px solid var(--gold-bright);
-          opacity: 0; box-shadow: 0 0 30px rgba(203,164,86,0.6);
-        }
-        .ring-1 { width: 20px; height: 20px; animation: rift-expand 1.2s ease-out forwards; }
-        .ring-2 { width: 20px; height: 20px; border-color: var(--combo); animation: rift-expand 1.2s ease-out 0.08s forwards; }
-        .ring-3 { width: 20px; height: 20px; border-color: var(--blue-bright); animation: rift-expand 1.2s ease-out 0.16s forwards; }
-        @keyframes rift-expand {
-          0% { width: 10px; height: 10px; opacity: 0.9; }
-          70% { opacity: 0.6; }
-          100% { width: 900px; height: 900px; opacity: 0; }
-        }
-        .rift-flash {
-          position: absolute; inset: 0; background: radial-gradient(circle, rgba(232,200,119,0.9), rgba(232,200,119,0) 55%);
-          animation: rift-flash-anim 1.2s ease-out forwards;
-        }
-        @keyframes rift-flash-anim {
-          0% { opacity: 0; }
-          15% { opacity: 1; }
-          100% { opacity: 0; }
-        }
 
         .rules-panel { max-height: 78vh; overflow-y: auto; }
         .rules-section { text-align: left; margin-bottom: 12px; }
@@ -2664,14 +3354,6 @@ const APP_STYLES = `
           -webkit-background-clip: text; background-clip: text; color: transparent;
           animation: title-shine 9s ease-in-out infinite; }
 
-        .inline-score {
-          display: inline-flex; align-items: center; justify-content: center; margin-left: 8px;
-          min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; vertical-align: middle;
-          background: var(--panel); border: 1px solid rgba(203,164,86,0.25);
-        }
-        .inline-score.blue { color: var(--blue-bright); border-color: var(--blue-bright); }
-        .inline-score.red { color: var(--red-bright); border-color: var(--red-bright); }
 
         /* ---------- Bras de fer : les deux camps poussent vers le centre ----------
            Remplace les deux pastilles .inline-score, qui etaient aux extremites de
@@ -2955,7 +3637,15 @@ const APP_STYLES = `
            calent maintenant sur la plus contraignante des deux dimensions. */
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
-          height: 100dvh; max-height: 100dvh; overflow: hidden;
+          height: 100dvh; max-height: 100dvh;
+          /* Filet de securite : une partie normale tient dans l'ecran et ne defile
+             jamais. Mais le bac a sable ajoute le choix d'arene, celui des Herauts et
+             deux mains de onze vignettes ; en coupant net, on rendait le bouton Quitter
+             inatteignable. Mieux vaut un defilement qu'un joueur enferme. Pendant qu'une
+             carte est tenue, le glissement natif reste bloque (voir bloqueDefilement),
+             le geste de pose n'est donc pas confondu avec un defilement. */
+          overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
+          -webkit-overflow-scrolling: touch;
           display: flex; flex-direction: column; justify-content: space-between;
           padding-top: 4px; padding-bottom: 4px; gap: 2px;
         }
@@ -3476,14 +4166,6 @@ const APP_STYLES = `
           box-shadow: 0 0 0 1px rgba(111,164,230,0.15), 0 6px 14px rgba(0,0,0,0.4); }
         .card.hand.red { background: linear-gradient(160deg, #7c332c, #4e1f1a 65%); border: 1px solid var(--red-bright);
           box-shadow: 0 0 0 1px rgba(224,101,90,0.15), 0 6px 14px rgba(0,0,0,0.4); }
-        @keyframes neon-pulse-blue {
-          0%, 100% { box-shadow: 0 0 3px rgba(127,200,255,0.6), 0 0 8px rgba(90,170,255,0.4), 0 0 14px rgba(70,150,255,0.25), 0 6px 14px rgba(0,0,0,0.4); }
-          50% { box-shadow: 0 0 4px rgba(127,200,255,0.75), 0 0 11px rgba(90,170,255,0.55), 0 0 18px rgba(70,150,255,0.35), 0 6px 14px rgba(0,0,0,0.4); }
-        }
-        @keyframes neon-pulse-red {
-          0%, 100% { box-shadow: 0 0 3px rgba(255,122,104,0.6), 0 0 8px rgba(255,90,70,0.4), 0 0 14px rgba(255,70,50,0.25), 0 6px 14px rgba(0,0,0,0.4); }
-          50% { box-shadow: 0 0 4px rgba(255,122,104,0.75), 0 0 11px rgba(255,90,70,0.55), 0 0 18px rgba(255,70,50,0.35), 0 6px 14px rgba(0,0,0,0.4); }
-        }
 
         .card .portrait-frame { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center;
           background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.14), transparent 70%);
@@ -3913,17 +4595,9 @@ const APP_STYLES = `
           70%  { transform: scaleY(1); opacity: 0.85; }
           100% { transform: scaleY(0); opacity: 0; }
         }
-        @keyframes spikes-pop-x {
-          0%   { transform: scaleX(0); opacity: 0; }
-          22%  { transform: scaleX(1.2); opacity: 1; }
-          42%  { transform: scaleX(0.92); opacity: 1; }
-          70%  { transform: scaleX(1); opacity: 0.85; }
-          100% { transform: scaleX(0); opacity: 0; }
-        }
 
         /* Archers, impact en anneau, façon flèche qui frappe */
         @keyframes portee-impact { 0%{transform:scale(0.4); opacity:0.4; filter:brightness(1)} 50%{transform:scale(1.18); opacity:1; filter:brightness(2.1)} 70%{filter:brightness(1.3)} 100%{transform:scale(1); filter:brightness(1)} }
-        @keyframes portee-ring { 0%{opacity:0.9; transform:scale(1)} 100%{opacity:0; transform:scale(11)} }
 
         /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
         @keyframes devoreuse-void { 0%,100%{transform:scale(1); filter:drop-shadow(0 0 0 var(--devour))} 40%{transform:scale(0.8); box-shadow:0 0 34px var(--devour); filter:drop-shadow(0 0 14px var(--devour))} 70%{transform:scale(1.28); filter:drop-shadow(0 0 10px var(--devour))} 88%{transform:scale(0.96)} }
@@ -4258,20 +4932,47 @@ const APP_STYLES = `
         /* L'Ordre en vedette pendant la recherche d'adversaire. */
         .attente-ordre {
           display: flex; flex-direction: column; align-items: center; gap: 4px;
-          margin-top: 10px; width: 100%; max-width: 250px;
+          margin-top: 12px; width: 100%; max-width: 250px;
         }
-        .attente-ordre img {
-          width: min(58vw, 210px); aspect-ratio: 3 / 4; object-fit: cover;
-          border-radius: 14px; border: 1px solid rgba(203,164,86,0.45);
-          box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+        /* Cadre du portrait : reference de position pour le texte incruste. Plus de trait
+           dore ni d'ombre portee : l'illustration ne doit plus se lire comme une carte
+           posee sur la page, elle doit s'y fondre. */
+        .attente-ordre-cadre {
+          position: relative; display: block; border-radius: 14px;
         }
-        .attente-ordre-nom {
-          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
-          letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-bright);
-          margin-top: 6px;
+        /* Fondu a l'apparition, puis bords qui s'effacent : l'image sort du noir et s'y
+           replonge sur ses quatre cotes, au lieu de s'arreter net sur un bord franc. */
+        .attente-ordre-cadre img {
+          display: block; width: min(72vw, 300px); aspect-ratio: 3 / 4; object-fit: cover;
+          -webkit-mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
+          mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
+          animation: attente-image-fondu 1.4s ease-out both;
         }
-        .attente-ordre-desc { font-size: 11px; color: var(--muted); text-align: center; }
-        .attente-message { margin-top: 8px; }
+        @keyframes attente-image-fondu {
+          from { opacity: 0; transform: scale(1.04); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        /* Le voile du texte suit le meme effacement : sans cela il flottait en rectangle
+           net sur une image aux bords fondus. */
+        .attente-ordre-cadre .recit-attente.sur-image {
+          -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
+        }
+        /* Textes poses SUR l'illustration : un voile monte du bas, opaque sous le texte
+           pour le rendre lisible quel que soit le portrait, transparent en haut pour ne
+           pas masquer le personnage. */
+        .recit-attente.sur-image {
+          position: absolute; left: 0; right: 0; bottom: 0;
+          width: auto; max-width: none; margin: 0;
+          padding: 26px 14px 12px;
+          background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.72) 32%, rgba(8,6,12,0.93) 100%);
+          border: none; border-radius: 0; min-height: 0; gap: 5px;
+        }
+        .recit-attente.sur-image .recit-genre { font-size: 9px; letter-spacing: 0.24em; }
+        .recit-attente.sur-image .recit-texte {
+          font-size: 11.5px; line-height: 1.45;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+        }
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
           margin-top: 12px;
@@ -4303,9 +5004,10 @@ const APP_STYLES = `
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
           box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
+        /* Le sablier est une illustration : plus haut que large, on ne le rogne pas. */
         .ordres-sablier {
-          width: 19px; height: 19px; fill: var(--gold-bright);
-          filter: drop-shadow(0 0 4px rgba(232,200,119,0.55));
+          width: 18px; height: 26px; object-fit: contain; display: block;
+          filter: drop-shadow(0 0 5px rgba(232,200,119,0.5));
           animation: sablier-tourne 2.4s linear infinite;
         }
         /* Seul transform est anime : le sablier tourne sans rien recalculer. */
@@ -4319,8 +5021,11 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums;
         }
         .ordres-minuteur.urgent { border-color: var(--red-bright); }
-        .ordres-minuteur.urgent .ordres-temps,
-        .ordres-minuteur.urgent .ordres-sablier { color: var(--red-bright); fill: var(--red-bright); }
+        .ordres-minuteur.urgent .ordres-temps { color: var(--red-bright); }
+        /* Sur une illustration, l'alerte passe par la teinte : on la fait virer au rouge. */
+        .ordres-minuteur.urgent .ordres-sablier {
+          filter: drop-shadow(0 0 5px rgba(224,101,90,0.6)) hue-rotate(-35deg) saturate(1.5);
+        }
         .ordres-adversaire {
           display: inline-flex; align-items: center; gap: 6px;
           font-size: 11.5px; color: var(--muted); margin-top: -2px;
@@ -4333,32 +5038,83 @@ const APP_STYLES = `
           color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
         }
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
-        /* Rotation du duel local : tout l'écran pivote vers le joueur dont c'est le tour.
-           La transition donne le geste de tourner physiquement le plateau. */
-        /* Rotation du duel local : INSTANTANEE, et c'est voulu. Transition comme
-           animation restaient gelees a leur point de depart dans certains
-           environnements (constate : la valeur calculee ne bougeait jamais, ecran
-           jamais tourne). L'etat est donc porte uniquement par le style inline pose
-           par React : aucun mecanisme temporel, aucun environnement ne peut le geler. */
-        /* Trophées d'un joueur en partie Classée : une puce discrète dans l'étiquette. */
-        /* Puce de trophees en Classe : a gauche, a hauteur de la rangee d'Ordres. */
+        /* Trophées et titre d'un joueur en Classé : des puces posées à côté de son nom. */
         .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        /* L'etiquette est une rangee : le nom, puis ce qui le decrit. */
+        .turn-label {
+          display: flex; align-items: center; justify-content: center;
+          gap: 8px; flex-wrap: wrap;
+        }
+        .turn-label-nom { flex: none; }
         .trophees-flottant {
-          position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 3px 8px 3px 6px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          display: inline-flex; align-items: center; gap: 5px; flex: none;
+          padding: 3px 11px 3px 8px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; line-height: 1;
           color: var(--gold-bright); background: rgba(8,6,12,0.8);
-          border: 1px solid rgba(203,164,86,0.4);
+          border: 1px solid rgba(203,164,86,0.45);
         }
-        .trophees-flottant svg { width: 12px; height: 12px; fill: var(--gold-bright); }
-        .trophees-chip {
-          margin-left: 7px; padding: 1px 7px 1px 8px; border-radius: 999px;
-          font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
-          color: var(--gold-bright); background: rgba(203,164,86,0.12);
-          border: 1px solid rgba(203,164,86,0.35); vertical-align: 1px;
+        .trophees-flottant svg { width: 17px; height: 17px; fill: var(--gold-bright); }
+        /* Titre de style en Classe : face aux trophees, a droite de la rangee d'Ordres. */
+        .titre-flottant {
+          flex: none; max-width: 44vw; padding: 3px 9px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          color: var(--bone); background: rgba(8,6,12,0.8);
+          border: 1px solid rgba(203,164,86,0.28);
         }
-        .trophees-icone { font-size: 10px; }
+        /* Le titre sous le pseudo du hub : discret, il n'eclipse pas le nom. */
+        .hub-pseudo-titre {
+          display: block; margin-top: 1px;
+          font-family: 'Cinzel', serif; font-size: 8.5px; font-weight: 600;
+          letter-spacing: 0.08em; color: var(--gold); text-transform: none;
+        }
+        /* Panneau de profil. Un joueur chevronne peut cumuler trois titres ET la liste
+           des dix combos : le panneau defile plutot que de deborder de l'ecran, ce qui
+           rendait le bouton Fermer inatteignable sur les petits telephones. */
+        .info-panel.settings-panel.profil-panel {
+          max-height: 88dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        .profil-chiffres { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
+        .profil-chiffres > div {
+          flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+          padding: 8px 4px; border-radius: 10px;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.18);
+        }
+        .profil-chiffres b { font-family: 'Cinzel', serif; font-size: 17px; color: var(--gold-bright); }
+        .profil-chiffres span { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+        .profil-titre {
+          width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px;
+          padding: 9px 11px; margin-bottom: 7px; border-radius: 11px;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
+        }
+        .profil-titre.principal {
+          background: linear-gradient(180deg, rgba(203,164,86,0.16), rgba(203,164,86,0.05));
+          border-color: rgba(203,164,86,0.55);
+        }
+        .profil-titre-haut { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .profil-titre-nom { font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; color: var(--gold-bright); }
+        .profil-titre-taux { font-size: 11px; font-weight: 700; color: var(--gold); }
+        .profil-titre-recit { font-size: 11.5px; line-height: 1.45; color: var(--bone); }
+        .profil-titre-ordres {
+          font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+        }
+        .profil-vide {
+          width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 11px;
+          font-size: 11.5px; line-height: 1.5; color: var(--muted);
+          background: rgba(255,255,255,0.03); border: 1px dashed rgba(203,164,86,0.25);
+        }
+        .profil-liste { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+        .profil-ligne { display: flex; align-items: center; gap: 8px; }
+        .profil-ligne-nom { flex: 0 0 43%; font-size: 11px; color: var(--bone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .profil-ligne-jauge {
+          flex: 1; height: 6px; border-radius: 999px; overflow: hidden;
+          background: rgba(255,255,255,0.07);
+        }
+        .profil-ligne-jauge i {
+          display: block; height: 100%; border-radius: 999px;
+          background: linear-gradient(90deg, #b89742, #e8c877);
+        }
+        .profil-ligne-nombre { flex: none; min-width: 18px; text-align: right; font-size: 11px; font-weight: 700; color: var(--gold); }
         .revanche-attente { font-size: 11px; color: var(--muted); text-align: center; font-style: italic; }
         /* Code du tournoi : lisible sans crier — l'arbre au-dessous est la vraie vedette,
            contrairement au mode "Jouer avec un ami" où le code occupe l'écran. */
@@ -4374,8 +5130,15 @@ const APP_STYLES = `
         .tb-champion-annonce { color: var(--gold-bright); font-weight: 700; font-size: 13px; }
         /* Messages en direct. Bouton flottant au-dessus de la rangée d'actions ; le
            panneau reste compact pour ne jamais recouvrir le plateau entier. */
+        /* z-index 75/76 et non 60/61 : l'eventail se deploie vers le HAUT depuis la main
+           du bas, c'est-a-dire exactement sur la bande du chat, et son fond invisible
+           couvre tout l'ecran (65). En restant dessous, le panneau ouvert se faisait
+           recouvrir par les cartes (70) au niveau meme du champ de saisie, et le premier
+           tap sur "Envoyer" ne servait qu'a refermer l'eventail. Meme raison que
+           .order-tile (66) et .info-overlay (90) : ce qu'on a ouvert soi-meme doit rester
+           touchable. */
         .chat-bouton {
-          position: fixed; right: 10px; bottom: 86px; z-index: 60;
+          position: fixed; right: 10px; bottom: 86px; z-index: 75;
           width: 40px; height: 40px; border-radius: 50%; font-size: 17px; line-height: 1;
           background: var(--panel); color: var(--bone);
           border: 1px solid rgba(203,164,86,0.45); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
@@ -4394,7 +5157,7 @@ const APP_STYLES = `
           box-shadow: 0 0 5px rgba(224,101,90,0.7);
         }
         .chat-bulle-directe {
-          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          position: fixed; right: 10px; bottom: 132px; z-index: 76;
           width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
           padding: 9px 12px; border-radius: 12px; cursor: pointer;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.4);
@@ -4413,7 +5176,7 @@ const APP_STYLES = `
           to { opacity: 1; transform: translateY(0); }
         }
         .chat-bulle-avis {
-          position: fixed; right: 10px; bottom: 132px; z-index: 61;
+          position: fixed; right: 10px; bottom: 132px; z-index: 76;
           padding: 7px 12px; border-radius: 999px;
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.35);
           font-size: 11px; letter-spacing: 0.06em; color: var(--gold-bright);
@@ -4425,7 +5188,7 @@ const APP_STYLES = `
           color: #14111c; background: var(--gold-bright); text-align: center;
         }
         .chat-panneau {
-          position: fixed; right: 10px; bottom: 132px; z-index: 60;
+          position: fixed; right: 10px; bottom: 132px; z-index: 75;
           width: min(290px, calc(100vw - 20px)); max-height: 42vh;
           display: flex; flex-direction: column;
           background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
@@ -4455,9 +5218,6 @@ const APP_STYLES = `
           border-color: var(--gold-bright); color: var(--gold-bright);
           animation: hint-pulse 1.4s ease-in-out infinite;
         }
-        /* Reprise d'une partie en ligne : un adversaire attend en face, donc elle passe
-           devant la reprise d'une partie solo, qui peut attendre. */
-        .landing-link.reprise-en-ligne { color: var(--gold-bright); font-weight: 600; }
         .order-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; width: 100%; }
         .order-option { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.15); cursor: pointer;
@@ -4844,7 +5604,6 @@ const APP_STYLES = `
            un pseudo-element SANS masque (::after est masque avec son parent, ::before non
            puisqu'on le sort du cadre), sinon le halo serait lui aussi decoupe a la forme
            du rocher et ne rayonnerait pas. */
-        /* Etape en cours : c'est le halo separe (.sm-halo-courant) qui la signale. */
         /* Le halo autour du rocher courant : un calque separe, place juste derriere le
            noeud et non masque, pour rayonner au-dela de la pierre. */
         /* Etape en cours : un ANNEAU pose autour du rocher. Il est rond, volontairement :
@@ -5184,18 +5943,6 @@ const APP_STYLES = `
         .imposed-order-desc { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
         /* Déblocage de Héraut (écran de récompense) : entrée en fanfare + halo qui pulse
            deux fois autour du portrait, pour marquer le coup sans être trop long. */
-        .imposed-order-box.hero-reveal { animation: hero-reveal-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        @keyframes hero-reveal-in {
-          0%   { transform: scale(0.6); opacity: 0; }
-          60%  { transform: scale(1.06); opacity: 1; }
-          80%  { transform: scale(0.98); }
-          100% { transform: scale(1); }
-        }
-        .imposed-order-box.hero-reveal .imposed-order-thumb { animation: hero-halo-pulse 1.8s ease-in-out 0.9s 2; }
-        @keyframes hero-halo-pulse {
-          0%, 100% { box-shadow: 0 0 12px rgba(203,164,86,0.4); }
-          50% { box-shadow: 0 0 12px rgba(203,164,86,0.4), 0 0 30px rgba(203,164,86,0.9), 0 0 50px rgba(203,164,86,0.5); }
-        }
         /* Option B : révélation en deux temps, flash doré sur portrait+nom d'abord
            (le "quoi"), puis la description se dévoile juste après (le "pourquoi"). */
         .imposed-order-box.hero-reveal-b .imposed-order-thumb,
@@ -5217,40 +5964,9 @@ const APP_STYLES = `
           to   { opacity: 1; transform: translateY(0); }
         }
 
-        .chapter-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 
-        /* Tournoi : voir le bloc de rendu pour le détail, géométrie calculée en JS,
-           traits en SVG, cartes en style inline (positions précises nécessaires). */
-        .chapter-card {
-          position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 14px;
-          border-radius: 12px; background: var(--panel); border: 1px solid rgba(203,164,86,0.15);
-          cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s;
-        }
-        .chapter-card:hover { border-color: var(--gold); transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
-        .chapter-card.completed { border-color: rgba(120,190,120,0.4); background: linear-gradient(160deg, rgba(60,90,60,0.18), var(--panel)); }
-        .chapter-card.locked { opacity: 0.85; cursor: not-allowed; }
-        .chapter-card.locked:hover { border-color: rgba(203,164,86,0.15); transform: none; box-shadow: none; }
-        .chapter-thumb {
-          width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-          border: 1px solid rgba(203,164,86,0.3); box-shadow: 0 0 10px rgba(0,0,0,0.4);
-        }
-        .chapter-thumb.thumb-teaser { filter: grayscale(0.85) brightness(0.55) blur(2px); }
-        .chapter-info { flex: 1; min-width: 0; text-align: left; }
-        .chapter-number { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-        .chapter-name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.04em; color: var(--gold-bright); margin-top: 1px; }
-        .chapter-lock-msg { font-size: 10.5px; color: var(--muted); font-style: italic; margin-top: 4px; }
-        .chapter-done-msg { font-size: 10.5px; color: #b6e0b6; margin-top: 4px; }
-        .chapter-progress-text { font-size: 10px; color: var(--muted); margin-top: 4px; }
-        .chapter-progress-bar { width: 100%; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.08); margin-top: 4px; overflow: hidden; }
-        .chapter-progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); border-radius: 999px; transition: width .3s; }
 
         .diff-grid { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .diff-section-label {
-          font-family: 'Cinzel', serif; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
-          color: var(--gold); display: flex; align-items: center; gap: 8px; margin: 14px 0 2px;
-        }
-        .diff-section-label:first-child { margin-top: 2px; }
-        .diff-section-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(203,164,86,0.35), transparent); }
         .diff-option { padding: 13px 16px; border-radius: 12px; background: var(--panel); border: 1px solid rgba(203,164,86,0.15);
           cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s;
           display: flex; align-items: center; gap: 12px; }
@@ -5260,9 +5976,6 @@ const APP_STYLES = `
         .diff-option .diff-text { flex: 1; min-width: 0; }
         .diff-option .name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.05em; color: var(--gold-bright); }
         .diff-option .desc { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
-        .diff-option.test-option { border-color: rgba(120,190,120,0.35); background: linear-gradient(160deg, rgba(60,90,60,0.25), var(--panel)); }
-        .diff-option.test-option:hover { border-color: #8fce8f; box-shadow: 0 8px 18px rgba(0,0,0,0.35), 0 0 14px rgba(120,190,120,0.2); }
-        .diff-option.test-option .name { color: #b6e0b6; }
         .confirm-panel { max-width: 300px; gap: 16px; }
         .confirm-text { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
         .confirm-actions { display: flex; flex-direction: column; gap: 9px; }
@@ -5643,15 +6356,15 @@ export default function Emprise() {
   const [partieClassee, setPartieClassee] = useState(false);
   // Trophees des deux camps, lus depuis le document de la partie classee.
   const [trophesPartie, setTrophesPartie] = useState(null);
+  const [titresPartie, setTitresPartie] = useState(null); // titres de style des deux camps
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
   // Reconnexion : partie en ligne retrouvée au démarrage et proposée sur l'accueil.
-  const [repriseEnLigne, setRepriseEnLigne] = useState(null);
   // Vrai le temps d'une reprise : indique à l'écouteur qu'il doit router vers le bon
   // écran (jeu ou choix des Ordres) au lieu de laisser le joueur sur l'écran d'attente.
   const repriseRef = useRef(false);
-  const repriseTesteeRef = useRef(false); // la recherche d'une partie à reprendre n'a lieu qu'une fois
+  const repriseTesteeRef = useRef(false); // la purge des cles de reprise n'a lieu qu'une fois
   // Fin de partie décidée hors plateau : "blue"/"red" quand un camp gagne par abandon ou
   // forfait de l'adversaire, quel que soit le score. Dérivé du document Firestore à chaque
   // notification (champ abandonPar), donc toujours cohérent entre les deux appareils.
@@ -5712,7 +6425,6 @@ export default function Emprise() {
   const [codeTournoiInput, setCodeTournoiInput] = useState("");
   const tournoiLancementRef = useRef(false); // un seul client tente le lancement à la fois
   const tournoiResultatRef = useRef(null); // gameId dont le résultat a déjà été écrit
-  const [repriseTournoi, setRepriseTournoi] = useState(null); // tournoi retrouvé au démarrage
 
 
   const [board, setBoard] = useState(Array(CELLS).fill(null));
@@ -5758,14 +6470,12 @@ export default function Emprise() {
   const shakeTimerRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
-  const riftTimerRef = useRef(null);
   useEffect(() => {
     return () => {
       clearTimeout(flashTimerRef.current);
       clearTimeout(shakeTimerRef.current);
       clearTimeout(shakeBigTimerRef.current);
       clearTimeout(poisonTimerRef.current);
-      clearTimeout(riftTimerRef.current);
       clearTimeout(bannerTimerRef.current);
       clearTimeout(bannerTimer2Ref.current);
     };
@@ -5773,14 +6483,17 @@ export default function Emprise() {
   const [gameOver, setGameOver] = useState(false);
   const [infoAbility, setInfoAbility] = useState(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
-  // Duel local à deux sur le même appareil : quand l'option est active, l'écran pivote
-  // de 180° pendant le tour d'Écarlate, comme si on tournait le plateau vers l'autre
-  // joueur. Chacun joue ainsi "en bas" de son côté de la table.
-  const [rotationLocale, setRotationLocale] = useState(() => {
+  // Duel local à deux sur le même appareil : on se passe le téléphone SANS le retourner.
+  // L'écran ne pivote donc pas — il échange les deux mains, pour que celui qui doit jouer
+  // trouve toujours la sienne en bas, à portée du pouce, et tout le texte à l'endroit.
+  // (Une rotation à 180° a été essayée avant : elle suppose qu'on retourne l'appareil,
+  // ce qui n'est pas le geste réel, et laissait la moitié de l'écran tête-bêche.)
+  // La clé de stockage garde son ancien nom pour ne pas effacer le réglage des joueurs.
+  const [passageTelephone, setPassageTelephone] = useState(() => {
     try { return localStorage.getItem("emprise-rotation-locale") === "1"; } catch (e) { return false; }
   });
-  function toggleRotationLocale() {
-    setRotationLocale((r) => {
+  function togglePassageTelephone() {
+    setPassageTelephone((r) => {
       const suivant = !r;
       try { localStorage.setItem("emprise-rotation-locale", suivant ? "1" : "0"); } catch (e) { /* non persisté */ }
       return suivant;
@@ -5804,6 +6517,13 @@ export default function Emprise() {
     });
   }
   const [activeModal, setActiveModal] = useState(null);
+  const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
+  useEffect(() => {
+    if (!ordreDetail) return;
+    const onKey = (e) => { if (e.key === "Escape") setOrdreDetail(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ordreDetail]);
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
@@ -5828,14 +6548,17 @@ export default function Emprise() {
   const [introEtape, setIntroEtape] = useState(0);
   useEffect(() => {
     if (reducedMotion) { setIntroEtape(3); return; } // animations réduites : accueil complet tout de suite
-    const t1 = setTimeout(() => setIntroEtape(1), 700);   // l'illustration monte du noir
-    const t2 = setTimeout(() => setIntroEtape(2), 2400);  // titre, sous-titre, bouton
-    const t3 = setTimeout(() => setIntroEtape(3), 3800);  // fin : tout est en place
+    const t1 = setTimeout(() => setIntroEtape(1), 650);   // l'arene sort du noir, seule
+    const t2 = setTimeout(() => setIntroEtape(2), 2600);  // le reste de l'accueil la rejoint
+    const t3 = setTimeout(() => setIntroEtape(3), 4100);  // fin : tout est en place
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [stats, setStats] = useState(DEFAULT_STATS);
   const statsRecordedRef = useRef(false);
+  // Suivi des combos de la partie en cours. Un ref et non un etat : il est lu et ecrit
+  // au milieu d'un coup, un rendu de retard fausserait la detection.
+  const combosRef = useRef(nouveauSuiviCombos());
   // Charge les stats au démarrage et à chaque ouverture du panneau (lecture asynchrone).
   useEffect(() => { loadStats().then(setStats); }, [activeModal === "stats"]);
   const [storyProgress, setStoryProgress] = useState(DEFAULT_STORY_PROGRESS);
@@ -6008,7 +6731,6 @@ export default function Emprise() {
   // commençait toujours, ce +1 pouvait être écrit en dur ; depuis le tirage au sort, il
   // doit suivre le tirage, sinon Azur cumule l'avantage de position ET le bonus.
   const [firstPlayer, setFirstPlayer] = useState("blue");
-  const [transitioning, setTransitioning] = useState(false);
   const [tut, setTut] = useState({ stepIdx: 0, board: null, resolved: false, flashes: {} });
 
   const { blueCount, redCount, blueScore, redScore } = useMemo(() => {
@@ -6032,31 +6754,58 @@ export default function Emprise() {
   // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
   // l'adversaire". Les deux sections (étiquette + main) sont donc pilotées par le camp
   // affiché en haut et en bas, et non plus figées rouge en haut / bleu en bas.
-  const campHaut = mode === "online" && onlineRole === "red" ? "blue" : "red";
-  const campBas = campHaut === "red" ? "blue" : "red";
-  // Rotation du duel local : l'écran entier pivote pendant le tour d'Écarlate.
-  const vueTournee = mode === "local" && !testMode && rotationLocale && phase === "play"
-    && turn === "red" && !gameOver && !infoAbility && !confirmQuit;
+  // Voir juste en dessous : en duel local, ce placement suit désormais le tour de jeu.
+  // Qui occupe le bas de l'écran. En ligne, c'est toujours MOI. En duel local avec
+  // l'option de passage, c'est celui dont c'est le tour : le téléphone change de mains
+  // sans changer de sens, la main du joueur vient donc à lui. Partout ailleurs, Azur.
+  // Aucune condition sur les panneaux ouverts ("i", confirmation de départ) : ils ne
+  // peuvent pas changer le tour, et les exclure ferait sauter les deux mains à l'écran
+  // au moment précis où l'on ouvre un panneau.
+  const campBas = mode === "online"
+    ? (onlineRole || "blue")
+    : (mode === "local" && !testMode && passageTelephone && phase === "play" ? turn : "blue");
+  const campHaut = campBas === "red" ? "blue" : "red";
 
-  // Étiquette d'un camp — texte identique à l'ancienne version, plus les trophées en
-  // Classé (0 pour l'instant : les profils ne sont pas encore synchronisés côté serveur,
-  // l'emplacement est prêt pour brancher les vraies valeurs le moment venu).
+  // ---------- Profil de joueur : quel camp est le mien, avec quels Ordres ----------
+  // Contre un Echo je suis toujours Azur ; en ligne, le camp que le serveur m'a donne.
+  // En duel local les deux camps sont humains : aucun profil ne peut leur etre attribue,
+  // d'ou l'exclusion plus bas.
+  const monCampCombos = mode === "bot" ? "blue" : mode === "online" ? onlineRole : null;
+  // Une partie ne nourrit le profil que si elle engage un vrai adversaire et un vrai
+  // choix d'Ordres : ni bac a sable (tous les Ordres, annulation libre), ni Mode Histoire
+  // (Ordres imposes par le chapitre), ni duel local (deux joueurs sur un meme profil), ni
+  // Confluence (on y dispose des dix Ordres : les combos y sont a portee de main, et les
+  // melanger aux parties a deux Ordres rendrait le profil illisible).
+  const partieCompteAuProfil = !!monCampCombos && !testMode && !storyChapterKey && !confluenceActive;
+
+  function mesOrdresDuJeu() {
+    const liste = monCampCombos === "red" ? redOrders : blueOrders;
+    return new Set((liste || []).map((o) => o && o.key).filter(Boolean));
+  }
+
+  // Étiquette d'un camp : son nom, puis ce qui le décrit — trophées et titre de style en
+  // Classé. Ces deux-là vivaient en pastilles flottantes calées sur les bords de l'écran,
+  // loin du joueur qu'elles décrivent ; elles appartiennent à son nom, elles s'y rangent
+  // donc, et les trophées sont assez gros pour se lire d'un coup d'œil en pleine partie.
   function labelCamp(camp) {
     const rouge = camp === "red";
     return (
       <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
-        {rouge ? "Écarlate" : "Azur"}
-        {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
-        {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
-        {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
-
+        <span className="turn-label-nom">
+          {rouge ? "Écarlate" : "Azur"}
+          {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
+          {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
+          {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
+        </span>
+        {pucesTrophees(camp)}
+        {pucesTitre(camp)}
       </div>
     );
   }
 
-  // Puce de trophees d'un camp en partie Classee, ancree a GAUCHE de sa rangee
-  // d'Ordres. Les valeurs viennent du document de la partie : les deux ecrans
-  // affichent les memes chiffres, quel que soit le camp qu'ils jouent.
+  // Puce de trophees d'un camp en partie Classee, posee a cote de son nom. Les valeurs
+  // viennent du document de la partie : les deux ecrans affichent les memes chiffres,
+  // quel que soit le camp qu'ils jouent.
   function pucesTrophees(camp) {
     if (mode !== "online" || !partieClassee) return null;
     const valeur = trophesPartie && typeof trophesPartie[camp] === "number"
@@ -6069,6 +6818,21 @@ export default function Emprise() {
         </svg>
         {valeur}
       </span>
+    );
+  }
+
+  // Titre de style d'un camp en partie Classee, a la suite de ses trophees. Comme eux, la
+  // valeur vient du document de la partie : les deux ecrans lisent la meme chose. Un
+  // joueur sans titre n'affiche rien du tout.
+  function pucesTitre(camp) {
+    if (mode !== "online" || !partieClassee) return null;
+    const titre = titresPartie && typeof titresPartie[camp] === "string"
+      ? titresPartie[camp]
+      : (onlineRole === camp ? titrePrincipal(stats) : "");
+    if (!titre) return null;
+    const combo = COMBOS.find((c) => c.nom === titre);
+    return (
+      <span className="titre-flottant" title={combo ? combo.recit : "Style de jeu"}>{titre}</span>
     );
   }
 
@@ -6104,11 +6868,13 @@ export default function Emprise() {
   useEffect(() => {
     if (gameOver && !statsRecordedRef.current) {
       statsRecordedRef.current = true;
-      // En Confluence, seuls les Ordres réellement piochés (draft.pool) comptent — pas les
-      // 10 Ordres du roster complet, dont 2 n'ont jamais été joués cette partie.
-      const orderKeys = confluenceActive
-        ? [...draft.pool, ...draft.pool] // les deux camps jouent avec les mêmes 8, comme en mode standard où chaque camp compte pour lui
-        : [...blueOrders, ...redOrders].map((l) => l.key);
+      // Seuls les Ordres que J'AI joues nourrissent ma maitrise. Compter aussi ceux de
+      // l'adversaire (c'etait le cas) faisait progresser des Ordres qu'on n'avait jamais
+      // tenus en main. En duel local, les deux camps sont humains sur ce meme appareil :
+      // on garde les deux. En Confluence, on dispose des dix Ordres pour quelques coups
+      // chacun : ca ne vaut pas une partie de maitrise, on ne compte rien.
+      const mesOrdresJoues = monCampCombos === "red" ? redOrders : monCampCombos === "blue" ? blueOrders : [...blueOrders, ...redOrders];
+      const orderKeys = confluenceActive ? [] : mesOrdresJoues.map((l) => l.key);
       // Trophées : UNIQUEMENT en mode Classé. Les parties contre un Écho, les duels locaux,
       // mais aussi "Jouer avec un ami" et le tournoi en ligne ne rapportent ni ne coûtent
       // rien : deux amis pourraient sinon se faire monter mutuellement dans les ligues en
@@ -6119,7 +6885,21 @@ export default function Emprise() {
       const trophyGain = partieClassee && onlineRole
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
-      recordGameStats(winner, orderKeys, trophyGain).then(setStats);
+      // Combos de la partie : ceux reconnus coup par coup, plus le Rempart Vicie qui ne
+      // se juge qu'au tableau final. Une partie disqualifiee (annulation) ne compte pas
+      // du tout — ni ses combos ni son total.
+      const suivi = combosRef.current;
+      const compteAuProfil = partieCompteAuProfil && !suivi.disqualifie;
+      if (compteAuProfil) {
+        comboDeFin({
+          mesOrdres: mesOrdresDuJeu(),
+          gagne: winner === monCampCombos,
+          poison: poisonedCells,
+          suivi,
+        });
+      }
+      const comboKeys = compteAuProfil ? [...suivi.reussis] : [];
+      recordGameStats(winner, orderKeys, trophyGain, comboKeys, compteAuProfil, monCampCombos).then(setStats);
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
       // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
@@ -6155,7 +6935,15 @@ export default function Emprise() {
   // Au chargement de l'appli : est-ce qu'il existe une partie sauvegardée à proposer ?
   useEffect(() => {
     try {
-      if (sessionStorage.getItem("emprise-save")) setHasSavedGame(true);
+      // Une sauvegarde de partie FINIE (laissee par une version anterieure) ne vaut pas un
+      // bouton "Reprendre" : on la jette au lieu de la proposer.
+      const brute = sessionStorage.getItem("emprise-save");
+      if (brute) {
+        let finie = false;
+        try { finie = !!JSON.parse(brute).gameOver; } catch (e) { finie = true; }
+        if (finie) sessionStorage.removeItem("emprise-save");
+        else setHasSavedGame(true);
+      }
     } catch (e) { /* stockage indisponible (mode privé, etc.) : tant pis, pas de sauvegarde */ }
   }, []);
 
@@ -6164,11 +6952,14 @@ export default function Emprise() {
       const raw = sessionStorage.getItem("emprise-save");
       if (!raw) return;
       const data = JSON.parse(raw);
+      // Sauvegarde d'une partie deja finie, laissee par une version anterieure : rien a
+      // reprendre, et la reprendre recompterait ses statistiques. On la jette.
+      if (data.gameOver) { clearSavedGame(); return; }
       const isConfluence = !!data.confluenceActive;
       setBoard(data.board.map(hydrateFromSave));
       setBlueHand(data.blueHand.map(hydrateFromSave));
       setRedHand(data.redHand.map(hydrateFromSave));
-      setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
+      setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
       setTurn(data.turn || "blue"); setFirstPlayer(data.firstPlayer || "blue");
       setMode(data.mode || "bot");
       setGameOver(!!data.gameOver);
@@ -6216,7 +7007,14 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null);
+    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null);
+    // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
+    // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
+    // le leve alors que gameOver etait deja faux : l'effet ne se rejouait pas, le verrou
+    // restait leve, et la partie SUIVANTE n'etait comptee nulle part (ni trophees, ni
+    // historique, ni profil). Deserter deux parties classees de suite ne coutait alors
+    // plus rien. On le baisse donc ici, sur le chemin que toute sortie emprunte.
+    statsRecordedRef.current = false;
     setVainqueurForce(null); setFinMotif(null); setAttenteAdv(0); forfaitEcritRef.current = false;
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
@@ -6251,84 +7049,18 @@ export default function Emprise() {
 
   function oublierPartieEnLigne() {
     try { localStorage.removeItem(CLE_PARTIE_EN_LIGNE); } catch (e) { /* stockage indisponible */ }
-    setRepriseEnLigne(null);
   }
 
-  // Mémorise la partie en cours à chaque changement, et l'oublie dès qu'elle est finie.
-  // Aucune donnée de jeu ici : Firestore fait foi, on ne stocke que de quoi s'y rebrancher.
+  // Au demarrage, on purge ce qu'une version precedente aurait laisse : la reprise en
+  // ligne n'existe plus, ces cles n'ont plus d'usage et ne doivent pas trainer.
   useEffect(() => {
-    if (mode !== "online" || !onlineGameId || !onlineRole) return;
-    // Pas de reprise en Classe : quitter un duel classe vaut abandon (le forfait s'en
-    // charge), le proposer a la reprise laissait croire qu'on pouvait revenir sans frais.
-    if (gameOver || partieClassee) { oublierPartieEnLigne(); return; }
-    try {
-      localStorage.setItem(CLE_PARTIE_EN_LIGNE, JSON.stringify({
-        gameId: onlineGameId, role: onlineRole, classee: partieClassee, uid: myUid,
-        tournoi: tournoiOnlineId || null,
-      }));
-    } catch (e) { /* stockage indisponible : pas de reprise possible, on continue */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, onlineGameId, onlineRole, partieClassee, gameOver, myUid]);
-
-  // Au démarrage, une fois l'identité connue : est-ce qu'une partie nous attend ?
-  // On ne propose la reprise qu'après avoir vérifié auprès de Firestore que la partie
-  // existe encore, qu'elle n'est pas terminée, et qu'on en fait bien partie — sinon on
-  // proposerait de reprendre une partie fantôme.
-  useEffect(() => {
-    if (!myUid || repriseTesteeRef.current) return;
+    if (repriseTesteeRef.current) return;
     repriseTesteeRef.current = true;
-    let brut = null;
-    try { brut = localStorage.getItem(CLE_PARTIE_EN_LIGNE); } catch (e) { return; }
-    if (!brut) return;
-    let enregistree = null;
-    try { enregistree = JSON.parse(brut); } catch (e) { oublierPartieEnLigne(); return; }
-    if (!enregistree || !enregistree.gameId) { oublierPartieEnLigne(); return; }
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, "games", enregistree.gameId));
-        if (!snap.exists()) { oublierPartieEnLigne(); return; }
-        const data = snap.data();
-        // Terminée, ou appartenant à quelqu'un d'autre (deux joueurs sur le même
-        // appareil) : il n'y a rien à reprendre.
-        if (data.gameOver) { oublierPartieEnLigne(); return; }
-        // Camps que cette identité peut légitimement reprendre dans cette partie.
-        const campsPossibles = [];
-        if (data.blueUid === myUid) campsPossibles.push("blue");
-        if (data.redUid === myUid) campsPossibles.push("red");
-        if (!campsPossibles.length) { oublierPartieEnLigne(); return; }
-        // Le camp mémorisé fait foi tant qu'il reste plausible : une même identité peut
-        // occuper les DEUX camps (deux onglets d'un même navigateur partagent le compte
-        // anonyme Firebase), et déduire le camp de la seule identité renvoyait alors
-        // systématiquement Azur — un joueur Écarlate se retrouvait dans le camp adverse.
-        const camp = campsPossibles.includes(enregistree.role) ? enregistree.role : campsPossibles[0];
-        setRepriseEnLigne({
-          gameId: enregistree.gameId,
-          role: camp,
-          classee: !!enregistree.classee,
-          tournoi: enregistree.tournoi || null,
-        });
-      } catch (e) { /* réseau absent : on ne propose rien, la partie reste mémorisée */ }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUid]);
-
-  function reprendrePartieEnLigne() {
-    if (!repriseEnLigne) return;
-    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
-    setConfluenceActive(false);
-    setTestMode(false);
-    setPickerChoice([]);
-    setOnlineError("");
-    setOnlineGameId(repriseEnLigne.gameId);
-    setOnlineRole(repriseEnLigne.role);
-    setPartieClassee(!!repriseEnLigne.classee);
-    if (repriseEnLigne.tournoi) setTournoiOnlineId(repriseEnLigne.tournoi);
-    setMode("online");
-    setOnlineStatus("Reprise de la partie...");
-    repriseRef.current = true;
-    setRepriseEnLigne(null);
-    setPhase("online-waiting");
-  }
+    try {
+      localStorage.removeItem(CLE_PARTIE_EN_LIGNE);
+      localStorage.removeItem(CLE_TOURNOI);
+    } catch (e) { /* stockage indisponible : rien a purger */ }
+  }, []);
 
   // ---------- Tournoi en ligne ----------
   // Huit vrais joueurs, un code à partager, et le même arbre que le tournoi solo.
@@ -6345,7 +7077,7 @@ export default function Emprise() {
       status: "waiting-orders", createdAt: serverTimestamp(),
       blueUid: aUid, redUid: bUid,
       blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
-      board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+      board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
       turn: premier, firstPlayer: premier, gameOver: false,
       tournoiId: tournoiOnlineId, matchKey,
     };
@@ -6552,41 +7284,6 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
 
-  // Un tournoi en cours est mémorisé sur l'appareil, comme une partie en ligne : après
-  // un rechargement, l'accueil propose d'y revenir. Oublié dès qu'il est terminé.
-  useEffect(() => {
-    if (!tournoiOnlineId) return;
-    try {
-      if (tournoiData && tournoiData.status === "done") localStorage.removeItem(CLE_TOURNOI);
-      else localStorage.setItem(CLE_TOURNOI, JSON.stringify({ tournoiId: tournoiOnlineId }));
-    } catch (e) { /* stockage indisponible */ }
-  }, [tournoiOnlineId, tournoiData]);
-
-  useEffect(() => {
-    if (!myUid) return;
-    let brut = null;
-    try { brut = localStorage.getItem(CLE_TOURNOI); } catch (e) { return; }
-    if (!brut) return;
-    let enregistre = null;
-    try { enregistre = JSON.parse(brut); } catch (e) { return; }
-    if (!enregistre || !enregistre.tournoiId) return;
-    getDoc(doc(db, "tournaments", enregistre.tournoiId)).then((snap) => {
-      if (snap.exists() && snap.data().status !== "done" && (snap.data().joueurs || []).includes(myUid)) {
-        setRepriseTournoi(enregistre.tournoiId);
-      } else {
-        try { localStorage.removeItem(CLE_TOURNOI); } catch (e) { /* rien */ }
-      }
-    }).catch(() => { /* hors ligne : on ne propose rien */ });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUid]);
-
-  function reprendreTournoiEnLigne() {
-    if (!repriseTournoi) return;
-    setTournoiOnlineId(repriseTournoi);
-    setRepriseTournoi(null);
-    setPhase("tourney-online");
-  }
-
   async function createOnlineGame() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
     setOnlineError("");
@@ -6602,7 +7299,7 @@ export default function Emprise() {
       blueHand: null,
       redHand: null,
       board: Array(CELLS).fill(null),
-      poisonedCells: Array(CELLS).fill(false),
+      poisonedCells: Array(CELLS).fill(""),
       turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
       gameOver: false,
     };
@@ -6744,9 +7441,10 @@ export default function Emprise() {
         setBlueHand(data.blueHand.map(hydrateFromSave));
         setRedHand(data.redHand.map(hydrateFromSave));
         setBoard(data.board.map(hydrateFromSave));
-        setPoisonedCells(data.poisonedCells || Array(CELLS).fill(false));
+        setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
+        setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -6772,7 +7470,7 @@ export default function Emprise() {
         }
       } else {
         // L'adversaire est parti avant même que la partie ne démarre : pas de victoire
-        // (rien n'a été joué), juste un message et le retour au menu en ligne.
+        // (rien n'a été joué), juste un message et le retour d'où l'on venait.
         if (finForcee) {
           if (tournoiOnlineId) {
             // Match de tournoi : l'abandon adverse nous donne la victoire du match.
@@ -6787,11 +7485,16 @@ export default function Emprise() {
           // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
           // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
           setVainqueurForce(null); setFinMotif(null);
+          // On lit le Classé sur le DOCUMENT et non sur l'état React : cet écouteur ne se
+          // réabonne qu'au changement de partie, sa fermeture garderait donc une valeur
+          // périmée de partieClassee. Le document, lui, dit la vérité de cette partie-là.
+          const venaitDuClasse = !!data.appariement;
           setPartieClassee(false);
           oublierPartieEnLigne();
           setOnlineError("L'adversaire a quitté avant le début de la partie.");
           setPickerChoice([]);
-          setPhase("online-menu");
+          if (venaitDuClasse) { setMode(null); setPhase("landing"); }
+          else setPhase("online-menu");
           return;
         }
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
@@ -6884,6 +7587,9 @@ export default function Emprise() {
             // Mes trophees voyagent avec l'inscription : celui qui creera la partie les
             // recopiera dans le document, et les DEUX ecrans afficheront les memes chiffres.
             waitingTrophees: stats.trophies || 0,
+            // Le titre suit le meme chemin que les trophees : recopie dans le document de
+            // la partie, il s'affiche a l'identique sur les deux ecrans.
+            waitingTitre: titrePrincipal(stats) || "",
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
           return null;
@@ -6905,7 +7611,7 @@ export default function Emprise() {
           redUid: myUid,
           blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
           board: Array(CELLS).fill(null),
-          poisonedCells: Array(CELLS).fill(false),
+          poisonedCells: Array(CELLS).fill(""),
           turn: premier, firstPlayer: premier,
           gameOver: false,
           appariement: true, // partie née d'un appariement, pas d'un code partagé
@@ -6915,6 +7621,8 @@ export default function Emprise() {
           // contredisaient sur le meme joueur.
           blueTrophees: lobby.waitingTrophees || 0,
           redTrophees: stats.trophies || 0,
+          blueTitre: lobby.waitingTitre || "",
+          redTitre: titrePrincipal(stats) || "",
         });
         tx.set(lobbyRef, {
           waitingUid: null, waitingAt: null,
@@ -6923,6 +7631,11 @@ export default function Emprise() {
         return { code };
       });
       if (apparie) {
+        // L'appariement a eu lieu : la partie existe et l'adversaire y est deja annonce.
+        // On reaffirme le mode, car un Retour appuye PENDANT la transaction l'a peut-etre
+        // remis a null — on serait alors entre dans la partie sans que l'ecouteur, qui
+        // depend de mode, ne s'y abonne : plateau fige, adversaire seul en face.
+        setMode("online");
         setFileAttente(false);
         setOnlineStatus("");
         setOnlineGameId(apparie.code);
@@ -6935,7 +7648,9 @@ export default function Emprise() {
       setOnlineStatus("");
       setMode(null);
       setOnlineError("Recherche impossible. Vérifiez votre connexion.");
-      setPhase("online-menu");
+      // La recherche ne part que du bouton Classé : en cas d'échec on rend le joueur au
+      // hub, jamais à l'écran des codes d'ami où il n'a rien à faire.
+      setPhase("landing");
     }
   }
 
@@ -6983,7 +7698,14 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setOnlineError("");
     setPickerChoice([]);
     oublierPartieEnLigne();
+    // On revient d'où l'on venait. Un joueur Classé n'est jamais passé par l'écran des
+    // codes de partie : il a appuyé sur Classé depuis le hub, et l'y renvoyer lui
+    // demandait un code d'ami qu'il n'a pas. Le drapeau du Classé est levé au passage,
+    // sans quoi la partie entre amis lancée juste après aurait compté des trophées.
+    const venaitDuClasse = partieClassee;
+    setPartieClassee(false);
     if (tournoiOnlineId) setPhase("tourney-online");
+    else if (venaitDuClasse) { setMode(null); setPhase("landing"); }
     else setPhase("online-menu");
   }
 
@@ -6992,8 +7714,9 @@ export default function Emprise() {
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
       if (partieClassee && !statsRecordedRef.current) {
         statsRecordedRef.current = true;
-        const orderKeys = [...blueOrders, ...redOrders].map((l) => l.key);
-        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE).then(setStats);
+        // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
+        const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
       }
     }
     // Match de tournoi : abandonner la partie ne fait pas quitter le TOURNOI — on
@@ -7108,7 +7831,7 @@ export default function Emprise() {
               status: "waiting-orders", createdAt: serverTimestamp(),
               blueUid: ancienne.redUid, redUid: ancienne.blueUid,
               blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
-              board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(false),
+              board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
             });
           });
@@ -7226,14 +7949,6 @@ export default function Emprise() {
     return unsub;
   }, [fileAttente, myUid]);
 
-  function withRift(action, duration = 500) {
-    setTransitioning(true);
-    clearTimeout(riftTimerRef.current);
-    riftTimerRef.current = setTimeout(() => {
-      setTransitioning(false);
-      action();
-    }, duration);
-  }
 
   // (L'ancien bouton "Nouvelle partie" ouvrait un ecran de choix de Voie ; le hub
   // presente ces choix directement sur la page Jouer.)
@@ -7768,6 +8483,19 @@ export default function Emprise() {
       scribePlacedBy: card.ability === "scribe" ? owner : undefined,
     };
     const { board: resolvedBoard, events, poisonedCells: nextPoison } = resolvePlacement(newBoard, position, owner, poisonedCells);
+
+    // Combos : on lit le coup ICI, une fois qu'il est reellement joue. resolvePlacement
+    // tourne aussi sur chaque survol et pour chaque coup imagine par l'Echo ; y brancher
+    // la detection crediterait des combos que personne n'a joues.
+    if (history.length === 0) combosRef.current = nouveauSuiviCombos();
+    if (partieCompteAuProfil && !combosRef.current.disqualifie) {
+      combosDuCoup({
+        card, position, owner, monCamp: monCampCombos, mesOrdres: mesOrdresDuJeu(), events,
+        plateauAvant: board, plateauApres: resolvedBoard,
+        poisonAvant: poisonedCells, poisonApres: nextPoison,
+        suivi: combosRef.current,
+      });
+    }
     if (viaTouch) {
       // Léger tapotement à la pose, plus franc si ça capture — jamais pour le bot ni
       // pour un coup auto-joué par le minuteur, seulement pour un vrai geste du joueur.
@@ -7829,7 +8557,7 @@ export default function Emprise() {
           board: resolvedBoard.map(stripForSave),
           blueHand: nextBlueHand.map(stripForSave),
           redHand: nextRedHand.map(stripForSave),
-          poisonedCells: nextPoison,
+          poisonedCells: nextPoison.map(encoderPoison),
           turn: nowGameOver ? turn : nextTurn,
           gameOver: nowGameOver,
           lastMove: {
@@ -7872,6 +8600,9 @@ export default function Emprise() {
     if (history.length === 0 || drag) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
     if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
+    // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
+    // du style du joueur, on la retire du profil plutot que de compter des combos essayes.
+    combosRef.current.disqualifie = true;
     const stack = history.slice();
     let target = stack.pop();
     if (mode === "bot" && target.owner === "red" && stack.length) {
@@ -7891,7 +8622,8 @@ export default function Emprise() {
     setHistory(stack);
   }
 
-  // "Augure" : suggère le meilleur coup pour le joueur (Bleu) en réutilisant
+  // "Augure" : suggère le meilleur coup pour le joueur — Azur contre un Écho, celui dont
+  // c'est le tour en duel local — en réutilisant
   // l'IA "Seigneur de Guerre" (la plus forte déjà codée), appliquée à sa propre
   // main plutôt qu'à celle du bot. Un second clic masque l'augure sans le perdre.
   function toggleHint() {
@@ -7976,14 +8708,21 @@ export default function Emprise() {
   // Rendu de la main d'un camp : carte directe pour un groupe à 1 seule carte (Confluence,
   // bac à sable), vignette d'Ordre + éventail au tap pour un groupe à plusieurs cartes
   // (main standard/Histoire/tournoi, où chaque Ordre en apporte 4 au départ). Partagé
-  // entre Écarlate et Azur : seuls le camp, le sens d'ouverture de l'éventail ("bas" pour
-  // Écarlate en haut d'écran, qui s'ouvre donc vers le plateau en dessous ; "haut" pour
-  // Azur en bas d'écran, qui s'ouvre vers le plateau au-dessus) et la règle de
-  // dissimulation des Scribes changent d'un côté à l'autre — reproduite ici À L'IDENTIQUE
-  // de ce qu'elle était avant l'éventail, camp par camp.
+  // entre Écarlate et Azur : seuls le sens d'ouverture de l'éventail et la règle de
+  // dissimulation des Scribes changent d'un côté à l'autre — cette dernière reproduite
+  // ici À L'IDENTIQUE de ce qu'elle était avant l'éventail, camp par camp.
   function renderHandGroups(owner) {
     const groups = owner === "blue" ? blueGroups : redGroups;
-    const sens = owner === "blue" ? "haut" : "bas";
+    // L'éventail s'ouvre vers le PLATEAU, donc d'après la place de la main à l'écran et
+    // non d'après sa couleur. Depuis que la main du joueur est toujours en bas de son
+    // écran, Écarlate s'y retrouve en ligne : s'en tenir à la couleur faisait alors
+    // s'ouvrir l'éventail vers le bas, hors de l'écran, sous les doigts.
+    const sens = owner === campBas ? "haut" : "bas";
+    // L'augure conseille le joueur dont c'est le tour en duel local (voir toggleHint) :
+    // son indice de carte vaut pour la main de CE camp-la. Le comparer en dur a Azur
+    // laissait la carte conseillee d'Ecarlate sans halo, et allumait a sa place la carte
+    // d'Azur occupant le meme rang — chaque camp numerote sa main a partir de zero.
+    const campAugure = mode === "local" ? turn : "blue";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
     const isConcealed = (card) =>
       card.ability === "scribe" &&
@@ -7993,7 +8732,7 @@ export default function Emprise() {
       const isOpen = !!(fanOpen && fanOpen.owner === owner && fanOpen.ability === group.ability);
       const isClosing = !isOpen && !!(fanClosing && fanClosing.owner === owner && fanClosing.ability === group.ability);
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
-      const hasHintInside = owner === "blue" && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
+      const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
       return (
         <div key={group.ability} className={`order-tile-wrap ${isOpen ? "fan-open" : ""}`}>
@@ -8051,7 +8790,7 @@ export default function Emprise() {
                     <Card
                       card={card}
                       owner={owner}
-                      extraClass={`hand in-fan ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === "blue" && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
+                      extraClass={`hand in-fan ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === campAugure && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
                       onPointerDown={canInteract ? (e) => startCardDrag(owner, handIdx, e) : undefined}
                       selected={!!(selected && selected.owner === owner && selected.idx === handIdx)}
                       concealed={isConcealed(card)}
@@ -8211,6 +8950,13 @@ export default function Emprise() {
     // Les parties en ligne ne sont pas sauvegardées localement : Firestore fait déjà foi,
     // et la reprise locale ne connaît pas le code de partie / le rôle en ligne.
     if (phase !== "play" || mode === "online") return;
+    // Une partie TERMINEE n'a rien a reprendre. La garder en sauvegarde faisait
+    // reapparaitre "Reprendre la partie en cours" apres un rechargement, et la reprise
+    // rejouait l'enregistrement des statistiques (le verrou est neuf a chaque
+    // chargement) : chaque aller-retour recharger -> Reprendre offrait une partie de
+    // maitrise a chaque Ordre de la main, sans jouer un coup. On efface des que l'issue
+    // tombe.
+    if (gameOver) { clearSavedGame(); return; }
     try {
       const data = {
         board: board.map(stripForSave),
@@ -8388,13 +9134,12 @@ export default function Emprise() {
 
   return (
     <div
-      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${vueTournee ? "vue-tournee" : ""}`}
-      style={vueTournee ? { transform: "rotate(180deg)" } : undefined}
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""}`}
     >
       <style>{APP_STYLES}</style>
 
       {phase === "landing" && (
-        <div className={`landing hub intro-e${introEtape} ${transitioning ? "landing-exit" : ""}`}>
+        <div className={`landing hub intro-e${introEtape}`}>
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
               apparaître l'illustration. Retiré du DOM une fois l'intro finie. */}
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
@@ -8403,14 +9148,17 @@ export default function Emprise() {
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
             <div className="hub-joueur">
-              {/* TODO : remplacer le pseudo en dur par un vrai profil joueur. */}
-              <span className="hub-pseudo">CARNAGE</span>
+              {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
+                  Il reste en dur pour l'instant, faute de comptes nommes. */}
+              <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
+                CARNAGE
+                {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
+              </button>
               <span className="hub-trophees" title="Trophées">
                 <svg className="hub-icone-coupe" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
                 </svg>
-                {/* TODO : brancher sur stats.trophies quand les profils seront synchronisés. */}
-                <span className="hub-trophees-nombre">0</span>
+                <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </span>
             </div>
             <span className="hub-haut-boutons">
@@ -8430,7 +9178,8 @@ export default function Emprise() {
               aria-label="Réglages"
               title="Réglages"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <img className="hub-rouage-img" src="/nav/rouage.webp" alt="" />
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
                 <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
               </svg>
@@ -8459,65 +9208,52 @@ export default function Emprise() {
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
                 <div className="league-badge">Le multijoueur arrive prochainement</div>
 
-                {/* Parties a reprendre : toujours au-dessus de tout, un adversaire attend. */}
-                {repriseEnLigne && (
-                  <button className="landing-link reprise-en-ligne" onClick={reprendrePartieEnLigne}>
-                    Reprendre la partie en ligne
-                  </button>
-                )}
-                {!repriseEnLigne && repriseTournoi && (
-                  <button className="landing-link reprise-en-ligne" onClick={reprendreTournoiEnLigne}>
-                    Reprendre le tournoi en ligne
-                  </button>
-                )}
+                {/* Seules les parties SOLO se reprennent. En ligne, un adversaire attend
+                    en face : une partie quittee est abandonnee, le forfait tranche pour
+                    celui qui reste. Proposer d'y revenir laissait croire le contraire. */}
                 {hasSavedGame && (
                   <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
                 )}
 
-                {/* Bouton principal : le duel Classé, l'action phare du hub. */}
-                <button className="hub-jouer-classe" onClick={chercherAdversaire}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
-                  </svg>
-                  <span className="hub-jouer-classe-titre">Classé</span>
-                  <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
+                {/* L'arène de la ligue : la pièce centrale du hub, et ce qui pousse les
+                    deux boutons vers le bas de l'écran, à portée du pouce. Seul le Bronze
+                    a son illustration pour l'instant ; les ligues suivantes reprendront la
+                    même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
+                    Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
+                <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
+                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
+                  <img
+                    className="hub-arene-img"
+                    src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
                 </button>
 
-                {/* Tuiles compactes : tout tient a l'ecran, aucun defilement vertical.
-                    La description complete de chaque mode reste portee par aria-label
-                    et title ; les ecrans suivants (difficulte, draft...) la detaillent. */}
-                <div className="hub-modes-grille">
-                  <button className="hub-mode-tuile" onClick={() => chooseMode("bot")} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
-                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-                    <span>Contre un Écho</span>
+                {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
+                    ici : sans cet avis, le joueur se retrouvait au hub sans savoir
+                    pourquoi. Un clic le chasse. */}
+                {onlineError && (
+                  <div className="online-error hub-avis" role="status" onClick={() => setOnlineError("")}>
+                    {onlineError}
+                  </div>
+                )}
+
+                {/* Deux entrees seulement : le Classe, action phare, et la porte vers
+                    tous les autres modes. Le detail vit dans un panneau, la page reste
+                    epuree comme un ecran d'accueil de jeu mobile. */}
+                <div className="hub-jouer-rang">
+                  <button className="hub-jouer-classe" onClick={chercherAdversaire}>
+                    <img className="hub-jouer-classe-img" src="/nav/classe.webp" alt="" />
+                    <span className="hub-jouer-classe-titre">Classé</span>
+                    <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
                   </button>
-                  <button className="hub-mode-tuile" onClick={() => setPhase("chapters")} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>Mode Histoire</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={chooseConfluenceBot} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
-                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-                    <span>Confluence (Écho)</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => setPhase("tourney-menu")} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
-                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-                    <span>Tournoi</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => chooseMode("local")} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>2 Commandants</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={chooseConfluenceLocal} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Confluence (à 2)</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Jouer avec un ami</span>
-                  </button>
-                  <button className="hub-mode-tuile test" onClick={chooseTestMode} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
-                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-                    <span>Mode test</span>
+                  <button className="hub-jouer-modes-btn" onClick={() => setActiveModal("modes")} aria-haspopup="dialog">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7zm-7-7v3h3V6H6zm9 0v3h3V6h-3zM6 15v3h3v-3H6zm9 0v3h3v-3h-3z" />
+                    </svg>
+                    <span className="hub-jouer-classe-titre">Modes</span>
+                    <span className="hub-jouer-classe-sous">Tous les autres</span>
                   </button>
                 </div>
               </section>
@@ -8525,34 +9261,37 @@ export default function Emprise() {
             {hubPage === "ordres" && (
               <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
                 <h2 className="hub-page-titre">Les Ordres</h2>
-                <p className="hub-page-sous">Les dix maisons qui s'affrontent dans la Faille.</p>
-                {/* Carrousel : le seul geste du hub est le gauche-droite. */}
-                <div className="hub-ordres-carrousel">
+                <p className="hub-page-sous">Votre maîtrise de chaque maison, partie après partie.</p>
+                {/* Cette page dit quel joueur on est, Ordre par Ordre : chaque portrait se
+                    remplit de sa couleur a la hauteur de la maitrise, gris au-dessus. Un
+                    Ordre jamais joue est entierement gris. On appuie pour l'agrandir et
+                    lire le detail. Le Geolier garde son portrait scelle : le cadenas dit tout. */}
+                <div className="hub-ordres-grille4">
                   {ORDERS.map((order) => {
                     const bientot = !isOrderAvailable(order);
+                    const m = maitriseOrdre(stats, order.key);
                     return (
-                      <div key={order.key} className={`order-option hub-ordre-fiche ${bientot ? "order-option-locked" : ""}`}>
-                        {order.portrait ? (
-                          bientot ? (
+                      <button
+                        key={order.key}
+                        type="button"
+                        className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`}
+                        title={bientot ? "Bientôt disponible" : `${order.name} · ${m.pourcent} %`}
+                        onClick={() => { if (!bientot) setOrdreDetail(order.key); }}
+                        disabled={bientot}
+                      >
+                        <div className="hub-ordre-cadre">
+                          {bientot ? (
                             <ComingSoonThumb order={order} />
                           ) : (
-                            <div className="order-thumb-wrap">
-                              <img className="thumb" src={order.portrait} alt={order.name} />
-                            </div>
-                          )
-                        ) : (
-                          <div className="icon-frame">{order.icon}</div>
-                        )}
-                        <div className="info">
-                          <span className="name">{order.name}</span>
-                          <span className="desc">{bientot ? <CountdownLabel order={order} /> : order.desc}</span>
+                            <VagueMaitrise order={order} taux={m.taux} />
+                          )}
+                          <span className="hub-ordre-vignette-nom">{order.name}</span>
+                          {!bientot && <span className="hub-ordre-pourcent">{m.pourcent} %</span>}
                         </div>
-                        {bientot && <span className="coming-soon-badge">Bientôt disponible</span>}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
-                <div className="hub-carrousel-indice" aria-hidden="true">faites glisser vers le bas</div>
               </section>
             )}
           </main>
@@ -8575,7 +9314,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("boutique")}
               aria-current={hubPage === "boutique" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/boutique.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/boutique.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M6.4 3h11.2L21 8.4H3L6.4 3zM4.6 10h14.8v11H4.6V10zm5.2 3.4v5.2h4.4v-5.2H9.8z" />
               </svg>
@@ -8586,7 +9325,7 @@ export default function Emprise() {
               onClick={() => allerPageHub("jouer")}
               aria-current={hubPage === "jouer" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/jouer.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/jouer.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path d="M4 3l6.2 6.2-1.4 1.4L4 6.4V3zm16 0v3.4l-9.9 9.9 1.8 1.8-1.4 1.4-2.1-2.1L6 19.8 4.2 18l2.4-2.4-2.1-2.1 1.4-1.4 1.8 1.8L17.6 4H20zM6.4 4H4v2.4L6.4 4zm11.4 8.4l2.2 2.2-1.4 1.4 1.8 1.8L18.6 19.6l-1.8-1.8-1.4 1.4-2.2-2.2 4.6-4.6z" />
               </svg>
@@ -8597,13 +9336,246 @@ export default function Emprise() {
               onClick={() => allerPageHub("ordres")}
               aria-current={hubPage === "ordres" ? "page" : undefined}
             >
-              <img className="hub-onglet-img" src="/nav/ordres.jpg" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
+              <img className="hub-onglet-img" src="/nav/ordres.webp" alt="" onError={(e) => { e.currentTarget.style.display = "none"; const s2 = e.currentTarget.nextElementSibling; if (s2) s2.style.display = ""; }} />
               <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
                 <path fillRule="evenodd" d="M12 1.6l8.6 3.2v6.4c0 5.4-3.6 10.1-8.6 11.8-5-1.7-8.6-6.4-8.6-11.8V4.8L12 1.6zm-.9 5.2v4.4H8.4v1.8h2.7v4.4h1.8v-4.4h2.7v-1.8h-2.7V6.8h-1.8z" />
               </svg>
               <span>Ordres</span>
             </button>
           </nav>
+
+          {ordreDetail && (() => {
+            const order = ORDERS.find((o) => o.key === ordreDetail);
+            if (!order) return null;
+            const m = maitriseOrdre(stats, order.key);
+            return (
+              <div className="info-overlay ordre-detail-voile" onClick={() => setOrdreDetail(null)}>
+                <div className="ordre-detail" onClick={(e) => e.stopPropagation()}>
+                  {/* A gauche la carte, grossie ; a droite ce qu'elle dit de vous. */}
+                  <div className="ordre-detail-carte">
+                    <VagueMaitrise order={order} taux={m.taux} grand />
+                  </div>
+                  <div className="ordre-detail-texte">
+                    <div className="ordre-detail-pourcent">{m.pourcent} %</div>
+                    <div className="ordre-detail-nom">{order.name}</div>
+                    <div className="ordre-detail-rang">
+                      <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
+                      {m.rang.nom}
+                    </div>
+                    {/* Ni compte de parties, ni "encore X pour..." : chiffrer le chemin en
+                        fait une corvee. Le rang et le pourcentage suffisent, le reste se
+                        decouvre en jouant. */}
+                    <div className="ordre-detail-parties">
+                      {m.parties === 0
+                        ? "Jamais joué"
+                        : m.parties >= MAITRISE_PARTIES_MAX
+                        ? "Maîtrise complète"
+                        : m.suivant
+                        ? `Prochain rang : ${m.suivant.nom}`
+                        : ""}
+                    </div>
+                    <p className="ordre-detail-desc">{order.desc}</p>
+                  </div>
+                  <button className="arenes-fermer ordre-detail-fermer" onClick={() => setOrdreDetail(null)} aria-label="Fermer">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeModal === "arenes" && (() => {
+            const ligue = getLeague(stats.trophies || 0);
+            // Une echelle se gravit : le Bronze occupe le bas, la Legende le sommet. On
+            // renverse donc l'ordre des ligues, et l'on ouvre la galerie sur l'arene ou
+            // le joueur se trouve — sinon il tomberait sur la Legende, qu'il n'a pas.
+            const echelle = LEAGUES.slice().reverse();
+            const rang = Math.max(0, echelle.findIndex((l) => l.name === ligue.name));
+            return (
+              <div className="info-overlay arenes-voile" onClick={() => setActiveModal(null)}>
+                {/* Une arene par ecran, calee au defilement : on part de la sienne et l'on
+                    monte vers les suivantes. Le voile se ferme au clic a cote. */}
+                <div
+                  className="arenes-defile"
+                  ref={(el) => {
+                    // Une seule fois par ouverture : la fonction de ref est rappelee a
+                    // chaque rendu, et recaler le defilement a chaque fois empecherait le
+                    // joueur de bouger.
+                    if (!el || el.dataset.cale) return;
+                    el.dataset.cale = "1";
+                    const page = el.children[rang];
+                    if (page) el.scrollTop = page.offsetTop;
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {echelle.map((l, i) => {
+                    const ici = l.name === ligue.name;
+                    // Verrouillee tant que les trophees n'atteignent pas son seuil. On la
+                    // montre quand meme, assombrie : savoir ce qu'on vise vaut mieux qu'une
+                    // case vide, et le cadenas dit clairement que ce n'est pas encore a soi.
+                    const verrouillee = (stats.trophies || 0) < l.min;
+                    return (
+                      <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
+                        {i > 0 && (
+                          <span className="arene-page-fleche" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 4v14M6 10l6-6 6 6" /></svg>
+                            arène supérieure
+                          </span>
+                        )}
+                        {/* Le nom coiffe la page : on doit savoir ou l'on est des que
+                            l'arene se pose, sans avoir a descendre le regard. */}
+                        <div className="arene-page-entete">
+                          <div className="arene-page-nom">Arène {l.name}</div>
+                          <div className={`arene-page-seuil ${verrouillee ? "a-conquerir" : ""}`}>
+                            {l.min === 0
+                              ? "Dès votre premier duel"
+                              : verrouillee
+                              ? `Encore ${l.min - (stats.trophies || 0)} trophées`
+                              : `À partir de ${l.min} trophées`}
+                          </div>
+                          {ici && <span className="arene-page-ici">Vous êtes ici</span>}
+                        </div>
+                        <div className={`arene-page-corps ${verrouillee ? "verrouillee" : ""}`}>
+                          {l.hub ? (
+                            <img className="arene-page-img" src={l.hub} alt="" />
+                          ) : (
+                            <div className="arene-page-chantier" aria-hidden="true">
+                              <svg viewBox="0 0 24 24"><path d="M12 2 2 20h20L12 2zm0 5 6 11H6l6-11zm-1 3v4h2v-4h-2zm0 5v2h2v-2h-2z" /></svg>
+                              <span>En construction</span>
+                            </div>
+                          )}
+                          {verrouillee && (
+                            <span className="arene-cadenas-rond" aria-label="Arène verrouillée">
+                              <img src="/arenes/cadenas.webp" alt="" />
+                            </span>
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+                <button className="arenes-fermer" onClick={() => setActiveModal(null)} aria-label="Fermer">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+            );
+          })()}
+
+          {activeModal === "profil" && (() => {
+            const profil = titresDuProfil(stats);
+            const total = stats.gamesPlayed || 0;
+            const victoires = stats.mesVictoires || 0;
+            return (
+              <div className="info-overlay" onClick={() => setActiveModal(null)}>
+                <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="info-panel-title">CARNAGE</div>
+
+                  <div className="profil-chiffres">
+                    <div><b>{total}</b><span>parties</span></div>
+                    <div><b>{victoires}</b><span>victoires</span></div>
+                    <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
+                  </div>
+
+                  <div className="modes-groupe-titre">Le joueur que vous êtes</div>
+                  {profil.titres.length > 0 ? (
+                    profil.titres.map((t, i) => (
+                      <div key={t.combo.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
+                        <div className="profil-titre-haut">
+                          <span className="profil-titre-nom">{t.combo.nom}</span>
+                          <span className="profil-titre-taux">{Math.round(t.taux * 100)} %</span>
+                        </div>
+                        <span className="profil-titre-recit">{t.combo.recit}</span>
+                        <span className="profil-titre-ordres">
+                          {t.combo.ordres.map((k) => ORDERS.find((o) => o.key === k)?.name).filter(Boolean).join(" + ")}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="profil-vide">
+                      {profil.pret
+                        ? "Vous jouez de tout, sans manie affirmée. Aucun combo ne revient assez souvent pour vous donner un titre."
+                        : `Encore ${profil.restantes} partie${profil.restantes > 1 ? "s" : ""} avant qu'un style se dégage. Seules comptent vos parties à deux Ordres, contre un Écho ou en ligne.`}
+                    </div>
+                  )}
+
+                  {profil.classement.length > 0 && (
+                    <>
+                      <div className="modes-groupe-titre">Combos réalisés</div>
+                      <div className="profil-liste">
+                        {profil.classement.map((t) => (
+                          <div key={t.combo.key} className="profil-ligne" title={t.combo.signe}>
+                            <span className="profil-ligne-nom">{t.combo.nom}</span>
+                            <span className="profil-ligne-jauge"><i style={{ width: `${Math.min(100, Math.round(t.taux * 100))}%` }} /></span>
+                            <span className="profil-ligne-nombre">{t.parties}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeModal === "modes" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel modes-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Modes de jeu</div>
+
+                <div className="modes-groupe-titre">Contre un Écho</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("bot"); }} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
+                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
+                    <span>Contre un Écho</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("chapters"); }} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>Mode Histoire</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceBot(); }} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
+                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
+                    <span>Confluence (Écho)</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("tourney-menu"); }} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
+                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
+                    <span>Tournoi</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">À deux sur le même écran</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("local"); }} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
+                    <span>2 Commandants</span>
+                  </button>
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceLocal(); }} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Confluence (à 2)</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">En ligne</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
+                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
+                    <span>Jouer avec un ami</span>
+                  </button>
+                </div>
+
+                <div className="modes-groupe-titre">Bac à sable</div>
+                <div className="modes-groupe">
+                  <button className="hub-mode-tuile test" onClick={() => { setActiveModal(null); chooseTestMode(); }} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
+                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
+                    <span>Mode test</span>
+                  </button>
+                </div>
+
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
 
           {activeModal === "historique" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
@@ -8803,14 +9775,6 @@ export default function Emprise() {
         </div>
       )}
 
-      {transitioning && (
-        <div className="rift-overlay">
-          <span className="rift-ring ring-1" />
-          <span className="rift-ring ring-2" />
-          <span className="rift-ring ring-3" />
-          <span className="rift-flash" />
-        </div>
-      )}
 
       {/* La carte du mode Histoire ("chapters") s'affiche en plein ecran, comme l'accueil
           et le plateau : le bandeau global mangerait 180 px de haut sur une carte qu'on
@@ -9601,17 +10565,16 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
-          {/* Un Ordre en vedette occupe le haut de l'attente ; les messages descendent
-              en dessous, comme demande. */}
+          {/* Pendant la recherche, l'illustration porte tout : les textes d'Histoire et
+              d'astuces s'incrustent en bas du portrait, sur un voile sombre. La consigne
+              et la ligne d'etat ont ete retirees, le titre de l'ecran les disait deja. */}
           {fileAttente && ordreAttente && (
             <div className="attente-ordre">
-              <img src={ordreAttente.portrait} alt={ordreAttente.name} />
-              <div className="attente-ordre-nom">{ordreAttente.name}</div>
-              <div className="attente-ordre-desc">{ordreAttente.desc}</div>
+              <div className="attente-ordre-cadre">
+                <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+                <RecitsAttente actif surImage />
+              </div>
             </div>
-          )}
-          {fileAttente && (
-            <div className="sub attente-message">Vous entrerez en duel dès qu'un autre Commandant se présentera. Gardez cet écran ouvert.</div>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
@@ -9621,13 +10584,20 @@ export default function Emprise() {
               <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
             </>
           )}
-          <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>
+          {!fileAttente && <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
               detourner l'attention d'une information qui, elle, demande une decision. */}
-          <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />
+          {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />}
           {attentePreMatch > TURN_SECONDS && (
-            <div className="sub">{`L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`}</div>
+            <div className="sub">{
+              // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
+              // simplement annulee et l'on rentre au menu. Promettre une victoire qui ne
+              // vient jamais etait la seule chose que cet ecran disait de faux.
+              tournoiOnlineId
+                ? `L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
+                : `L'adversaire ne se présente pas : la partie sera annulée dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
+            }</div>
           )}
           {onlineError && <div className="online-error">{onlineError}</div>}
         </div>
@@ -9647,9 +10617,7 @@ export default function Emprise() {
               en continu (transform seule) pour dire d'un coup d'oeil que le temps court. */}
           {minuteurOrdresActif && (
             <div className={`ordres-minuteur ${tempsOrdres <= 10 ? "urgent" : ""}`} role="timer" aria-live="off">
-              <svg className="ordres-sablier" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 2h10v2h-1v2.6c0 1.4-.7 2.7-1.8 3.5L12 12l-2.2 1.9A4.3 4.3 0 0 0 8 17.4V20h1v2H7v-2h1v-2.6c0-1.4.7-2.7 1.8-3.5L12 12l2.2-1.9A4.3 4.3 0 0 0 16 6.6V4h1V2H7zm3 4.6c0 .8.4 1.6 1 2.1l1 .9 1-.9c.6-.5 1-1.3 1-2.1V4h-4v2.6z" />
-              </svg>
+              <img className="ordres-sablier" src="/nav/sablier.webp" alt="" />
               <span className="ordres-temps">{Math.floor(tempsOrdres / 60)}:{String(tempsOrdres % 60).padStart(2, "0")}</span>
             </div>
           )}
@@ -9887,11 +10855,11 @@ export default function Emprise() {
                   <div className="desc">Un bouton révèle le meilleur coup du joueur dont c'est le tour.</div>
                 </div>
               </label>
-              <label className={`assist-option ${rotationLocale ? "checked" : ""}`}>
-                <input type="checkbox" checked={rotationLocale} onChange={toggleRotationLocale} />
+              <label className={`assist-option ${passageTelephone ? "checked" : ""}`}>
+                <input type="checkbox" checked={passageTelephone} onChange={togglePassageTelephone} />
                 <div className="assist-text">
-                  <div className="name">Rotation de l'écran</div>
-                  <div className="desc">L'écran pivote vers le joueur dont c'est le tour, pour se passer l'appareil sans le retourner.</div>
+                  <div className="name">Se passer le téléphone</div>
+                  <div className="desc">La main du joueur dont c'est le tour descend en bas de l'écran. Rien ne pivote : on tend l'appareil tel quel.</div>
                 </div>
               </label>
             </div>
@@ -9990,7 +10958,6 @@ export default function Emprise() {
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
           <div className="zone-main">
-            {pucesTrophees(campHaut)}
             {labelCamp(campHaut)}
             {mainCamp(campHaut)}
           </div>
@@ -10185,7 +11152,6 @@ export default function Emprise() {
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           <div>
-            {pucesTrophees(campBas)}
             {mainCamp(campBas)}
             {labelCamp(campBas)}
           </div>
@@ -10247,10 +11213,7 @@ export default function Emprise() {
           )}
 
           {drag && draggedCard && !liveDragPreviewBoard && (
-            // Sous rotation (duel local), la racine est pivotée : les coordonnées du
-            // pointeur (repère de l'écran) doivent être inversées pour que le fantôme
-            // suive le doigt au lieu de fuir à l'opposé.
-            <div className="drag-ghost" style={{ left: vueTournee ? window.innerWidth - drag.x : drag.x, top: vueTournee ? window.innerHeight - drag.y : drag.y }}>
+            <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
               <Card card={draggedCard} owner={drag.owner} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
             </div>
           )}
@@ -10268,12 +11231,19 @@ export default function Emprise() {
               </button>
             )}
             {gameOver && boutonRevanche()}
+            {/* En Classe, tant que la partie n'est pas finie, aucun bouton pour partir :
+                un duel classe se joue jusqu'au bout. Le bouton reparait des la fin, ou il
+                sert a lancer la partie suivante. Un adversaire qui cesse de jouer ne peut
+                pas nous retenir pour autant : le forfait tranche tout seul apres deux
+                tours sans coup. */}
+            {!(partieClassee && !gameOver) && (
             <button
               className={`reset-btn ${gameOver ? "" : "quitter-discret"}`}
               onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : tournoiOnlineId ? retournerAuTournoi : reset)) : () => setConfirmQuit(true)}
             >
               {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : tournoiOnlineId ? "Retour au tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
             </button>
+            )}
           </div>
 
           {infoAbility && (
