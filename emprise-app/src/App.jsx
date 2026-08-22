@@ -3042,12 +3042,13 @@ const APP_STYLES = `
         /* Le pourcentage, en haut a droite de la carte, sur le meme voile que le nom. */
         /* Le pourcentage vit en BAS de la carte, sur un voile qui monte : a cote du nom, il
            lui volait 30 px et coupait "Pestiférés" sur les ecrans de 390 px et moins. */
+        /* Discret : petit, cale a gauche en bas de la carte, sur un voile qui monte. */
         .hub-ordre-pourcent {
           position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; pointer-events: none;
-          padding: 9px 4px 3px; border-radius: 0 0 10px 10px;
+          padding: 9px 4px 3px 5px; border-radius: 0 0 10px 10px;
           background: linear-gradient(0deg, rgba(8,6,12,0.88) 0%, rgba(8,6,12,0.5) 60%, rgba(8,6,12,0) 100%);
-          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700; text-align: center;
-          color: var(--gold-bright); text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+          font-family: 'Cinzel', serif; font-size: 8px; font-weight: 700; text-align: left;
+          letter-spacing: 0.02em; color: var(--gold); text-shadow: 0 1px 3px rgba(0,0,0,0.95);
         }
 
         /* ---------- La vague de maitrise ---------- */
@@ -3144,7 +3145,7 @@ const APP_STYLES = `
         .ordre-detail-carte { flex: 0 0 42%; max-width: 170px; }
         .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .ordre-detail-pourcent {
-          font-family: 'Cinzel', serif; font-size: 30px; font-weight: 700; line-height: 1;
+          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; line-height: 1;
           color: var(--gold-bright); text-shadow: 0 2px 8px rgba(0,0,0,0.8);
         }
         .ordre-detail-nom {
@@ -9496,18 +9497,18 @@ export default function Emprise() {
                       <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
                       {m.rang.nom}
                     </div>
+                    {/* Ni compte de parties, ni "encore X pour..." : chiffrer le chemin en
+                        fait une corvee. Le rang et le pourcentage suffisent, le reste se
+                        decouvre en jouant. */}
                     <div className="ordre-detail-parties">
                       {m.parties === 0
                         ? "Jamais joué"
                         : m.parties >= MAITRISE_PARTIES_MAX
-                        ? `${m.parties} parties · maîtrise complète`
-                        : `${m.parties} partie${m.parties > 1 ? "s" : ""} sur ${MAITRISE_PARTIES_MAX}`}
+                        ? "Maîtrise complète"
+                        : m.suivant
+                        ? `Prochain rang : ${m.suivant.nom}`
+                        : ""}
                     </div>
-                    {m.suivant && (
-                      <div className="ordre-detail-suivant">
-                        Encore {m.manque} pour devenir <b>{m.suivant.nom}</b>
-                      </div>
-                    )}
                     <p className="ordre-detail-desc">{order.desc}</p>
                   </div>
                   <button className="arenes-fermer ordre-detail-fermer" onClick={() => setOrdreDetail(null)} aria-label="Fermer">
