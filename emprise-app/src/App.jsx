@@ -11117,13 +11117,14 @@ export default function Emprise() {
       {/* La carte du mode Histoire ("chapters") s'affiche en plein ecran, comme l'accueil
           et le plateau : le bandeau global mangerait 180 px de haut sur une carte qu'on
           explore au doigt. */}
-      {phase !== "landing" && phase !== "play" && phase !== "tutorial" && phase !== "chapters" && (
-        <>
-          {/* Le bandeau des deux camps ne se justifie qu'au moment ou l'on compose sa
-              main : partout ailleurs il repete une evidence et mange de la hauteur. */}
-          {(phase === "select-blue" || phase === "select-red") && <div className="eyebrow">Pacte Azur vs Horde Écarlate</div>}
-          {phase !== "select-blue" && phase !== "select-red" && <h1 className="title">EMPRISE</h1>}
-        </>
+      {/* Le bandeau des deux camps ne se justifie qu'au moment ou l'on compose sa main :
+          partout ailleurs il repete une evidence et mange de la hauteur.
+          Le TITRE du jeu, lui, ne parait plus ici du tout. Il couronnait chaque ecran
+          intermediaire — options d'assistance, apercu, menu en ligne, arbre du tournoi —
+          et le nom finissait par ne plus rien annoncer. Il reste la ou il ouvre le jeu :
+          l'ecran de nom a la premiere fois, et le hub. */}
+      {(phase === "select-blue" || phase === "select-red") && (
+        <div className="eyebrow">Pacte Azur vs Horde Écarlate</div>
       )}
 
       {phase === "play" && (
