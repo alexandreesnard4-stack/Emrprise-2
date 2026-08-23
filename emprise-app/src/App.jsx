@@ -43,6 +43,29 @@ function nettoyerCodeAmi(brut) {
   return String(brut || "").replace(/[^0-9]/g, "").slice(0, IDENTIFIANT_CHIFFRES);
 }
 const AMIS_MAX = 20;                       // borne les lectures a l'ouverture du profil
+const DEMANDES_PAR_JOUR = 20;              // envoyees ; au-dela, c'est du demarchage
+const RENVOI_MIN_MS = 24 * 60 * 60 * 1000; // une demande ignoree ne se renvoie pas avant un jour
+const CLE_DEMANDES = "emprise-demandes";   // compteur du jour et dates d'envoi, par appareil
+// Motifs de signalement. Apple exige un moyen de signaler des qu'un joueur voit du contenu
+// ecrit par un autre — ici le pseudo. La liste reste courte : on signale, on ne plaide pas.
+const MOTIFS_SIGNALEMENT = [
+  ["pseudo", "Nom offensant"],
+  ["triche", "Triche"],
+  ["comportement", "Comportement en partie"],
+  ["autre", "Autre"],
+];
+// Compteur d'envois, garde sur l'appareil : { jour: "2026-08-23", n: 3, envois: { uid: t } }.
+function lireEnvois() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLE_DEMANDES) || "{}");
+    const jour = new Date().toISOString().slice(0, 10);
+    if (v.jour !== jour) return { jour, n: 0, envois: v.envois || {} };
+    return { jour, n: v.n || 0, envois: v.envois || {} };
+  } catch (e) { return { jour: new Date().toISOString().slice(0, 10), n: 0, envois: {} }; }
+}
+function ecrireEnvois(v) {
+  try { localStorage.setItem(CLE_DEMANDES, JSON.stringify(v)); } catch (e) { /* tant pis */ }
+}
 const DEFI_PERIME_MS = 10 * 60 * 1000;     // un defi non releve en dix minutes s'efface
 const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes = en ligne
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
@@ -3274,6 +3297,32 @@ const APP_STYLES = `
         }
         .amis-croix:hover { opacity: 1; border-color: rgba(224,101,90,0.5); }
         .amis-croix svg { width: 12px; height: 12px; stroke: var(--bone); stroke-width: 2; fill: none; stroke-linecap: round; }
+        .amis-trophees {
+          display: inline-flex; align-items: center; gap: 3px; margin-left: 7px;
+          font-size: 11px; color: var(--gold); vertical-align: middle;
+        }
+        .amis-trophees img { width: 11px; height: 14px; object-fit: contain; }
+        .amis-ligne.bloque { opacity: 0.7; }
+        .amis-signaler-lien { margin-top: 2px; font-size: 10.5px; }
+        /* Le menu d'un joueur : trois actions, chacune avec sa consequence en clair. */
+        .amis-menu { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+        .amis-menu-btn {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+          width: 100%; padding: 10px 12px; border-radius: 11px; text-align: left; cursor: pointer;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.25);
+          transition: border-color .2s, background .2s;
+        }
+        .amis-menu-btn:hover { border-color: var(--gold); background: rgba(203,164,86,0.08); }
+        .amis-menu-btn b { font-family: 'Cinzel', serif; font-size: 12.5px; letter-spacing: 0.05em; color: var(--gold-bright); }
+        .amis-menu-btn span { font-size: 10.5px; line-height: 1.4; color: var(--muted); }
+        .amis-motifs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
+        .amis-motif {
+          padding: 9px 6px; border-radius: 10px; cursor: pointer;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.25); color: var(--bone);
+          transition: border-color .2s, background .2s, color .2s;
+        }
+        .amis-motif.actif { color: var(--gold-bright); background: rgba(203,164,86,0.14); border-color: var(--gold-bright); }
         .amis-vide { font-size: 11.5px; line-height: 1.45; color: var(--muted); text-align: center; padding: 4px 6px; }
         .amis-note { font-size: 10.5px; line-height: 1.4; color: var(--muted); text-align: center; }
         .amis-ajout { display: flex; align-items: center; gap: 8px; width: 100%; }
@@ -7089,6 +7138,10 @@ export default function Emprise() {
   const [codeAmiCopie, setCodeAmiCopie] = useState(false);
   const [adversaireUid, setAdversaireUid] = useState(null);     // l'uid d'en face, pour l'ajouter en fin de partie
   const [amitieAvis, setAmitieAvis] = useState("");
+  const [bloques, setBloques] = useState([]);                   // [{ uid, depuis }]
+  const [joueurMenu, setJoueurMenu] = useState(null);           // { uid, nom, contexte: "ami" | "demande" | "adversaire" }
+  const [signalement, setSignalement] = useState(null);         // { uid, nom, motif }
+  const [signalementEnvoye, setSignalementEnvoye] = useState({}); // uid -> true
 
 
 
@@ -7104,7 +7157,9 @@ export default function Emprise() {
       setDemandesRecues(q.docs.map((d) => ({ uid: d.id, t: horodatageMs(d.data().envoyeeLe) || Date.now() }))), rien);
     const u4 = onSnapshot(collection(base, "invitations"), (q) =>
       setInvitationsRecues(q.docs.map((d) => ({ uid: d.id, code: String(d.data().code || ""), t: horodatageMs(d.data().envoyeeLe) || Date.now() }))), rien);
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = onSnapshot(collection(base, "bloques"), (q) =>
+      setBloques(q.docs.map((d) => ({ uid: d.id, depuis: horodatageMs(d.data().depuis) }))), rien);
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [myUid]);
 
   // Les fiches des autres (pseudo, code, derniere presence) : une lecture par joueur,
@@ -7118,8 +7173,11 @@ export default function Emprise() {
       try {
         const snap = await getDoc(doc(db, "users", u));
         const d = snap.exists() ? snap.data() : {};
-        return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe), lu: Date.now() }];
-      } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, lu: Date.now() }]; }
+        // Le titre vient de l'autre joueur : il ne peut valoir que l'un des titres du jeu.
+        const titre = COMBOS.some((c) => c.nom === d.titre) ? d.titre : "";
+        return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
+          trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre, lu: Date.now() }];
+      } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", lu: Date.now() }]; }
     }));
     const suivant = { ...fichesRef.current };
     for (const [u, f] of lus) suivant[u] = f;
@@ -7127,8 +7185,8 @@ export default function Emprise() {
     setFiches(suivant);
   }
   useEffect(() => {
-    chargerFiches([...amis.map((a) => a.uid), ...demandesRecues.map((d) => d.uid), ...invitationsRecues.map((i) => i.uid), adversaireUid]);
-  }, [amis, demandesRecues, invitationsRecues, adversaireUid]);
+    chargerFiches([...amis.map((a) => a.uid), ...demandesRecues.map((d) => d.uid), ...invitationsRecues.map((i) => i.uid), ...bloques.map((b) => b.uid), adversaireUid]);
+  }, [amis, demandesRecues, invitationsRecues, bloques, adversaireUid]);
 
   // Le defi en cours de validite, s'il y en a un : le plus recent, pas perime, pas ignore.
   const defiRecu = invitationsRecues
@@ -7137,12 +7195,22 @@ export default function Emprise() {
       && Date.now() - i.t < DEFI_PERIME_MS
       && defisIgnores[i.uid] !== i.t)
     .sort((a, b) => b.t - a.t)[0] || null;
-  const pastilleAmis = demandesRecues.length + (defiRecu ? 1 : 0);
+  // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
+  const demandesVisibles = demandesRecues.filter((d) => !bloques.some((b) => b.uid === d.uid));
+  const pastilleAmis = demandesVisibles.length + (defiRecu ? 1 : 0);
 
   // Toutes les ecritures a deux documents passent par un batch : les regles verifient
   // l'etat APRES le batch (existsAfter) et refusent les moities isolees. C'est voulu.
   async function envoyerDemande(uidCible) {
     if (!myUid || !uidCible || uidCible === myUid) return;
+    // Un joueur que j'ai bloque ne recoit rien de moi non plus.
+    if (bloques.some((b) => b.uid === uidCible)) throw new Error("bloque");
+    // Plafond du jour et delai de renvoi, tenus sur l'appareil. Pas infaillibles —
+    // vider le stockage les remet a zero — mais ils arretent le demarchage ordinaire ;
+    // les regles gardent l'anti-rafale de dix secondes.
+    const envois = lireEnvois();
+    if (envois.n >= DEMANDES_PAR_JOUR) throw new Error("plafond-jour");
+    if (envois.envois[uidCible] && Date.now() - envois.envois[uidCible] < RENVOI_MIN_MS) throw new Error("renvoi");
     // Une demande deja posee se remplace en la retirant d'abord : set() sur un document
     // existant est un UPDATE, que les regles refusent, et le batch entier tomberait —
     // « Impossible d'envoyer la demande » pour toujours. Retirer SA PROPRE demande est
@@ -7152,7 +7220,44 @@ export default function Emprise() {
     b.set(doc(db, "users", uidCible, "demandes", myUid), { envoyeeLe: serverTimestamp() });
     b.update(doc(db, "users", myUid), { derniereDemande: serverTimestamp() }); // exige par l'anti-rafale
     await b.commit();
+    ecrireEnvois({ ...envois, n: envois.n + 1, envois: { ...envois.envois, [uidCible]: Date.now() } });
     setDemandesEnvoyees((d) => ({ ...d, [uidCible]: true }));
+  }
+  // Les messages de refus, sans jamais dire qu'on est bloque : « introuvable » suffit.
+  function messageEnvoi(e) {
+    const c = e && e.message;
+    if (c === "plafond-jour") return `${DEMANDES_PAR_JOUR} demandes par jour au plus. Revenez demain.`;
+    if (c === "renvoi") return "Demande déjà envoyée récemment.";
+    if (c === "bloque" || (e && e.code === "permission-denied")) return "Identifiant introuvable.";
+    return "Impossible d'envoyer la demande. Réessayez dans un instant.";
+  }
+  // Bloquer : l'amitie tombe des deux cotes, les demandes et defis en cours aussi, et
+  // plus rien ne passe dans aucun sens — les regles le verifient. Le bloque n'apprend
+  // rien : de son cote, l'autre est simplement devenu introuvable.
+  async function bloquerJoueur(uidAutre) {
+    if (!myUid || !uidAutre || uidAutre === myUid) return;
+    const b = writeBatch(db);
+    b.set(doc(db, "users", myUid, "bloques", uidAutre), { depuis: serverTimestamp() });
+    b.delete(doc(db, "users", myUid, "amis", uidAutre));
+    b.delete(doc(db, "users", uidAutre, "amis", myUid));
+    b.delete(doc(db, "users", myUid, "demandes", uidAutre));
+    b.delete(doc(db, "users", uidAutre, "demandes", myUid));
+    b.delete(doc(db, "users", myUid, "invitations", uidAutre));
+    b.delete(doc(db, "users", uidAutre, "invitations", myUid));
+    await b.commit();
+  }
+  function debloquerJoueur(uidAutre) {
+    if (myUid) deleteDoc(doc(db, "users", myUid, "bloques", uidAutre)).catch(() => {});
+  }
+  // Signaler : une trace, ecrite une fois, que seul l'editeur lit. Le joueur ne verra
+  // jamais la suite, et c'est normal : un signalement n'est pas une conversation.
+  async function signalerJoueur(uidAutre, motif) {
+    if (!myUid || !uidAutre || uidAutre === myUid) return;
+    await setDoc(doc(collection(db, "signalements")), {
+      de: myUid, cible: uidAutre, motif: String(motif || "autre"), date: serverTimestamp(),
+      pseudoCible: (fichesRef.current[uidAutre] && fichesRef.current[uidAutre].pseudo) || "",
+    });
+    setSignalementEnvoye((v) => ({ ...v, [uidAutre]: true }));
   }
   async function accepterDemande(uidAutre) {
     if (!myUid) return;
@@ -7195,6 +7300,7 @@ export default function Emprise() {
       if (!idx.exists()) { setAvisAmis({ texte: "Identifiant introuvable.", bon: false }); return; }
       const uid = String(idx.data().uid || "");
       if (uid === myUid) { setAvisAmis({ texte: "C'est votre propre identifiant.", bon: false }); return; }
+      if (bloques.some((b) => b.uid === uid)) { setAvisAmis({ texte: "Identifiant introuvable.", bon: false }); return; }
       await chargerFiches([uid], true);
       const nom = nomAffiche(fichesRef.current[uid]?.pseudo);
       if (amis.some((a) => a.uid === uid)) { setAvisAmis({ texte: `${nom} est déjà votre ami.`, bon: false }); return; }
@@ -7205,7 +7311,7 @@ export default function Emprise() {
       setAvisAmis({ texte: `Demande envoyée à ${nom}`, bon: true });
       setCodeAmiSaisi("");
     } catch (e) {
-      setAvisAmis({ texte: "Impossible d'envoyer la demande. Réessayez dans un instant.", bon: false });
+      setAvisAmis({ texte: messageEnvoi(e), bon: false });
     }
   }
   async function copierCodeAmi() {
@@ -7266,6 +7372,17 @@ export default function Emprise() {
   }
   // En fin de partie en ligne : ajouter celui d'en face, d'un geste. Trois etats, comme
   // la revanche. Si l'autre m'a deja demande, mon geste vaut acceptation.
+  // En fin de partie en ligne, l'adversaire se signale d'un geste : c'est la qu'on a vu
+  // son nom, et Apple exige que le signalement soit a portee de main a cet endroit.
+  function lienSignalerAdversaire() {
+    if (mode !== "online" || !gameOver || !adversaireUid || !myUid) return null;
+    if (signalementEnvoye[adversaireUid]) return <div className="revanche-attente" key="sg">Adversaire signalé</div>;
+    return (
+      <button key="sg" className="defeat-lien amis-signaler-lien" onClick={() => setJoueurMenu({ uid: adversaireUid, nom: nomAffiche(fiches[adversaireUid] && fiches[adversaireUid].pseudo), contexte: "adversaire" })}>
+        Signaler ou bloquer l'adversaire
+      </button>
+    );
+  }
   function boutonAmitie() {
     if (mode !== "online" || !gameOver || !adversaireUid || !myUid) return null;
     if (amis.some((a) => a.uid === adversaireUid)) return null;
@@ -7277,7 +7394,7 @@ export default function Emprise() {
     return (
       <button key="am" className={`reset-btn revanche-btn ${ilDemande && !amitieAvis ? "revanche-invite" : ""}`}
               onClick={() => { setAmitieAvis(""); (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
-                .catch(() => setAmitieAvis("Impossible — réessayer")); }}>
+                .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}>
         {amitieAvis || (ilDemande ? "Accepter en ami" : "Ajouter en ami")}
       </button>
     );
@@ -7291,18 +7408,27 @@ export default function Emprise() {
     return (
       <div key={a.uid} className="amis-ligne">
         <div className="amis-ligne-texte">
-          <span className="amis-nom">{nom}</span>
-          <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}{presence ? ` · ${presence}` : ""}</span>
+          <span className="amis-nom">
+            {nom}
+            {f && f.trophees > 0 && (
+              <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
+            )}
+          </span>
+          <span className="amis-code">
+            {codeAmiLisible(f && f.codeAmi)}{f && f.titre ? ` · ${f.titre}` : ""}{presence ? ` · ${presence}` : ""}
+          </span>
         </div>
         <button className="amis-btn principal" onClick={() => defierAmi(a.uid)}>Défier</button>
         {!compact && (
-          <button className="amis-croix" aria-label={`Retirer ${nom}`} title="Retirer" onClick={() => setAmiARetirer({ uid: a.uid, nom })}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: a.uid, nom, contexte: "ami" })}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
           </button>
         )}
       </div>
     );
   }
+  // Les amis se rangent par trophees, les plus titres en tete.
+  const amisTries = [...amis].sort((x, y) => ((fiches[y.uid] && fiches[y.uid].trophees) || 0) - ((fiches[x.uid] && fiches[x.uid].trophees) || 0));
   function banniereDefi() {
     if (!defiRecu) return null;
     const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
@@ -7514,68 +7640,6 @@ export default function Emprise() {
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
 
-  // Le profil public : cree des la connexion — avant meme que le joueur ait un nom, pour
-  // que son identifiant soit deja la quand il le choisit — avec ce numero tire dans une
-  // transaction qui echoue s'il est deja pris.
-  // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
-  // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
-  // pas en place, tout echoue en silence : la section Amis reste simplement vide.
-  // Une nouvelle tentative apres un echec : sans elle, remettre la marque a zero ne
-  // servait a rien, l'effet ne se rejouait pas (ses dependances n'avaient pas bouge) et
-  // le joueur restait sans identifiant jusqu'au prochain lancement.
-  const [essaiProfil, setEssaiProfil] = useState(0);
-  const profilSyncRef = useRef("");
-  useEffect(() => {
-    if (!myUid || profilSyncRef.current === myUid + "/" + pseudo) return;
-    profilSyncRef.current = myUid + "/" + pseudo;
-    let annule = false;
-    (async () => {
-      try {
-        const ref = doc(db, "users", myUid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          const d = snap.data();
-          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo: pseudo || "", vuLe: serverTimestamp() });
-          if (!annule) setMonCodeAmi(d.codeAmi || "");
-          return;
-        }
-        for (let essai = 0; essai < 5; essai++) {
-          const code = makeCodeAmi();
-          try {
-            await runTransaction(db, async (tx) => {
-              const idx = doc(db, "codesAmi", code);
-              const pris = await tx.get(idx);
-              if (pris.exists()) throw new Error("code-pris");
-              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
-              tx.set(idx, { uid: myUid });
-            });
-            if (!annule) setMonCodeAmi(code);
-            return;
-          } catch (e) { if (e.message !== "code-pris") throw e; }
-        }
-      } catch (e) {
-        // Regles absentes ou reseau coupe : on repasse dans vingt secondes.
-        profilSyncRef.current = "";
-        if (!annule) setTimeout(() => setEssaiProfil((n) => n + 1), 20000);
-      }
-    })();
-    return () => { annule = true; };
-  }, [myUid, pseudo, essaiProfil]);
-
-  // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
-  // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
-  // s'ecrit quand l'application est en arriere-plan : c'est justement ce qui fait
-  // vieillir la marque et bascule l'ami sur « Vu il y a... ».
-  useEffect(() => {
-    if (!myUid) return;
-    const direPresence = () => {
-      if (document.visibilityState !== "visible") return;
-      updateDoc(doc(db, "users", myUid), { vuLe: serverTimestamp() }).catch(() => {});
-    };
-    const id = setInterval(direPresence, 120000);
-    document.addEventListener("visibilitychange", direPresence);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", direPresence); };
-  }, [myUid]);
   // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
   useEffect(() => {
@@ -7678,6 +7742,78 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [stats, setStats] = useState(DEFAULT_STATS);
+
+  // Le profil public : cree des la connexion — avant meme que le joueur ait un nom, pour
+  // que son identifiant soit deja la quand il le choisit — avec ce numero tire dans une
+  // transaction qui echoue s'il est deja pris.
+  // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
+  // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
+  // pas en place, tout echoue en silence : la section Amis reste simplement vide.
+  // Une nouvelle tentative apres un echec : sans elle, remettre la marque a zero ne
+  // servait a rien, l'effet ne se rejouait pas (ses dependances n'avaient pas bouge) et
+  // le joueur restait sans identifiant jusqu'au prochain lancement.
+  const [essaiProfil, setEssaiProfil] = useState(0);
+  const profilSyncRef = useRef("");
+  useEffect(() => {
+    if (!myUid || profilSyncRef.current === myUid + "/" + pseudo) return;
+    profilSyncRef.current = myUid + "/" + pseudo;
+    let annule = false;
+    (async () => {
+      try {
+        const ref = doc(db, "users", myUid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const d = snap.data();
+          await updateDoc(ref, { pseudo: pseudo || "", vuLe: serverTimestamp(), trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" });
+          if (!annule) setMonCodeAmi(d.codeAmi || "");
+          return;
+        }
+        for (let essai = 0; essai < 5; essai++) {
+          const code = makeCodeAmi();
+          try {
+            await runTransaction(db, async (tx) => {
+              const idx = doc(db, "codesAmi", code);
+              const pris = await tx.get(idx);
+              if (pris.exists()) throw new Error("code-pris");
+              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp(), trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" });
+              tx.set(idx, { uid: myUid });
+            });
+            if (!annule) setMonCodeAmi(code);
+            return;
+          } catch (e) { if (e.message !== "code-pris") throw e; }
+        }
+      } catch (e) {
+        // Regles absentes ou reseau coupe : on repasse dans vingt secondes.
+        profilSyncRef.current = "";
+        if (!annule) setTimeout(() => setEssaiProfil((n) => n + 1), 20000);
+      }
+    })();
+    return () => { annule = true; };
+  }, [myUid, pseudo, essaiProfil]);
+
+  // Les trophees et le titre suivent chaque partie comptee : c'est ce que les amis voient.
+  const trophyRef = useRef(null);
+  useEffect(() => {
+    const cle = (stats.trophies || 0) + "/" + (titrePrincipal(stats) || "");
+    if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
+    trophyRef.current = cle;
+    updateDoc(doc(db, "users", myUid), { trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" }).catch(() => {});
+  }, [myUid, monCodeAmi, stats]);
+
+  // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
+  // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
+  // s'ecrit quand l'application est en arriere-plan : c'est justement ce qui fait
+  // vieillir la marque et bascule l'ami sur « Vu il y a... ».
+  useEffect(() => {
+    if (!myUid) return;
+    const direPresence = () => {
+      if (document.visibilityState !== "visible") return;
+      updateDoc(doc(db, "users", myUid), { vuLe: serverTimestamp() }).catch(() => {});
+    };
+    const id = setInterval(direPresence, 120000);
+    document.addEventListener("visibilitychange", direPresence);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", direPresence); };
+  }, [myUid]);
   const statsRecordedRef = useRef(false);
   // Suivi des combos de la partie en cours. Un ref et non un etat : il est lu et ecrit
   // au milieu d'un coup, un rendu de retard fausserait la detection.
@@ -10816,19 +10952,28 @@ export default function Emprise() {
 
                   <div className="profil-section-titre">Amis</div>
                   {banniereDefi()}
-                  {demandesRecues.length > 0 && (
+                  {demandesVisibles.length > 0 && (
                     <>
                       <div className="amis-sous-titre">Demandes reçues</div>
-                      {demandesRecues.map((d) => {
+                      {demandesVisibles.map((d) => {
                         const f = fiches[d.uid];
+                        const nom = nomAffiche(f && f.pseudo);
                         return (
                           <div key={d.uid} className="amis-ligne">
                             <div className="amis-ligne-texte">
-                              <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
+                              <span className="amis-nom">
+                                {nom}
+                                {f && f.trophees > 0 && (
+                                  <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
+                                )}
+                              </span>
                               <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
                             </div>
-                            <button className="amis-btn principal" onClick={() => accepterDemande(d.uid).catch(() => setAvisAmis({ texte: "Impossible d'accepter pour l'instant.", bon: false }))}>Accepter</button>
+                            <button className="amis-btn principal" onClick={() => accepterDemande(d.uid).catch((e) => setAvisAmis({ texte: e && e.message === "liste-pleine" ? `Liste pleine : ${AMIS_MAX} amis au plus.` : "Impossible d'accepter pour l'instant.", bon: false }))}>Accepter</button>
                             <button className="amis-btn" onClick={() => refuserDemande(d.uid)}>Refuser</button>
+                            <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: d.uid, nom, contexte: "demande" })}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
+                            </button>
                           </div>
                         );
                       })}
@@ -10837,7 +10982,7 @@ export default function Emprise() {
                   {amis.length === 0 ? (
                     <div className="amis-vide">Aucun ami pour l'instant. Partagez votre identifiant, ou ajoutez votre prochain adversaire en fin de partie.</div>
                   ) : (
-                    <div className="amis-liste">{amis.map((a) => ligneAmi(a, false))}</div>
+                    <div className="amis-liste">{amisTries.map((a) => ligneAmi(a, false))}</div>
                   )}
                   <div className="amis-sous-titre">Ajouter un ami</div>
                   <div className="amis-ajout">
@@ -10864,6 +11009,23 @@ export default function Emprise() {
                   </div>
                   {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
                   <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
+                  {bloques.length > 0 && (
+                    <>
+                      <div className="amis-sous-titre">Joueurs bloqués</div>
+                      {bloques.map((b) => {
+                        const f = fiches[b.uid];
+                        return (
+                          <div key={b.uid} className="amis-ligne bloque">
+                            <div className="amis-ligne-texte">
+                              <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
+                              <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
+                            </div>
+                            <button className="amis-btn" onClick={() => debloquerJoueur(b.uid)}>Débloquer</button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
 
                   <div className="profil-section-titre">Le joueur que vous êtes</div>
                   {profil.titres.length > 0 ? (
@@ -11942,7 +12104,7 @@ export default function Emprise() {
           {amis.length > 0 && (
             <>
               <div className="sub" style={{ marginTop: 18 }}>ou défier un ami</div>
-              <div className="amis-liste compacte">{amis.map((a) => ligneAmi(a, true))}</div>
+              <div className="amis-liste compacte">{amisTries.map((a) => ligneAmi(a, true))}</div>
             </>
           )}
         </div>
@@ -12728,6 +12890,7 @@ export default function Emprise() {
               {bilanTrophees()}
               {boutonRevanche()}
               {boutonAmitie()}
+              {lienSignalerAdversaire()}
               <button className="reset-btn cer-continuer" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); }}>
                 {tournoiOnlineId ? "Retour au tournoi" : "Continuer"}
               </button>
@@ -12762,12 +12925,62 @@ export default function Emprise() {
             {bilanTrophees()}
             {boutonRevanche()}
             {boutonAmitie()}
+            {lienSignalerAdversaire()}
             <button className="defeat-button" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); reset(); }}>
               {tournoiOnlineId ? "Retour au tournoi" : mode === "online" ? "Retour au menu" : "Recommencer"}
             </button>
             <button className="defeat-lien" onClick={() => { setCeremonieFin(null); setCerPose(false); }}>
               Revoir le plateau
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
+          les trois contextes — ami, demande, adversaire de fin de partie. */}
+      {joueurMenu && !signalement && (
+        <div className="info-overlay" onClick={() => setJoueurMenu(null)}>
+          <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">{joueurMenu.nom}</div>
+            <div className="amis-menu">
+              {joueurMenu.contexte === "ami" && (
+                <button className="amis-menu-btn" onClick={() => { setAmiARetirer({ uid: joueurMenu.uid, nom: joueurMenu.nom }); setJoueurMenu(null); }}>
+                  <b>Retirer de mes amis</b><span>Son identifiant permet de le rajouter.</span>
+                </button>
+              )}
+              <button className="amis-menu-btn" onClick={() => { bloquerJoueur(joueurMenu.uid).catch(() => {}); setJoueurMenu(null); }}>
+                <b>Bloquer</b><span>Plus aucune demande ni défi, dans aucun sens. Il n'en saura rien.</span>
+              </button>
+              <button className="amis-menu-btn" onClick={() => setSignalement({ uid: joueurMenu.uid, nom: joueurMenu.nom, motif: "pseudo" })}>
+                <b>Signaler</b><span>Un nom offensant, une triche, un comportement.</span>
+              </button>
+            </div>
+            <button className="landing-link" onClick={() => setJoueurMenu(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
+      {signalement && (
+        <div className="info-overlay" onClick={() => { setSignalement(null); setJoueurMenu(null); }}>
+          <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Signaler {signalement.nom}</div>
+            <div className="amis-motifs" role="radiogroup" aria-label="Motif">
+              {MOTIFS_SIGNALEMENT.map(([cle, libelle]) => (
+                <button key={cle} role="radio" aria-checked={signalement.motif === cle}
+                        className={`amis-motif ${signalement.motif === cle ? "actif" : ""}`}
+                        onClick={() => setSignalement({ ...signalement, motif: cle })}>
+                  {libelle}
+                </button>
+              ))}
+            </div>
+            <div className="confirm-text">Le signalement est transmis à l'éditeur du jeu. Vous n'aurez pas de réponse, mais il sera lu.</div>
+            <div className="confirm-actions">
+              <button className="reset-btn" onClick={() => { setSignalement(null); setJoueurMenu(null); }}>Annuler</button>
+              <button className="reset-btn quit-confirm" onClick={() => {
+                signalerJoueur(signalement.uid, signalement.motif).catch(() => {});
+                setSignalement(null); setJoueurMenu(null);
+                setAvisAmis({ texte: "Signalement envoyé.", bon: true });
+              }}>Envoyer</button>
+            </div>
           </div>
         </div>
       )}

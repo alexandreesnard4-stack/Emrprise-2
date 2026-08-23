@@ -74,7 +74,9 @@ service cloud.firestore {
     //   /users/{uid}/demandes/{deUid}      demande d'ami reçue par uid, envoyée par deUid
     //   /users/{uid}/amis/{amiUid}         lien d'amitié, écrit en double (chez les deux)
     //   /users/{uid}/invitations/{deUid}   défi (invitation à une partie) envoyé par l'ami deUid
-    // plus un index /codesAmi/{code} = { uid } pour retrouver un joueur par son numero.
+    //   /users/{uid}/bloques/{autreUid}    joueurs dont uid ne veut plus rien recevoir
+    // plus un index /codesAmi/{code} = { uid } pour retrouver un joueur par son numero,
+    // et une collection /signalements, en écriture seule côté joueur.
     //
     // Pourquoi des sous-collections et pas des tableaux dans le profil ? Une demande
     // d'ami, c'est un INCONNU qui écrit chez vous. Avec un tableau, il faudrait lui
@@ -97,6 +99,9 @@ service cloud.firestore {
     function docAmi(u, a)     { return /databases/$(database)/documents/users/$(u)/amis/$(a); }
     function docDemande(u, d) { return /databases/$(database)/documents/users/$(u)/demandes/$(d); }
     function docCode(c)       { return /databases/$(database)/documents/codesAmi/$(c); }
+    function docBloque(u, b)  { return /databases/$(database)/documents/users/$(u)/bloques/$(b); }
+    // Vrai si l'un des deux a bloqué l'autre : rien ne passe plus, dans aucun sens.
+    function blocageEntre(a, b) { return exists(docBloque(a, b)) || exists(docBloque(b, a)); }
     function docPartie(c)     { return /databases/$(database)/documents/games/$(c); }
 
     // Pseudo : 14 caractères côté client ; size() compte en octets et les accents en
@@ -113,6 +118,15 @@ service cloud.firestore {
     // moi : un profil ne peut jamais annoncer un code qui ne mène pas à lui.
     function indexPointeVersMoi(code) {
       return getAfter(docCode(code)).data.uid == moi();
+    }
+
+    // Trophées et titre, montrés aux amis : un entier raisonnable et une courte chaîne.
+    // Le client ne retient le titre que s'il est l'un des titres du jeu.
+    function profilPublicValide() {
+      return (!('trophees' in request.resource.data)
+              || (request.resource.data.trophees is int && request.resource.data.trophees >= 0 && request.resource.data.trophees <= 100000))
+          && (!('titre' in request.resource.data)
+              || (request.resource.data.titre is string && request.resource.data.titre.size() <= 60));
     }
 
     // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
@@ -149,8 +163,9 @@ service cloud.firestore {
       // Création : soi-même seulement, champs fixés, code ami dont l'index est créé
       // dans la même transaction et pointe vers soi.
       allow create: if connecte() && moi() == uid
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'trophees', 'titre'])
         && pseudoValide(request.resource.data.pseudo)
+        && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
         && request.resource.data.creeLe == request.time
         && horodatageSur('vuLe')
@@ -160,8 +175,9 @@ service cloud.firestore {
       // prennent que l'heure du serveur ; le code ami peut changer si l'index du
       // nouveau code pointe vers soi après le batch.
       allow update: if connecte() && moi() == uid
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre'])
         && pseudoValide(request.resource.data.pseudo)
+        && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
         && request.resource.data.creeLe == resource.data.creeLe
         && horodatageSur('vuLe')
@@ -183,6 +199,7 @@ service cloud.firestore {
           && deUid != uid                        // pas de demande à soi-même
           && exists(docUser(uid))                // le destinataire existe
           && !exists(docAmi(uid, deUid))         // pas déjà amis
+          && !blocageEntre(uid, deUid)           // aucun des deux n'a bloqué l'autre
           && request.resource.data.keys().hasOnly(['envoyeeLe'])
           && request.resource.data.envoyeeLe == request.time
           && rafaleRespectee();
@@ -239,6 +256,7 @@ service cloud.firestore {
         allow create, update: if connecte() && moi() == deUid
           && deUid != uid
           && exists(docAmi(uid, deUid))
+          && !blocageEntre(uid, deUid)
           && request.resource.data.keys().hasOnly(['code', 'envoyeeLe'])
           // Le code a la forme exacte d'un code de partie : le client de l'ami le met en
           // majuscules avant de rejoindre, un code forge en minuscules l'enverrait ailleurs.
@@ -251,6 +269,41 @@ service cloud.firestore {
         // Le destinataire l'efface une fois traitée, l'inviteur peut la retirer.
         allow delete: if connecte() && (moi() == uid || moi() == deUid);
       }
+
+      // ---------- Blocages ----------
+      // Liste privée, écrite et lue par son propriétaire seul. Un joueur bloqué ne peut
+      // plus envoyer de demande ni de défi, et le bloqueur non plus vers lui (vérifié
+      // par blocageEntre ci-dessus). Le client qui bloque efface aussi, dans le même
+      // batch, l'amitié, les demandes et les défis en cours dans les deux sens. Le
+      // bloqué reçoit un simple refus, indiscernable d'un identifiant inexistant.
+      match /bloques/{bloqueUid} {
+        allow read: if connecte() && moi() == uid;
+        allow create: if connecte() && moi() == uid
+          && uid != bloqueUid
+          && request.resource.data.keys().hasOnly(['depuis'])
+          && request.resource.data.depuis == request.time;
+        allow update: if false;
+        allow delete: if connecte() && moi() == uid;
+      }
+    }
+
+    // ---------- Signalements ----------
+    // Écriture seule côté joueur : on dépose, on ne relit jamais. L'auteur est l'uid
+    // connecté (impossible d'en accuser un autre), la cible est un uid, le motif une
+    // courte chaîne, la date celle du serveur. Le pseudo de la cible est recopié tel
+    // que l'auteur le voyait, pour que l'éditeur sache ce qui a été signalé même si le
+    // joueur en change ensuite.
+    match /signalements/{id} {
+      allow read: if false;
+      allow create: if connecte()
+        && request.resource.data.keys().hasOnly(['de', 'cible', 'motif', 'date', 'pseudoCible'])
+        && request.resource.data.de == moi()
+        && request.resource.data.cible is string
+        && request.resource.data.cible != moi()
+        && request.resource.data.motif is string && request.resource.data.motif.size() <= 40
+        && request.resource.data.pseudoCible is string && request.resource.data.pseudoCible.size() <= 28
+        && request.resource.data.date == request.time;
+      allow update, delete: if false;
     }
 
     // ---------- Index des codes amis ----------
