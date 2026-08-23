@@ -169,6 +169,40 @@ function CountdownLabel({ order }) {
 }
 
 
+// Le decompte du panneau : quatre cadrans plutot qu une phrase. Meme minuteur d une
+// seconde que CountdownLabel, qui sert lui a la ligne de description des cartes.
+function OrdreDecompte({ order }) {
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    if (!order.releaseDate) return;
+    const id = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [order.releaseDate]);
+  if (!order.releaseDate) {
+    return <div className="ordre-detail-parties">Son heure viendra.</div>;
+  }
+  const reste = order.releaseDate - maintenant;
+  if (reste <= 0) {
+    return <div className="ordre-detail-bientot-proche">Son heure est venue.</div>;
+  }
+  const total = Math.floor(reste / 1000);
+  const cadrans = [
+    [Math.floor(total / 86400), "j", "jours"],
+    [Math.floor((total % 86400) / 3600), "h", "heures"],
+    [Math.floor((total % 3600) / 60), "m", "minutes"],
+    [total % 60, "s", "secondes"],
+  ];
+  return (
+    <div className="ordre-decompte" role="timer" aria-label={`Disponible dans ${cadrans[0][0]} jours`}>
+      {cadrans.map(([valeur, court, long]) => (
+        <div key={court} className="ordre-decompte-case" title={long}>
+          <b>{String(valeur).padStart(2, "0")}</b><span>{court}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Vignette d'un Ordre "prochainement". Le portrait réel n'est pas une image
 // pré-assombrie : c'est le vrai portrait, poussé au contraste par CSS jusqu'à ne
 // laisser qu'une gravure. Une aura respire derrière lui, un balayage lumineux le
@@ -3685,6 +3719,32 @@ const APP_STYLES = `
           background: rgba(203,164,86,0.18); border: 1px solid rgba(203,164,86,0.3);
         }
         .ordre-detail-parties { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+        /* Ordre encore scelle : la place du rang revient a l annonce, celle du
+           pourcentage au decompte. Quatre cadrans, chiffres en avant, unites en retrait. */
+        .ordre-detail-bientot {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
+        }
+        .ordre-detail-bientot-proche {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.08em; color: var(--gold-bright); margin: 6px 0;
+        }
+        /* La colonne de droite du panneau est etroite : quatre cadrans en ligne s y
+           chevauchaient. Deux rangees de deux, en grille. */
+        .ordre-decompte {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+          margin: 10px 0 4px; width: 100%;
+        }
+        .ordre-decompte-case {
+          min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 2px;
+          padding: 6px 2px; border-radius: 8px; box-sizing: border-box;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.22);
+        }
+        .ordre-decompte-case b {
+          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; line-height: 1;
+          color: var(--gold-bright); font-variant-numeric: tabular-nums;
+        }
+        .ordre-decompte-case span { font-size: 9px; color: var(--muted); }
         .ordre-detail-desc {
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
@@ -10348,9 +10408,8 @@ export default function Emprise() {
                         key={order.key}
                         type="button"
                         className={`hub-ordre-vignette ${bientot ? "scellee" : ""}`}
-                        title={bientot ? "Bientôt disponible" : `${order.name} · ${m.pourcent} %`}
-                        onClick={() => { if (!bientot) setOrdreDetail(order.key); }}
-                        disabled={bientot}
+                        title={bientot ? "Arrive prochainement" : `${order.name} · ${m.pourcent} %`}
+                        onClick={() => setOrdreDetail(order.key)}
                       >
                         <div className="hub-ordre-cadre">
                           {bientot ? (
@@ -10424,10 +10483,21 @@ export default function Emprise() {
             return (
               <div className="info-overlay ordre-detail-voile" onClick={() => setOrdreDetail(null)}>
                 <div className="ordre-detail" onClick={(e) => e.stopPropagation()}>
-                  {/* A gauche la carte, grossie ; a droite ce qu'elle dit de vous. */}
+                  {/* A gauche la carte, grossie ; a droite ce qu'elle dit de vous. Un
+                      Ordre encore scelle n a ni rang ni pourcentage : il a une date. */}
                   <div className="ordre-detail-carte">
-                    <VagueMaitrise order={order} taux={m.taux} grand />
+                    {!isOrderAvailable(order)
+                      ? <ComingSoonThumb order={order} />
+                      : <VagueMaitrise order={order} taux={m.taux} grand />}
                   </div>
+                  {!isOrderAvailable(order) ? (
+                    <div className="ordre-detail-texte">
+                      <div className="ordre-detail-bientot">Arrive prochainement</div>
+                      <div className="ordre-detail-nom">{order.name}</div>
+                      <OrdreDecompte order={order} />
+                      <p className="ordre-detail-desc">{order.desc}</p>
+                    </div>
+                  ) : (
                   <div className="ordre-detail-texte">
                     <div className="ordre-detail-rang">
                       {m.rang.nom}
@@ -10447,6 +10517,7 @@ export default function Emprise() {
                     </div>
                     <p className="ordre-detail-desc">{order.desc}</p>
                   </div>
+                  )}
                 </div>
               </div>
             );
