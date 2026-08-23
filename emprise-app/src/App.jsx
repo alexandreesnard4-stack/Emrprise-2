@@ -528,27 +528,15 @@ const PSEUDO_MAX = 14;
 const CLE_PSEUDO = "emprise-pseudo";
 let pseudoMemoire = null; // repli si aucun stockage durable n'est disponible
 
-// Ne laisse passer que ce qui s'affiche : lettres (accents compris), chiffres, espace,
-// trait d'union, apostrophe. Les caracteres de controle et les espaces multiples, qui
-// permettraient de fabriquer un nom vide ou trompeur, sont ecartes.
-
-// Nettoyage PENDANT la frappe : identique au nettoyage final, sauf qu'un espace en fin
-// de nom survit — sans lui, impossible d'ecrire un nom en deux mots, le trim avalant
-// l'espace des qu'il est tape. Nettoyer a la frappe plutot qu'a la validation permet
-// aussi de compter juste : sinon un caractere refuse mangeait le quota des 14.
-function pseudoEnSaisie(brut) {
-  return String(brut || "")
-    .replace(/[^\p{L}\p{N} '\-]/gu, "")
-    .replace(/\s+/g, " ")
-    .replace(/^\s+/, "")
-    .slice(0, PSEUDO_MAX);
-}
-
+// Lettres et chiffres, rien d'autre : ni espace, ni ponctuation, ni symbole. Un nom d'une
+// seule piece se lit partout — dans l'etiquette de camp, dans l'historique, dans un futur
+// classement — sans jamais se couper en deux ni fabriquer une fausse ressemblance avec le
+// nom d'un autre. Les lettres accentuees restent des lettres : Elise s'ecrit Élise.
+// Applique des la frappe plutot qu'a la validation : le compteur des 14 caracteres reste
+// juste, sinon un caractere refuse en mangeait le quota.
 function nettoyerPseudo(brut) {
   return String(brut || "")
-    .replace(/[^\p{L}\p{N} '\-]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim()
+    .replace(/[^\p{L}\p{N}]/gu, "")
     .slice(0, PSEUDO_MAX);
 }
 
@@ -5098,18 +5086,25 @@ const APP_STYLES = `
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
         /* Trophées et titre d'un joueur en Classé : des puces posées à côté de son nom. */
         .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
-        /* L'etiquette est une rangee : le nom, puis ce qui le decrit. */
+        .zone-bas { width: 100%; }
+        /* L'etiquette est une rangee : le nom, puis ce qui le decrit. Calee a GAUCHE, sur
+           le bord du plateau — centree, elle se decalait d'un camp a l'autre selon la
+           longueur du pseudo, et rien ne la reliait au reste de l'ecran. */
         .turn-label {
-          display: flex; align-items: center; justify-content: center;
+          display: flex; align-items: center; justify-content: flex-start;
           gap: 8px; flex-wrap: wrap;
+          width: 100%; max-width: 340px; margin-inline: auto;
+          padding-inline: 2px; box-sizing: border-box;
         }
         .turn-label-nom { flex: none; }
+        /* Les trophees se posent a nu, sans pastille : le fond noir cerne les detourait du
+           nom qu'ils accompagnent, alors qu'ils en font partie. L'ombre portee remplace le
+           cadre pour les detacher du plateau. */
         .trophees-flottant {
           display: inline-flex; align-items: center; gap: 5px; flex: none;
-          padding: 3px 11px 3px 8px; border-radius: 999px;
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; line-height: 1;
-          color: var(--gold-bright); background: rgba(8,6,12,0.8);
-          border: 1px solid rgba(203,164,86,0.45);
+          color: var(--gold-bright);
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
         .trophees-flottant img {
           width: 16px; height: 21px; object-fit: contain; display: block;
@@ -5159,6 +5154,18 @@ const APP_STYLES = `
         .info-panel.settings-panel.profil-panel {
           max-height: 88dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;
         }
+        /* Le nom du profil devient un bouton : on neutralise le style natif et l'on ajoute
+           un crayon, discret, qui dit que le nom se change. */
+        .profil-nom {
+          display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+          background: none; border: none; padding: 0; font: inherit; color: inherit;
+          cursor: pointer;
+        }
+        .profil-nom svg { width: 14px; height: 14px; fill: var(--gold); opacity: 0.75; flex: none; }
+        .profil-nom:hover svg { opacity: 1; }
+        .profil-edition { display: flex; flex-direction: column; align-items: center; gap: 7px; width: 100%; }
+        .profil-edition-boutons { display: flex; align-items: center; gap: 12px; }
+        .profil-edition-boutons .reset-btn:disabled { opacity: 0.4; cursor: default; }
         .profil-chiffres { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
         .profil-chiffres > div {
           flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -6616,9 +6623,14 @@ export default function Emprise() {
   const [activeModal, setActiveModal] = useState(null);
   const [pseudo, setPseudo] = useState(lirePseudo);
   const [pseudoSaisi, setPseudoSaisi] = useState("");
+  const [editionPseudo, setEditionPseudo] = useState(false);
   // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
   // affichent ainsi exactement la meme chose, comme pour les trophees et les titres.
   const [pseudosPartie, setPseudosPartie] = useState(null);
+  useEffect(() => {
+    if (activeModal !== "profil") { setEditionPseudo(false); setPseudoSaisi(""); }
+  }, [activeModal]);
+
   function validerPseudo() {
     const nom = nettoyerPseudo(pseudoSaisi);
     if (!nom) return;
@@ -9328,10 +9340,13 @@ export default function Emprise() {
             className="pseudo-champ"
             type="text"
             value={pseudoSaisi}
-            onChange={(e) => setPseudoSaisi(pseudoEnSaisie(e.target.value))}
+            onChange={(e) => setPseudoSaisi(nettoyerPseudo(e.target.value))}
             onKeyDown={(e) => { if (e.key === "Enter") validerPseudo(); }}
             placeholder="Votre nom"
             maxLength={PSEUDO_MAX}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             autoFocus
             aria-label="Votre nom"
           />
@@ -9660,7 +9675,43 @@ export default function Emprise() {
             return (
               <div className="info-overlay" onClick={() => setActiveModal(null)}>
                 <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="info-panel-title">{pseudo}</div>
+                  {/* Le nom se change ici, la ou on le lit : le toucher ouvre le champ,
+                      pre-rempli du nom actuel pour le corriger plutot que le retaper. */}
+                  {editionPseudo ? (
+                    <div className="profil-edition">
+                      <input
+                        className="pseudo-champ"
+                        type="text"
+                        value={pseudoSaisi}
+                        onChange={(e) => setPseudoSaisi(nettoyerPseudo(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && pseudoSaisi) { validerPseudo(); setEditionPseudo(false); }
+                          if (e.key === "Escape") { setEditionPseudo(false); setPseudoSaisi(""); }
+                        }}
+                        maxLength={PSEUDO_MAX}
+                        autoFocus
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Votre nom"
+                      />
+                      <div className="pseudo-reste">{PSEUDO_MAX - pseudoSaisi.length} caractères restants</div>
+                      <div className="profil-edition-boutons">
+                        <button className="landing-link" onClick={() => { setEditionPseudo(false); setPseudoSaisi(""); }}>Annuler</button>
+                        <button className="reset-btn" disabled={!pseudoSaisi}
+                                onClick={() => { validerPseudo(); setEditionPseudo(false); }}>Valider</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="info-panel-title profil-nom"
+                            onClick={() => { setPseudoSaisi(pseudo); setEditionPseudo(true); }}
+                            title="Changer de nom">
+                      {pseudo}
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 17.2V20h2.8L18 8.8 15.2 6 4 17.2zm16-9.6a.9.9 0 0 0 0-1.3l-2.3-2.3a.9.9 0 0 0-1.3 0l-1.5 1.5L17.7 9l1.5-1.4z" />
+                      </svg>
+                    </button>
+                  )}
 
                   <div className="profil-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
@@ -11357,7 +11408,7 @@ export default function Emprise() {
 
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
-          <div>
+          <div className="zone-bas">
             {mainCamp(campBas)}
             {labelCamp(campBas)}
           </div>
