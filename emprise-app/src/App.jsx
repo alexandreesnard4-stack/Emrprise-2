@@ -528,22 +528,339 @@ const PSEUDO_MAX = 14;
 const CLE_PSEUDO = "emprise-pseudo";
 let pseudoMemoire = null; // repli si aucun stockage durable n'est disponible
 
-// Lettres et chiffres, rien d'autre : ni espace, ni ponctuation, ni symbole. Un nom d'une
-// seule piece se lit partout — dans l'etiquette de camp, dans l'historique, dans un futur
-// classement — sans jamais se couper en deux ni fabriquer une fausse ressemblance avec le
-// nom d'un autre. Les lettres accentuees restent des lettres : Elise s'ecrit Élise.
+// Lettres LATINES et chiffres ASCII, en MAJUSCULES, rien d'autre : ni espace, ni
+// ponctuation, ni symbole, ni autre ecriture. Un nom d'une seule piece se lit partout —
+// dans l'etiquette de camp, dans l'historique, dans un futur classement — sans se couper
+// en deux. Les lettres accentuees restent des lettres : Ayşe, Łukasz et João passent.
+//
+// Pourquoi le latin SEUL, et non toutes les ecritures. Un H cyrillique (U+041D) et un H
+// latin sont indiscernables a l'oeil, et aucune normalisation Unicode ne les rapproche.
+// Tant qu'on accepte les autres ecritures, n'importe quel mot refuse se recrit avec des
+// sosies et traverse le filtre. Ecarter les ecritures non latines ferme d'un coup toutes
+// ces familles — cyrillique, grec, cherokee, lisu, armenien — ainsi que les remplisseurs
+// invisibles du hangul (U+3164 et parents), qui sont des LETTRES et passeraient sinon.
+// Le prix : un joueur ne peut pas ecrire son nom en cyrillique ou en grec. Pour un jeu
+// francais, c'est le bon cote du marche.
+//
 // Applique des la frappe plutot qu'a la validation : le compteur des 14 caracteres reste
 // juste, sinon un caractere refuse en mangeait le quota.
+const PONCTUATION_DEGUISEE = /[\u01C0-\u01C3\u02BB-\u02BD\u02C8\u02CC\u02D0\u02D1]/gu;
 function nettoyerPseudo(brut) {
-  return String(brut || "")
-    .replace(/[^\p{L}\p{N}]/gu, "")
-    .slice(0, PSEUDO_MAX);
+  const garde = String(brut || "")
+    .replace(PONCTUATION_DEGUISEE, "")
+    .replace(/[^\p{Script=Latin}0-9]/gu, "")
+    .toUpperCase();
+  // Decoupe par POINTS DE CODE : slice() compte en unites UTF-16 et couperait une paire
+  // de substitution en deux, laissant un demi-caractere illisible en fin de nom. La coupe
+  // vient apres la mise en majuscules, qui peut rallonger le nom (ß devient SS).
+  return [...garde].slice(0, PSEUDO_MAX).join("");
+}
+
+// ---------- Noms refuses ----------
+// Refuser « hitler » ne sert a rien si « h1tler », « hiiitler » et « ʜɪᴛʟᴇʀ » passent. On
+// ne compare donc jamais le nom tel quel : on le reduit d'abord a un SQUELETTE, la forme
+// ou toutes les ecritures detournees d'un meme mot se rejoignent. Et l'on applique aux
+// TERMES de la liste exactement la meme reduction qu'au nom : sans cela « connard », une
+// fois ses lettres doublees ecrasees en « conard », ne se retrouverait plus nulle part.
+
+// Ce que la normalisation Unicode ne replie pas d'elle-meme, alors que l'oeil ne fait pas
+// la difference. Les petites capitales sont le piege du lot : ce sont bien des lettres
+// latines minuscules, et NFKD ne les touche pas.
+const SOSIES = {
+  "ı": "i", "ȷ": "j", "ł": "l", "ƚ": "l", "ɫ": "l", "ø": "o", "ɵ": "o", "đ": "d", "ð": "d",
+  "ɖ": "d", "ħ": "h", "ɦ": "h", "ŧ": "t", "ƫ": "t", "ɨ": "i", "ɩ": "i", "ɇ": "e", "ɛ": "e",
+  "ǝ": "e", "ə": "e", "ɍ": "r", "ɽ": "r", "ɾ": "r", "ƀ": "b", "ɓ": "b", "ǥ": "g", "ɠ": "g",
+  "ᵽ": "p", "ȼ": "c", "ƈ": "c", "ʉ": "u", "ʊ": "u", "ƶ": "z", "ȥ": "z", "ƒ": "f", "ƙ": "k",
+  "ɯ": "m", "ɲ": "n", "ƥ": "p", "ɋ": "q", "ʂ": "s", "ƭ": "t", "ʋ": "v", "ɰ": "w", "ɏ": "y",
+  // Petites capitales et alphabet phonetique : latins eux aussi, donc rescapes du tri.
+  "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i",
+  "ᴊ": "j", "ᴋ": "k", "ʟ": "l", "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ꞯ": "q", "ʀ": "r",
+  "ꜱ": "s", "ᴛ": "t", "ᴜ": "u", "ᴠ": "v", "ᴡ": "w", "ʏ": "y", "ᴢ": "z", "ʁ": "r", "ɡ": "g",
+  // Lettres retournees, pour les noms ecrits a l'envers.
+  "ɐ": "a", "ɔ": "c", "ɟ": "f", "ƃ": "g", "ɥ": "h", "ᴉ": "i", "ʞ": "k", "ʇ": "t",
+  "ʌ": "v", "ʍ": "w", "ʎ": "y",
+};
+// Ligatures qu'aucune decomposition ne separe : elles valent deux lettres.
+const DIGRAMMES = { "ß": "ss", "ẞ": "ss", "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe", "þ": "th", "ĸ": "k", "ŋ": "ng" };
+// Le chiffre mis a la place d'une lettre.
+const LEET = { "0": "o", "1": "i", "2": "z", "3": "e", "4": "a", "5": "s", "6": "g", "7": "t", "8": "b", "9": "g" };
+
+function squeletteDuNom(nom, options) {
+  const o = options || {};
+  let t = String(nom || "")
+    .normalize("NFKD")        // replie accents, pleine chasse, variantes mathematiques, ligatures
+    .replace(/\p{M}/gu, "")   // ote les marques combinantes liberees par la decomposition
+    .toLowerCase();
+  t = [...t].map((c) => DIGRAMMES[c] || SOSIES[c] || c).join("");
+  if (o.leet) t = [...t].map((c) => LEET[c] || c).join("");
+  if (o.sansChiffres) t = t.replace(/[0-9]/g, "");
+  // i, l et 1 se confondent dans presque toutes les polices : les fondre ensemble ferme la
+  // famille entiere (« hitIer » avec un I majuscule, « hit1er », « hitler »).
+  if (o.fondIL) t = t.replace(/[il1]/g, "i");
+  if (o.sansRepetitions) t = t.replace(/(.)\1+/g, "$1");
+  return t.replace(/[^a-z0-9]/g, "");
+}
+
+// LISTE DURE — cherchee n'importe ou dans le nom, et la seule appliquee retroactivement.
+// N'y entrent que des termes assez longs et assez univoques pour qu'aucun nom honnete ne
+// les porte par hasard. « nazi » n'y est PAS : Nazim, Naziha et Nazira sont des prenoms
+// courants. Ses derives plus longs, eux, n'ont pas d'homonyme et y figurent.
+const NOMS_INTERDITS_PARTOUT = [
+  // Nazisme : figures, regime, slogans, camps
+  "hitler", "hilter", "hitleur", "hitlerien", "hitlerjugend", "adolfhitler", "heilhitler",
+  "siegheil", "sieghail", "nazisme", "naziste", "nazillon", "neonazi", "nsdap", "fuhrer",
+  "fuehrer", "furher", "gestapo", "waffenss", "goebbels", "himmler", "eichmann", "mengele",
+  "meinkampf", "mainkampf", "auschwitz", "birkenau", "treblinka", "buchenwald", "sobibor",
+  "mauthausen", "ravensbruck", "sachsenhausen", "zyklonb", "judenraus", "judenfrei",
+  "judensau", "croixgammee", "hakenkreuz", "totenkopf", "wolfsangel", "untermensch",
+  "solutionfinale", "negationnist", "holocauste", "holocaust", "genocide", "shoananas",
+  // Suprematisme organise
+  "kukluxklan", "kuklux", "whitepower", "whitepride", "aryanbrother", "hammerskin",
+  "atomwaffen", "bloodandhonour", "suprematiste", "raceblanche",
+  "quatorzemots",
+  // Racisme — formes longues, sans derive anodin
+  "bougnoule", "bougnol", "crouille", "niakoue", "chinetoque", "chintok", "bamboula",
+  "moricaud", "ratonnade", "negresse", "negrillon", "negroid", "nigger", "nigga", "niggah",
+  "niggas", "sandnigger", "wetback", "towelhead", "raghead", "jigaboo", "junglebunny",
+  "tarbaby", "chinaman", "whitetrash", "halfbreed",
+  // Antisemitisme
+  "youpin", "youpine", "youtre", "complotjuif", "sixmillions", "juifporc", "sionporc",
+  // Homophobie et transphobie — formes longues
+  "tantouze", "tantouse", "tarlouze", "tarlouse", "tafiole", "tapiole", "lopette", "fiotte",
+  "broutegazon", "faggot", "battyboy", "sidaique", "travelo", "tranny", "trannie",
+  "trannies", "shemale", "ladyboy", "transrat",
+  // Injures generales — formes longues
+  "connard", "connasse", "connerie", "encule", "enculer", "enculee", "enculade",
+  "salopard", "salopiaud", "enfoire", "putain", "niquetamer", "filsdepute", "chiotte",
+  "chiasse", "batard", "motherfuck", "asshole", "dumbass", "bullshit", "fuck", "fucker",
+  "wanker", "jerkoff", "hurensohn", "arschloch", "schlampe", "vaffanculo", "puttana",
+  "coglione", "filhadaputa", "putamadre", "maricon", "cabron", "pendejo", "sharmuta",
+  "charmouta",
+  // Sexuel explicite
+  "branler", "branlette", "ejacul", "masturb", "sodomi", "fellation", "levrette",
+  "partouze", "gangbang", "godemiche", "deepthroat", "blowjob", "cumshot", "creampie",
+  "fisting", "bukkake", "camgirl", "pornhub", "xvideos", "youporn", "onlyfans", "hentai",
+  "dildo", "nichon", "chibre", "zboub", "clito", "porno",
+  // Pedocriminalite, zoophilie, inceste
+  "pedophile", "pedocrim", "pedobear", "pedosex", "lolicon", "shotacon", "jailbait",
+  "childporn", "zoophile", "bestialite", "inceste", "necrophil",
+  // Terrorisme et tueries
+  "alqaida", "alqaeda", "etatislamique", "benladen", "jihadiste", "djihadiste", "bataclan",
+  "samuelpaty", "christchurch", "dylannroof", "schoolshoot", "bokoharam",
+  // Appel au meurtre, menace, incitation au suicide
+  "mortaux", "mortau", "jetetue", "jevaistetuer", "tuezles", "tuezlestous", "egorger",
+  "gazezles", "brulezles", "pendezles", "killall", "killyourself", "killurself",
+  "suicidetoi", "pendstoi", "vatependre", "crevetoi", "vamourir",
+  // Validisme
+  "mongolien", "trisomique", "retarded", "debilemental",
+  // Usurpation de l'administration et de l'editeur
+  "administrat", "moderateur", "moderation", "moderator", "sysadmin", "officiel",
+  "empriseoff", "empriseteam", "empriseadmin", "equipeemprise", "jeuemprise",
+];
+
+// Les injures composees ne figurent dans aucun dictionnaire : elles naissent du collage,
+// puisque le nom n'a pas d'espace. Une regle produit les couvre toutes, y compris celles
+// que personne n'a encore ecrites.
+// Seuls les prefixes qui ne tiennent pas debout seuls : « mortaux », « gazez », « fuck »
+// sont deja cherches tels quels, leurs combinaisons seraient redondantes. « sale » et
+// « nique », eux, ne peuvent pas etre cherches seuls — ils sont dans Salerno et Dominique.
+const PREFIXES_DE_HAINE = ["sale", "nique", "niquel", "jehais"];
+const CIBLES_DE_HAINE = [
+  "juif", "juifs", "arabe", "arabes", "noir", "noirs", "blanc", "blancs", "rom", "roms",
+  "gitan", "gitans", "musulman", "chretien", "renoi", "beur", "feuj", "asiat", "chinois",
+  "africain", "negro", "negre", "pd", "pds", "gay", "gays", "trans", "gouine", "pede",
+  "femme", "femmes", "flic", "flics", "handi", "juive",
+];
+for (const prefixe of PREFIXES_DE_HAINE) {
+  for (const cible of CIBLES_DE_HAINE) NOMS_INTERDITS_PARTOUT.push(prefixe + cible);
+}
+
+// LISTE LARGE — refusee seulement si le nom ENTIER s'y reduit, chiffres de queue mis a
+// part (« con », « con75 »). Jamais en sous-chaine : « con » est dans Constance, « nazi »
+// dans Nazim, « cul » dans Hercule, « ass » dans Cassandre, « nique » dans Dominique,
+// « ped » dans Pedro. Appliquee a la saisie et a l'affichage, jamais retroactivement.
+const NOMS_INTERDITS_ENTIERS = new Set([
+  "nazi", "nazis", "nazie", "sieg", "heil", "reich", "negro", "negros", "negre", "negres",
+  "duce", "petain", "aryen", "ss", "kkk", "zog", "rahowa", "skinhead",
+  "con", "cons", "conne", "connes", "cul", "culs", "pd", "pds", "pede", "pedes", "pedale",
+  "tapette", "fag", "fags", "dyke", "gouine", "tarlouz", "homo",
+  "pute", "putes", "salope", "salop", "salaud", "pouffe", "morue",
+  "nique", "niquer", "nik", "ntm", "fdp", "tg", "merde", "chie", "chier", "chiez",
+  "bite", "pine", "gland", "burne", "burnes", "couille", "couilles", "chatte", "moule",
+  "nichons", "zizi", "penis", "vagin", "anus", "anal", "cum", "sex", "sexe", "boobs",
+  "tits", "ass", "cock", "dick", "cunt", "whore", "slut", "bitch", "pussy", "horny",
+  "nudes", "nsfw", "xxx", "porn", "milf", "shit", "wank", "bais", "baise", "baiser",
+  "pisse", "fesse", "fesses", "foutre", "trique", "sperme", "gode", "viol", "viols",
+  "violer", "violeur", "rape", "bordel", "gogol", "mongol", "kys", "cp", "pedo", "loli",
+  // Injures racistes courtes, homonymes a risque : le mot entier seulement.
+  "bicot", "melon", "macaque", "singe", "bridee", "sidi", "boche", "rital", "polak",
+  "chink", "gook", "coon", "kike", "paki", "honky", "squaw", "redskin", "gyppo", "pikey",
+  // Usurpation : se faire passer pour le jeu ou son administration.
+  "admin", "administrateur", "modo", "staff", "support", "systeme", "system", "root",
+  "arbitre", "createur", "developpeur", "assistance", "certifie", "verified",
+  // Vocabulaire reserve du jeu : porter ces noms brouille la lecture de la partie.
+  "emprise", "adversaire", "echo", "lecho", "ladversaire",
+]);
+
+// Noms honnetes qui portent un terme interdit. Verifies AVANT tout refus. Cette liste est
+// aussi le corpus de non-regression du filtre : tout ajout a la liste dure doit la laisser
+// passer entiere, sinon le terme redescend dans la liste large.
+const NOMS_TOUJOURS_PERMIS = [
+  "nazim", "nazime", "nazif", "nazifa", "naziha", "nazia", "nazir", "nazira", "nazik",
+  "dominique", "domenique", "monique", "veronique", "veronika", "monika", "angelique",
+  "frederique", "unique", "technique", "clinique", "tunique", "panique", "mecanique",
+  "botanique", "ethnique", "chronique", "ironique", "communique", "nikita", "nikolas",
+  "nikola", "nikolai", "nikhil", "nikos", "dominik", "yannick", "annika", "nike",
+  "violette", "violaine", "viola", "violet", "violeta", "violine", "viollet", "violon",
+  "violoncelle", "violent", "hercule", "herculine", "dracula", "culture", "calcul",
+  "particule", "ridicule", "molecule", "majuscule", "minuscule", "vehicule", "crepuscule",
+  "bascule", "cullen", "culver", "mcculloch", "culioli", "niculae", "constance", "constant",
+  "constantin", "connor", "conner", "connie", "connelly", "conrad", "consuelo", "concetta",
+  "falcone", "marconi", "rincon", "bacon", "deacon", "cassandre", "cassandra", "cassie",
+  "cassius", "hassan", "hassane", "yassine", "yassin", "wassim", "nassim", "nasser",
+  "bassem", "bassam", "assia", "assane", "issam", "idrissa", "larissa", "melissa", "alyssa",
+  "vanessa", "jessica", "clarisse", "youssef", "moussa", "ousseynou", "essex", "sussex",
+  "middlesex", "sexton", "analise", "analia", "anali", "analyse", "analyste", "canal",
+  "banal", "janus", "uranus", "anusha", "anush", "stephanus", "germanus", "titouan",
+  "titien", "titus", "tita", "petit", "petits", "petitjean", "petitpas", "attitude",
+  "institut", "battistini", "pedro", "pedersen", "pederson", "pedraza", "torpedo", "speedo",
+  "pediatre", "pedagogie", "encyclopedie", "pedalier", "pedalo", "fukuda", "fukushima",
+  "fukui", "fukuyama", "fukumoto", "fukuoka", "cummings", "cumming", "cumali", "cuma",
+  "cumhur", "cumulus", "documents", "aryan", "aryana", "arya", "aryanne", "adolf", "adolfo",
+  "adolphe", "jihad", "isis", "talib", "taleb", "talibah", "gay", "gaye", "gayet", "gayle",
+  "gayatri", "gaynor", "negri", "negrini", "negroni", "negrete", "montenegro",
+  "reichert", "reichel", "reichmann", "reichenbach", "ulreich", "siegfried", "siegel",
+  "sieglinde", "mikheil", "suheil", "heilmann", "couillard", "couillet", "couilloud",
+  "chatterjee", "chatterton", "chattopadhyay", "vachier", "bouchier", "rochier", "fauchier",
+  "fichier", "officier", "difficile", "pacifique", "certificat", "sacrifice", "benefice",
+  "fiction", "efficace", "ficarra", "pissarro", "pissenlit", "drapeau", "trapeze",
+  "therapeute", "grape", "draper", "bitencourt", "habite", "cohabite", "orbite", "booba",
+  "dickens", "dickinson", "dickson", "dicker", "england", "englander", "pinault", "pineau",
+  "pinede", "epine", "alpine", "pinerolo", "pinelli", "montmartre", "montmorency",
+  "montmirail", "montgomery", "montgolfier", "antman", "frontman", "mikkel", "nikki",
+  "pekka", "jukka", "rikke", "salopette", "professeur", "professe", "confesse", "fessenden",
+  "bordeleau", "bordelais", "gouineau", "gouinet", "yoshito", "yoshitaka", "yoshitomo",
+  "yoshitsune", "mongolie", "rajput", "computer", "reputation", "repute", "depute",
+  "dispute", "puteaux", "electrique", "symetrique", "metrique", "geometrique",
+  "concentrique", "baisse", "rabais", "abaisse", "burnett", "homolka", "nainggolan",
+  "cancer", "suisse", "classe", "passion", "basset", "chassagne", "lassalle", "sarah",
+  "hannah", "noah", "leah", "jonah", "elijah", "aaliyah", "chien", "chiesa", "salaudin",
+  "nikoletta", "batista", "batiste", "sebastien", "violetta", "salvatore", "moricone",
+  "morize", "singer", "singh", "melonie", "melony", "arbitrage", "creature", "creation",
+];
+
+// Les quatre facons de lire un nom. Chacune a SA liste de termes, passee par la meme
+// reduction : « connard » ecrase en « conard » doit se chercher sous « conard ».
+const VARIANTES_DE_LECTURE = [
+  {},
+  { leet: true, sansRepetitions: true },
+  { sansChiffres: true, sansRepetitions: true },
+  { leet: true, fondIL: true, sansRepetitions: true },
+];
+function reduireListe(liste, options) {
+  const vus = new Set();
+  for (const mot of liste) { const r = squeletteDuNom(mot, options); if (r) vus.add(r); }
+  return [...vus];
+}
+// Un terme reduit a moins de quatre lettres ne discrimine plus rien : il se retrouverait
+// par hasard dans des noms honnetes. On l abandonne plutot que de refuser a tort.
+const TERMES_PARTOUT = VARIANTES_DE_LECTURE.map((o) => reduireListe(NOMS_INTERDITS_PARTOUT, o).filter((t) => t.length >= 4));
+
+// Codes chiffres a connotation extremiste. Les codes ISOLES (88, 14, 18) restent permis :
+// une annee de naissance, un age, un numero de maillot. Seules les combinaisons sans
+// ambiguite tombent. On les cherche en repliant les lettres du nom VERS les chiffres
+// qu elles imitent — « 14BB » et « lABB » se lisent 1488 — plutot que l inverse.
+const CODES_INTERDITS = ["1488", "8814", "combat18", "combat28", "14mots", "14words"];
+const VERS_CHIFFRES = { o: "0", i: "1", l: "1", z: "2", e: "3", a: "4", s: "5", t: "7", b: "8", g: "9" };
+function chiffrerLeNom(nom) {
+  return [...squeletteDuNom(nom, {})].map((c) => VERS_CHIFFRES[c] || c).join("");
+}
+const TERMES_ENTIERS = VARIANTES_DE_LECTURE.map((o) => new Set(reduireListe([...NOMS_INTERDITS_ENTIERS], o)));
+const PERMIS_REDUITS = VARIANTES_DE_LECTURE.map((o) => reduireListe(NOMS_TOUJOURS_PERMIS, o));
+
+// Un terme trouve peut etre innocent : « salope » se trouve dans « salopette ». On regarde
+// si un nom honnete occupe exactement cette place ; si oui, la trouvaille ne compte pas.
+function trouvailleExcusee(lecture, terme, position, permis) {
+  for (const mot of permis) {
+    if (!mot.includes(terme)) continue;
+    let p = lecture.indexOf(mot);
+    while (p !== -1) {
+      if (position >= p && position + terme.length <= p + mot.length) return true;
+      p = lecture.indexOf(mot, p + 1);
+    }
+  }
+  return false;
+}
+
+// Ce nom est-il refusable ? Avec durSeulement, on s'en tient a la liste dure : c'est la
+// forme employee pour juger un nom DEJA choisi, la ou un refus retire son nom a quelqu'un
+// sans qu'il ait rien demande. La liste large ne sert qu'a la saisie et a l'affichage, la
+// ou un refus se corrige ou se remplace sans rien couter au joueur.
+const JUGEMENTS = new Map(); // les memes deux noms sont juges a chaque instantane recu
+function nomRefuse(nom, durSeulement) {
+  const propre = nettoyerPseudo(nom);
+  if (!propre) return false;
+  const cle = (durSeulement ? "d:" : "l:") + propre;
+  const connu = JUGEMENTS.get(cle);
+  if (connu !== undefined) return connu;
+  const verdict = jugerNom(propre, durSeulement);
+  if (JUGEMENTS.size > 400) JUGEMENTS.clear();
+  JUGEMENTS.set(cle, verdict);
+  return verdict;
+}
+function jugerNom(propre, durSeulement) {
+  const chiffre = chiffrerLeNom(propre);
+  for (const code of CODES_INTERDITS) if (chiffre.includes(code)) return true;
+  for (let i = 0; i < VARIANTES_DE_LECTURE.length; i++) {
+    const lecture = squeletteDuNom(propre, VARIANTES_DE_LECTURE[i]);
+    if (!lecture) continue;
+    // La lecture repliee se relit aussi a l'envers : « reltih » cache « hitler ».
+    const vues = i === 1 ? [lecture, [...lecture].reverse().join("")] : [lecture];
+    for (const vue of vues) {
+      for (const terme of TERMES_PARTOUT[i]) {
+        let p = vue.indexOf(terme);
+        while (p !== -1) {
+          if (!trouvailleExcusee(vue, terme, p, PERMIS_REDUITS[i])) return true;
+          p = vue.indexOf(terme, p + 1);
+        }
+      }
+    }
+    if (durSeulement) continue;
+    const sansQueue = lecture.replace(/[0-9]+$/, "");
+    const permis = PERMIS_REDUITS[i];
+    if (permis.includes(lecture) || permis.includes(sansQueue)) continue;
+    if (TERMES_ENTIERS[i].has(lecture) || TERMES_ENTIERS[i].has(sansQueue)) return true;
+  }
+  return false;
+}
+
+// Le nom d'un ADVERSAIRE, tel qu'on accepte de le montrer. C'est ici que se joue la vraie
+// protection : celui qui triche maitrise son propre appareil, jamais celui d'en face. Le
+// filtre pose a la saisie n'engage que les joueurs honnetes ; celui-ci s'execute chez la
+// personne qu'il protege, hors de portee de l'autre. Il remet aussi le nom recu en FORME,
+// alors qu'il arrivait jusqu'ici tel quel : un client modifie pouvait envoyer cinq cents
+// caracteres ou des espaces et defaire la mise en page de l'etiquette de camp.
+// Renvoyer "" suffit : nomDuCamp retombe alors sur « Adversaire », deja ecrit.
+// Volontairement MUET. Les deux ecrans cessent d'afficher la meme chose, et c'est le but :
+// l'auteur du nom continue de le voir chez lui et n'apprend jamais qu'il est masque en
+// face, donc n'a aucun moyen de chercher a tatons la formule qui passerait.
+function pseudoAffichable(brut) {
+  // Ce qui arrive de Firestore n est pas garanti etre une chaine : un client modifie peut
+  // y avoir depose un nombre, un tableau, un objet. Tout ce qui n est pas du texte est
+  // traite comme une absence de nom.
+  if (typeof brut !== "string") return "";
+  const propre = nettoyerPseudo(brut);
+  if (!propre || nomRefuse(propre)) return "";
+  return propre;
 }
 
 function lirePseudo() {
   try {
     const v = localStorage.getItem(CLE_PSEUDO);
-    if (v !== null) return nettoyerPseudo(v);
+    // Liste dure seulement : elargir ici retirerait son nom, au demarrage et sans un mot,
+    // a un joueur qui l'a porte cent parties. Le refus renvoie "" et l'ecran de nommage
+    // reparait — les statistiques, elles, vivent a part et ne bougent pas.
+    if (v !== null) { const nom = nettoyerPseudo(v); return nomRefuse(nom, true) ? "" : nom; }
   } catch (e) { /* stockage bloque : on retombe sur la memoire */ }
   return pseudoMemoire || "";
 }
@@ -5146,6 +5463,10 @@ const APP_STYLES = `
         .pseudo-champ:focus { border-color: var(--gold-bright); background: rgba(255,255,255,0.08); }
         .pseudo-champ::placeholder { color: var(--muted); font-weight: 400; letter-spacing: 0.04em; }
         .pseudo-reste { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
+        .pseudo-refus {
+          max-width: 300px; font-size: 11.5px; line-height: 1.45;
+          color: var(--red-bright); letter-spacing: 0.02em;
+        }
         .pseudo-ecran .reset-btn:disabled { opacity: 0.4; cursor: default; }
 
         /* Panneau de profil. Un joueur chevronne peut cumuler trois titres ET la liste
@@ -6624,19 +6945,32 @@ export default function Emprise() {
   const [pseudo, setPseudo] = useState(lirePseudo);
   const [pseudoSaisi, setPseudoSaisi] = useState("");
   const [editionPseudo, setEditionPseudo] = useState(false);
+  const [pseudoRefus, setPseudoRefus] = useState("");
   // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
   // affichent ainsi exactement la meme chose, comme pour les trophees et les titres.
   const [pseudosPartie, setPseudosPartie] = useState(null);
   useEffect(() => {
-    if (activeModal !== "profil") { setEditionPseudo(false); setPseudoSaisi(""); }
+    if (activeModal !== "profil") { setEditionPseudo(false); setPseudoSaisi(""); setPseudoRefus(""); }
   }, [activeModal]);
 
+  // Renvoie true si le nom a ete pris. Les appelants s'en servent pour ne refermer le
+  // champ qu'en cas de succes. Le refus se prononce ICI, a la validation, et jamais dans
+  // le onChange : nettoyer a chaque frappe est une chose, juger a chaque frappe en est une
+  // autre — un nom honnete passerait par des etats intermediaires refuses et le champ
+  // semblerait casse.
   function validerPseudo() {
     const nom = nettoyerPseudo(pseudoSaisi);
-    if (!nom) return;
+    if (!nom) return false;
+    // Le message ne nomme jamais le mot en cause. Le repeter, c'est le reafficher ; et le
+    // designer transforme le champ en oracle ou l'on cherche a tatons la formule qui
+    // passe. En cas de faux positif, c'est aussi une accusation adressee a quelqu'un qui
+    // s'appelle Hercule.
+    if (nomRefuse(nom)) { setPseudoRefus("Ce nom ne peut pas être utilisé. Choisissez-en un autre."); return false; }
     ecrirePseudo(nom);
     setPseudo(nom);
     setPseudoSaisi("");
+    setPseudoRefus("");
+    return true;
   }
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
   // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
@@ -7586,7 +7920,11 @@ export default function Emprise() {
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
-        setPseudosPartie({ blue: data.bluePseudo || "", red: data.redPseudo || "" });
+        // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
+        // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
+        // celui qu'il protege. Il vaut aussi pour les noms deja ecrits en base avant que
+        // le filtre existe, ce qu'aucune regle de securite ne saurait faire.
+        setPseudosPartie({ blue: pseudoAffichable(data.bluePseudo), red: pseudoAffichable(data.redPseudo) });
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -7788,7 +8126,10 @@ export default function Emprise() {
           redTrophees: stats.trophies || 0,
           blueTitre: lobby.waitingTitre || "",
           redTitre: titrePrincipal(stats) || "",
-          bluePseudo: lobby.waitingPseudo || "",
+          // Ce n'est pas son propre nom qu'on inscrit ici, c'est celui de l'adversaire,
+          // ramasse dans le salon : donnee etrangere en transit, a assainir comme telle.
+          // Le nom refuse n'est ainsi jamais recopie dans le document de partie.
+          bluePseudo: pseudoAffichable(lobby.waitingPseudo),
           redPseudo: pseudo || "",
         });
         tx.set(lobbyRef, {
@@ -9340,7 +9681,7 @@ export default function Emprise() {
             className="pseudo-champ"
             type="text"
             value={pseudoSaisi}
-            onChange={(e) => setPseudoSaisi(nettoyerPseudo(e.target.value))}
+            onChange={(e) => { setPseudoSaisi(nettoyerPseudo(e.target.value)); setPseudoRefus(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") validerPseudo(); }}
             placeholder="Votre nom"
             maxLength={PSEUDO_MAX}
@@ -9351,6 +9692,7 @@ export default function Emprise() {
             aria-label="Votre nom"
           />
           <div className="pseudo-reste">{PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length} caractères restants</div>
+          {pseudoRefus && <div className="pseudo-refus">{pseudoRefus}</div>}
           <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
         </div>
       )}
@@ -9683,10 +10025,10 @@ export default function Emprise() {
                         className="pseudo-champ"
                         type="text"
                         value={pseudoSaisi}
-                        onChange={(e) => setPseudoSaisi(nettoyerPseudo(e.target.value))}
+                        onChange={(e) => { setPseudoSaisi(nettoyerPseudo(e.target.value)); setPseudoRefus(""); }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && pseudoSaisi) { validerPseudo(); setEditionPseudo(false); }
-                          if (e.key === "Escape") { setEditionPseudo(false); setPseudoSaisi(""); }
+                          if (e.key === "Enter" && pseudoSaisi && validerPseudo()) setEditionPseudo(false);
+                          if (e.key === "Escape") { setEditionPseudo(false); setPseudoSaisi(""); setPseudoRefus(""); }
                         }}
                         maxLength={PSEUDO_MAX}
                         autoFocus
@@ -9696,10 +10038,11 @@ export default function Emprise() {
                         aria-label="Votre nom"
                       />
                       <div className="pseudo-reste">{PSEUDO_MAX - pseudoSaisi.length} caractères restants</div>
+                      {pseudoRefus && <div className="pseudo-refus">{pseudoRefus}</div>}
                       <div className="profil-edition-boutons">
-                        <button className="landing-link" onClick={() => { setEditionPseudo(false); setPseudoSaisi(""); }}>Annuler</button>
+                        <button className="landing-link" onClick={() => { setEditionPseudo(false); setPseudoSaisi(""); setPseudoRefus(""); }}>Annuler</button>
                         <button className="reset-btn" disabled={!pseudoSaisi}
-                                onClick={() => { validerPseudo(); setEditionPseudo(false); }}>Valider</button>
+                                onClick={() => { if (validerPseudo()) setEditionPseudo(false); }}>Valider</button>
                       </div>
                     </div>
                   ) : (
