@@ -3354,7 +3354,10 @@ const APP_STYLES = `
           color: var(--gold-bright); background: rgba(203,164,86,0.12);
           border-color: rgba(203,164,86,0.45);
         }
-        .modes-bannieres { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+        /* Meme hauteur quel que soit l onglet : celle de Solo, le plus fourni (4 bannieres
+           de 78px, 3 ecarts de 9px). Sans cela le panneau retrecissait d un onglet a
+           l autre et la croix, les onglets, tout sautait de place. */
+        .modes-bannieres { display: flex; flex-direction: column; gap: 9px; width: 100%; min-height: 339px; }
         .mode-banniere {
           position: relative; overflow: hidden; width: 100%; height: 78px;
           padding: 0; border-radius: 13px; cursor: pointer; text-align: left;
