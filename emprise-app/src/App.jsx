@@ -3186,8 +3186,8 @@ const APP_STYLES = `
         .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
         .hub-jouer-classe {
           width: 100%; max-width: 240px; box-sizing: border-box;
-          display: flex; flex-direction: column; align-items: center; gap: 1px;
-          margin-top: 4px; padding: 8px 14px 7px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+          margin-top: 4px; padding: 10px 14px 9px;
           background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
           border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
           box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
@@ -3426,13 +3426,13 @@ const APP_STYLES = `
         /* Les haches croisees remplacent le pictogramme : illustration detouree, posee
            sans cadre, elle porte le bouton a elle seule. */
         .hub-jouer-classe-img {
-          width: 40px; height: 40px; object-fit: contain; display: block;
+          width: 36px; height: 36px; object-fit: contain; display: block; flex: none;
           filter: drop-shadow(0 3px 7px rgba(0,0,0,0.75));
         }
         .hub-jouer-modes-btn {
           flex: 1; box-sizing: border-box;
-          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-          padding: 10px 10px 8px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+          padding: 10px 10px 9px;
           background: linear-gradient(180deg, #2c2340, #171221 75%);
           border: 1px solid rgba(203,164,86,0.5); border-radius: 14px; cursor: pointer;
           box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,205,0.12);
@@ -3692,6 +3692,19 @@ const APP_STYLES = `
           to { opacity: 1; transform: none; }
         }
         .ordre-detail-carte .vague-maitrise.grand img { object-position: center 20%; }
+        /* La vignette scellee vient de la grille : sa regle de base la fixe a 200px de
+           haut et ne dimensionne son image que sous .order-option, absent ici — le
+           portrait s affichait donc a sa taille reelle, enormement agrandi dans un cadre
+           de 180px. On lui donne le meme cadrage que la grande carte des autres Ordres. */
+        .ordre-detail-carte .teaser-wrap {
+          width: 100%; height: auto; aspect-ratio: 2 / 3; border-radius: 12px;
+          border: 1px solid rgba(203,164,86,0.28); box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+          animation: ordre-detail-fondu 0.9s ease-out both;
+        }
+        .ordre-detail-carte .teaser-wrap .thumb {
+          width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block;
+        }
+        @media (prefers-reduced-motion: reduce) { .ordre-detail-carte .teaser-wrap { animation: none; } }
         @media (prefers-reduced-motion: reduce) { .ordre-detail-carte .vague-maitrise.grand { animation: none; } }
         .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         /* Le pourcentage n'est plus qu'une mesure : une petite pastille sous le nom. */
@@ -3758,19 +3771,23 @@ const APP_STYLES = `
         .hub-nav {
           position: relative;
           width: 100%; box-sizing: border-box; flex: none;
-          display: flex; align-items: flex-end; justify-content: space-around;
-          padding: 8px 8px calc(9px + env(safe-area-inset-bottom, 0px));
-          background:
-            linear-gradient(180deg, rgba(46,37,62,0.55) 0%, rgba(18,14,26,0.97) 42%, rgba(9,7,14,1) 100%);
-          border-top: 1px solid rgba(203,164,86,0.32);
+          display: flex; align-items: flex-end; justify-content: center; gap: 9px;
+          padding: 8px 18px calc(9px + env(safe-area-inset-bottom, 0px));
+          /* Fond plein : le degrade semi-transparent laissait passer le jeu au travers,
+             et la bande paraissait sale sur les ecrans clairs de l arene. */
+          background: #0d0a12;
+          border-top: 1px solid rgba(232,200,119,0.2);
           box-shadow: 0 -6px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,240,205,0.09);
         }
         /* Le <defs> du degrade ne doit rien occuper dans la mise en page. */
         .hub-nav-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+        /* Hauteur imposee, identique pour les trois : sans elle chaque onglet prenait
+           celle de son contenu (l icone centrale est plus grande) et les libelles ne
+           s alignaient pas. Le central reste sureleve, mais sur la meme base. */
         .hub-onglet {
-          flex: 1; max-width: 150px; position: relative;
-          display: flex; flex-direction: column; align-items: center; gap: 4px;
-          padding: 8px 6px; cursor: pointer;
+          flex: 1; max-width: 150px; position: relative; height: 68px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+          padding: 6px; cursor: pointer;
           background: #000000;
           border: 1px solid rgba(203,164,86,0.16); border-radius: 13px;
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
@@ -3840,13 +3857,14 @@ const APP_STYLES = `
            Royale, mais dans la sobriete du jeu. Socle en relief, arete claire en haut. */
         .hub-onglet-central {
           transform: translateY(-10px);
+          height: 68px;
           background: #000000;
           border: 1px solid rgba(203,164,86,0.5);
           box-shadow:
             0 8px 18px rgba(0,0,0,0.55),
             inset 0 1px 0 rgba(255,240,205,0.14),
             inset 0 -2px 6px rgba(0,0,0,0.5);
-          padding: 12px 12px 10px;
+          padding: 6px;
         }
         .hub-onglet-central svg { width: 28px; height: 28px; }
         .hub-onglet-central span { font-size: 11px; }
@@ -10382,9 +10400,7 @@ export default function Emprise() {
                     <span className="hub-jouer-classe-sous">Trouver un adversaire</span>
                   </button>
                   <button className="hub-jouer-modes-btn" onClick={() => setActiveModal("modes")} aria-haspopup="dialog">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7zm-7-7v3h3V6H6zm9 0v3h3V6h-3zM6 15v3h3v-3H6zm9 0v3h3v-3h-3z" />
-                    </svg>
+                    <img className="hub-jouer-classe-img" src="/nav/modes.webp" alt="" />
                     <span className="hub-jouer-classe-titre">Modes</span>
                     <span className="hub-jouer-classe-sous">Tous les autres</span>
                   </button>
