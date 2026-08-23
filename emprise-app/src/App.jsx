@@ -3296,6 +3296,27 @@ const APP_STYLES = `
         .amis-ajout-btn { width: auto; flex: none; padding-inline: 16px; }
         .amis-avis { font-size: 11.5px; line-height: 1.4; color: var(--red-bright); text-align: center; }
         .amis-avis.bon { color: var(--gold-bright); }
+        /* L'identifiant sous le nom, en tete du profil : c'est par lui qu'on vous ajoute. */
+        .profil-identifiant {
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          width: 100%; margin-top: -2px;
+        }
+        .profil-identifiant-valeur {
+          font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700; letter-spacing: 0.12em;
+          font-variant-numeric: tabular-nums; color: var(--gold);
+        }
+        .profil-identifiant .bouton-copier { width: 26px; height: 26px; }
+        .profil-identifiant .bouton-copier svg { width: 13px; height: 13px; }
+        /* Sur l'ecran de nom : le numero, puis ce qu'il veut dire. */
+        .pseudo-identifiant {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          max-width: 300px; margin-top: 6px;
+        }
+        .pseudo-identifiant-valeur {
+          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; letter-spacing: 0.12em;
+          font-variant-numeric: tabular-nums; color: var(--gold);
+        }
+        .pseudo-identifiant-note { font-size: 10.5px; line-height: 1.45; color: var(--muted); }
         .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
         .amis-mon-code-valeur {
           font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
@@ -7493,8 +7514,9 @@ export default function Emprise() {
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
 
-  // Le profil public : cree une fois pour toutes des que l'identite et le nom sont
-  // connus, avec son identifiant tire dans une transaction qui echoue s'il est deja pris.
+  // Le profil public : cree des la connexion — avant meme que le joueur ait un nom, pour
+  // que son identifiant soit deja la quand il le choisit — avec ce numero tire dans une
+  // transaction qui echoue s'il est deja pris.
   // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
   // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
   // pas en place, tout echoue en silence : la section Amis reste simplement vide.
@@ -7504,7 +7526,7 @@ export default function Emprise() {
   const [essaiProfil, setEssaiProfil] = useState(0);
   const profilSyncRef = useRef("");
   useEffect(() => {
-    if (!myUid || !pseudo || profilSyncRef.current === myUid + "/" + pseudo) return;
+    if (!myUid || profilSyncRef.current === myUid + "/" + pseudo) return;
     profilSyncRef.current = myUid + "/" + pseudo;
     let annule = false;
     (async () => {
@@ -7513,7 +7535,7 @@ export default function Emprise() {
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const d = snap.data();
-          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo, vuLe: serverTimestamp() });
+          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo: pseudo || "", vuLe: serverTimestamp() });
           if (!annule) setMonCodeAmi(d.codeAmi || "");
           return;
         }
@@ -7524,7 +7546,7 @@ export default function Emprise() {
               const idx = doc(db, "codesAmi", code);
               const pris = await tx.get(idx);
               if (pris.exists()) throw new Error("code-pris");
-              tx.set(ref, { pseudo, codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
+              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
               tx.set(idx, { uid: myUid });
             });
             if (!annule) setMonCodeAmi(code);
@@ -7545,7 +7567,7 @@ export default function Emprise() {
   // s'ecrit quand l'application est en arriere-plan : c'est justement ce qui fait
   // vieillir la marque et bascule l'ami sur « Vu il y a... ».
   useEffect(() => {
-    if (!myUid || !pseudo) return;
+    if (!myUid) return;
     const direPresence = () => {
       if (document.visibilityState !== "visible") return;
       updateDoc(doc(db, "users", myUid), { vuLe: serverTimestamp() }).catch(() => {});
@@ -7553,7 +7575,7 @@ export default function Emprise() {
     const id = setInterval(direPresence, 120000);
     document.addEventListener("visibilitychange", direPresence);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", direPresence); };
-  }, [myUid, pseudo]);
+  }, [myUid]);
   // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
   useEffect(() => {
@@ -10380,6 +10402,14 @@ export default function Emprise() {
           <div className="pseudo-reste">{PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length} caractères restants</div>
           {pseudoRefus && <div className="pseudo-refus">{pseudoRefus}</div>}
           <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
+          {/* Le nom n'est pas unique : deux joueurs peuvent porter le meme. On le dit ici,
+              au moment ou le choix se fait, en montrant le numero qui les distingue. */}
+          {monCodeAmi && (
+            <div className="pseudo-identifiant">
+              <span className="pseudo-identifiant-valeur">{codeAmiLisible(monCodeAmi)}</span>
+              <span className="pseudo-identifiant-note">Votre identifiant. Un autre joueur peut porter le même nom que vous&nbsp;; ce numéro, lui, n'appartient qu'à vous.</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -10758,6 +10788,26 @@ export default function Emprise() {
                     </button>
                   )}
 
+                  {/* Sous le nom, l'identifiant : c'est par lui qu'on vous ajoute, il doit
+                      se voir des l'ouverture du profil et non au fond d'une section. */}
+                  {monCodeAmi && (
+                    <div className="profil-identifiant">
+                      <span className="profil-identifiant-valeur">{codeAmiLisible(monCodeAmi)}</span>
+                      <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                          <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                        </svg>
+                      </button>
+                      <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                  <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
+
                   <div className="profil-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
                     <div><b>{victoires}</b><span>victoires</span></div>
@@ -10813,25 +10863,7 @@ export default function Emprise() {
                     <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== IDENTIFIANT_CHIFFRES} onClick={ajouterParCode}>Ajouter</button>
                   </div>
                   {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
-                  <div className="amis-sous-titre">Votre identifiant</div>
-                  {monCodeAmi ? (
-                    <>
-                      <div className="amis-mon-code">
-                        <span className="amis-mon-code-valeur">{codeAmiLisible(monCodeAmi)}</span>
-                        <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
-                            <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
-                      <button className="reset-btn" onClick={partagerCodeAmi}>Envoyer mon identifiant</button>
-                      <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
-                    </>
-                  ) : (
-                    <div className="amis-vide">Connexion en cours… votre identifiant apparaîtra ici.</div>
-                  )}
+                  <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
 
                   <div className="profil-section-titre">Le joueur que vous êtes</div>
                   {profil.titres.length > 0 ? (
