@@ -2923,7 +2923,7 @@ const APP_STYLES = `
           .arenes-voile, .arene-page-img { animation: none; }
         }
         .hub-arene-img {
-          max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
+          max-width: min(72vw, 300px); max-height: 100%; width: auto; height: auto;
           object-fit: contain; display: block;
           filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6));
           animation: hub-arene-parait 0.7s ease-out both;
