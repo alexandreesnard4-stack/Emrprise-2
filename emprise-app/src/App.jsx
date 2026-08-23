@@ -2490,18 +2490,10 @@ const APP_STYLES = `
           position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
           align-items: center; justify-content: center; gap: 14px; padding: 32px 24px;
           text-align: center;
-          background:
-            radial-gradient(ellipse at 50% 20%, rgba(60,50,80,0.35), transparent 60%),
-            repeating-linear-gradient(115deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 5px),
-            repeating-linear-gradient(25deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 2px, transparent 2px, transparent 7px),
-            linear-gradient(180deg, #100d16, #0a0810 70%);
-        }
-        .landing-hero {
-          position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-          width: 100%; max-width: 480px; height: 52%; object-fit: cover; object-position: center 8%;
-          -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
-          mask-image: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
-          opacity: 1; filter: brightness(1.8) contrast(1.05) saturate(1.15); pointer-events: none; z-index: -1;
+          /* Noir plein : l'arene est la seule illustration de l'ecran, tout le reste doit
+             lui laisser la place. Le degrade violet et ses hachures se disputaient
+             l'attention avec elle. */
+          background: #000000;
         }
 
         /* ---------- Séquence d'entrée de l'accueil ----------
@@ -2537,15 +2529,6 @@ const APP_STYLES = `
           opacity: 1; transition: opacity 1.5s ease .2s;
         }
 
-        /* L'illustration de fond : elle montait des l'etape 1, elle attend maintenant
-           l'etape 2 pour ne pas voler la vedette a l'arene. */
-        .landing.intro-e0 .landing-hero,
-        .landing.intro-e1 .landing-hero { opacity: 0; transform: translateX(-50%) scale(1.05); }
-        .landing.intro-e2 .landing-hero,
-        .landing.intro-e3 .landing-hero {
-          opacity: 1; transform: translateX(-50%) scale(1);
-          transition: opacity 1.7s ease, transform 2.2s cubic-bezier(.22,.9,.3,1);
-        }
 
         /* Titre, sous-titre, badge et bouton : caches pendant les deux premieres etapes,
            puis remontent ensemble avec un leger decalage entre eux. */
@@ -2910,27 +2893,21 @@ const APP_STYLES = `
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-bright);
           text-shadow: 0 2px 8px rgba(0,0,0,0.9);
         }
-        .arene-page-seuil { font-size: 12px; color: var(--muted); }
+        .arene-page-seuil {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.04em; color: var(--muted);
+        }
+        .arene-seuil-trophee {
+          width: 13px; height: 17px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         .arene-page-ici {
           margin-top: 6px; padding: 3px 12px; border-radius: 999px;
           font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
           letter-spacing: 0.12em; text-transform: uppercase;
           color: var(--gold-bright); background: rgba(203,164,86,0.16);
           border: 1px solid rgba(203,164,86,0.5);
-        }
-        .arene-page-fleche {
-          position: absolute; left: 0; right: 0; top: 14px;
-          display: flex; flex-direction: column; align-items: center; gap: 2px;
-          font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
-          animation: arene-fleche-respire 2.2s ease-in-out infinite;
-        }
-        .arene-page-fleche svg {
-          width: 16px; height: 16px; fill: none; stroke: var(--gold);
-          stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-        }
-        @keyframes arene-fleche-respire {
-          0%, 100% { opacity: 0.45; transform: translateY(3px); }
-          50% { opacity: 1; transform: translateY(-3px); }
         }
         .arenes-fermer {
           position: fixed; top: 14px; right: 14px; z-index: 5;
@@ -2943,7 +2920,7 @@ const APP_STYLES = `
           stroke-width: 2; stroke-linecap: round;
         }
         @media (prefers-reduced-motion: reduce) {
-          .arenes-voile, .arene-page-img, .arene-page-fleche { animation: none; }
+          .arenes-voile, .arene-page-img { animation: none; }
         }
         .hub-arene-img {
           max-width: min(88vw, 380px); max-height: 100%; width: auto; height: auto;
@@ -9241,7 +9218,6 @@ export default function Emprise() {
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
               apparaître l'illustration. Retiré du DOM une fois l'intro finie. */}
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
-          <img className="landing-hero" src={ORDERS.find((l) => l.key === "devoreuse")?.portrait} alt="" />
 
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
@@ -9505,22 +9481,22 @@ export default function Emprise() {
                     const verrouillee = (stats.trophies || 0) < l.min;
                     return (
                       <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
-                        {i > 0 && (
-                          <span className="arene-page-fleche" aria-hidden="true">
-                            <svg viewBox="0 0 24 24"><path d="M12 4v14M6 10l6-6 6 6" /></svg>
-                            arène supérieure
-                          </span>
-                        )}
                         {/* Le nom coiffe la page : on doit savoir ou l'on est des que
                             l'arene se pose, sans avoir a descendre le regard. */}
                         <div className="arene-page-entete">
                           <div className="arene-page-nom">Arène {l.name}</div>
+                          {/* Le prix d'entree de l'arene, et rien d'autre. "Encore X
+                              trophees" changeait a chaque partie et faisait de l'echelle
+                              un decompte ; le seuil, lui, ne bouge jamais. */}
                           <div className={`arene-page-seuil ${verrouillee ? "a-conquerir" : ""}`}>
-                            {l.min === 0
-                              ? "Dès votre premier duel"
-                              : verrouillee
-                              ? `Encore ${l.min - (stats.trophies || 0)} trophées`
-                              : `À partir de ${l.min} trophées`}
+                            {l.min === 0 ? (
+                              "Dès votre premier duel"
+                            ) : (
+                              <>
+                                <img className="arene-seuil-trophee" src="/nav/trophee.webp" alt="" />
+                                {l.min}
+                              </>
+                            )}
                           </div>
                           {ici && <span className="arene-page-ici">Vous êtes ici</span>}
                         </div>
