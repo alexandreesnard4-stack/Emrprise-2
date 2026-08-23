@@ -54,5 +54,204 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null;
     }
+
+    // ============================== AMIS ==============================
+    //
+    // Un document par joueur, /users/{uid}, où uid est l'identifiant anonyme Firebase.
+    // Il ne porte que le PROFIL PUBLIC (pseudo, code ami, dernière présence). Tout le
+    // relationnel vit dans des sous-collections dont l'identifiant du document est l'uid
+    // de l'AUTRE joueur :
+    //   /users/{uid}/demandes/{deUid}      demande d'ami reçue par uid, envoyée par deUid
+    //   /users/{uid}/amis/{amiUid}         lien d'amitié, écrit en double (chez les deux)
+    //   /users/{uid}/invitations/{deUid}   défi (invitation à une partie) envoyé par l'ami deUid
+    // plus un index /codesAmi/{code} = { uid } pour retrouver un joueur par son code.
+    //
+    // Pourquoi des sous-collections et pas des tableaux dans le profil ? Une demande
+    // d'ami, c'est un INCONNU qui écrit chez vous. Avec un tableau, il faudrait lui
+    // ouvrir « update » sur votre document et prouver champ par champ qu'il n'a rien
+    // touché d'autre. Ici le document qu'il crée est séparé du vôtre, son nom EST son
+    // uid, et la règle n'a qu'à vérifier deUid == request.auth.uid : il ne peut rien
+    // écrire d'autre, nulle part. Les écritures à deux documents (accepter, retirer)
+    // se font en batch côté client, et existsAfter() vérifie l'état APRÈS le batch.
+    //
+    // Deux conventions, partout :
+    //  - aucun pseudo n'est recopié dans ces sous-collections : celui qui affiche un
+    //    nom va le lire dans /users/{autreUid}, et le passe par le filtre côté client ;
+    //  - tout horodatage doit valoir serverTimestamp() (== request.time), ce qui
+    //    interdit d'antidater et fixe exactement le contenu de chaque document.
+
+    function connecte() { return request.auth != null; }
+    function moi() { return request.auth.uid; }
+
+    function docUser(u)       { return /databases/$(database)/documents/users/$(u); }
+    function docAmi(u, a)     { return /databases/$(database)/documents/users/$(u)/amis/$(a); }
+    function docDemande(u, d) { return /databases/$(database)/documents/users/$(u)/demandes/$(d); }
+    function docCode(c)       { return /databases/$(database)/documents/codesAmi/$(c); }
+    function docPartie(c)     { return /databases/$(database)/documents/games/$(c); }
+
+    // Pseudo : 14 caractères côté client ; size() compte en octets et les accents en
+    // prennent deux, d'où 28. Le filtre des noms offensants reste côté client, chez
+    // celui qui regarde : un client modifié peut écrire ce qu'il veut ici, personne
+    // d'autre que lui ne le verra tel quel.
+    function pseudoValide(p) { return p is string && p.size() <= 28; }
+
+    // Code ami : 6 caractères, même alphabet que les codes de partie (ni 0/O ni 1/I).
+    function codeAmiValide(c) { return c is string && c.matches('^[A-HJ-NP-Z2-9]{6}$'); }
+
+    // Après le batch en cours, l'index /codesAmi/{code} doit exister et pointer vers
+    // moi : un profil ne peut jamais annoncer un code qui ne mène pas à lui.
+    function indexPointeVersMoi(code) {
+      return getAfter(docCode(code)).data.uid == moi();
+    }
+
+    // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
+    function horodatageSur(champ) {
+      return !(champ in request.resource.data)
+        || request.resource.data[champ] == request.time
+        || (resource != null && champ in resource.data && request.resource.data[champ] == resource.data[champ]);
+    }
+
+    // Anti-rafale : au plus une demande d'ami toutes les 10 secondes par expéditeur.
+    // L'expéditeur doit, dans le MÊME batch que la demande, écrire
+    // derniereDemande: serverTimestamp() sur son propre profil ; la règle compare la
+    // valeur d'avant (get) à celle d'après (getAfter). Oublier cette écriture côté
+    // client = demande refusée.
+    function rafaleRespectee() {
+      let avant = get(docUser(moi())).data;
+      let apres = getAfter(docUser(moi())).data;
+      return apres.derniereDemande == request.time
+        && (!('derniereDemande' in avant)
+            || avant.derniereDemande + duration.value(10, 's') <= request.time);
+    }
+
+    // ---------- Profil public ----------
+    match /users/{uid} {
+      // N'importe quel connecté peut lire UN profil (il faut bien afficher le pseudo
+      // d'un ami ou d'un demandeur), jamais la collection entière : sans « list »,
+      // impossible d'aspirer tous les pseudos et codes.
+      allow get: if connecte();
+      allow list: if false;
+
+      // Création : soi-même seulement, champs fixés, code ami dont l'index est créé
+      // dans la même transaction et pointe vers soi.
+      allow create: if connecte() && moi() == uid
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe'])
+        && pseudoValide(request.resource.data.pseudo)
+        && codeAmiValide(request.resource.data.codeAmi)
+        && request.resource.data.creeLe == request.time
+        && horodatageSur('vuLe')
+        && indexPointeVersMoi(request.resource.data.codeAmi);
+
+      // Mise à jour : soi-même seulement. creeLe ne bouge jamais ; les horodatages ne
+      // prennent que l'heure du serveur ; le code ami peut changer si l'index du
+      // nouveau code pointe vers soi après le batch.
+      allow update: if connecte() && moi() == uid
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande'])
+        && pseudoValide(request.resource.data.pseudo)
+        && codeAmiValide(request.resource.data.codeAmi)
+        && request.resource.data.creeLe == resource.data.creeLe
+        && horodatageSur('vuLe')
+        && horodatageSur('derniereDemande')
+        && indexPointeVersMoi(request.resource.data.codeAmi);
+
+      allow delete: if false;
+
+      // ---------- Demandes d'ami reçues ----------
+      // Le point dur : un INCONNU écrit chez moi. Il ne peut créer QUE le document qui
+      // porte son propre uid, avec un seul champ horodaté. Il n'a accès à rien d'autre.
+      match /demandes/{deUid} {
+        allow list: if connecte() && moi() == uid;
+        allow get: if connecte() && (moi() == uid || moi() == deUid);
+
+        allow create: if connecte() && moi() == deUid
+          && deUid != uid                        // pas de demande à soi-même
+          && exists(docUser(uid))                // le destinataire existe
+          && !exists(docAmi(uid, deUid))         // pas déjà amis
+          && request.resource.data.keys().hasOnly(['envoyeeLe'])
+          && request.resource.data.envoyeeLe == request.time
+          && rafaleRespectee();
+
+        allow update: if false;
+
+        // Refus (destinataire) ou annulation (expéditeur). L'acceptation passe aussi par
+        // ici : le destinataire supprime la demande dans le batch qui crée les deux liens.
+        allow delete: if connecte() && (moi() == uid || moi() == deUid);
+      }
+
+      // ---------- Amis ----------
+      // Un lien est écrit deux fois, chez chacun. Seul le destinataire d'une demande
+      // peut les créer, dans UN batch qui contient les deux moitiés et supprime la
+      // demande. Vu depuis la règle, ce batch produit deux créations :
+      //  (a) chez moi  : /users/MOI/amis/LUI  — permis si la moitié miroir existe après ;
+      //  (b) chez lui  : /users/LUI/amis/MOI  — permis seulement si LUI m'avait envoyé
+      //      une demande (elle existe AVANT), si la moitié miroir existe APRÈS, et si
+      //      la demande est supprimée dans ce même batch (sinon elle resservirait).
+      // Personne ne peut donc s'inviter dans la liste d'un joueur qui ne l'a pas demandé.
+      match /amis/{amiUid} {
+        allow list: if connecte() && moi() == uid;
+        allow get: if connecte() && (moi() == uid || moi() == amiUid);
+
+        allow create: if connecte()
+          && uid != amiUid
+          && request.resource.data.keys().hasOnly(['depuis'])
+          && request.resource.data.depuis == request.time
+          && (
+               (moi() == uid && existsAfter(docAmi(amiUid, uid)))
+               ||
+               (moi() == amiUid
+                 && exists(docDemande(amiUid, uid))
+                 && existsAfter(docAmi(amiUid, uid))
+                 && !existsAfter(docDemande(amiUid, uid)))
+             );
+
+        allow update: if false;
+
+        // Retirer un ami : chacun des deux peut effacer le lien, chez lui ET chez
+        // l'autre (le client fait les deux suppressions dans un batch).
+        allow delete: if connecte() && (moi() == uid || moi() == amiUid);
+      }
+
+      // ---------- Défis ----------
+      // Réservé aux AMIS du destinataire, pour une partie que l'inviteur a réellement
+      // créée (il y est Bleu) et qui attend encore son Rouge. Une seule invitation par
+      // inviteur, puisque le nom du document est son uid ; une nouvelle partie remplace
+      // la précédente.
+      match /invitations/{deUid} {
+        allow list: if connecte() && moi() == uid;
+        allow get: if connecte() && (moi() == uid || moi() == deUid);
+
+        allow create, update: if connecte() && moi() == deUid
+          && deUid != uid
+          && exists(docAmi(uid, deUid))
+          && request.resource.data.keys().hasOnly(['code', 'envoyeeLe'])
+          && request.resource.data.code is string
+          && request.resource.data.envoyeeLe == request.time
+          && get(docPartie(request.resource.data.code)).data.blueUid == moi()
+          && get(docPartie(request.resource.data.code)).data.redUid == null;
+
+        // Le destinataire l'efface une fois traitée, l'inviteur peut la retirer.
+        allow delete: if connecte() && (moi() == uid || moi() == deUid);
+      }
+    }
+
+    // ---------- Index des codes amis ----------
+    // /codesAmi/{code} = { uid }. Lecture « get » seulement : pour trouver quelqu'un il
+    // faut connaître son code, on ne peut pas lister. Un code ne se crée que pour soi,
+    // dans la transaction qui écrit aussi le profil (getAfter vérifie la cohérence), et
+    // ne se modifie jamais : écrire sur un code déjà pris est un « update », refusé —
+    // impossible d'écraser le code d'un autre.
+    match /codesAmi/{code} {
+      allow get: if connecte();
+      allow list: if false;
+      allow create: if connecte()
+        && codeAmiValide(code)
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == moi()
+        && getAfter(docUser(moi())).data.codeAmi == code;
+      allow update: if false;
+      allow delete: if connecte()
+        && resource.data.uid == moi()
+        && getAfter(docUser(moi())).data.codeAmi != code;
+    }
   }
 }

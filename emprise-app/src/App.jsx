@@ -3,6 +3,7 @@ import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction, arrayUnion,
+  setDoc, deleteDoc, writeBatch, collection,
 } from "firebase/firestore";
 
 // ---------- Multijoueur : code de partie à 5 lettres (sans caractères ambigus) ----------
@@ -11,6 +12,37 @@ function makeGameCode() {
   let code = "";
   for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
+}
+
+// ---------- Amis ----------
+// Le code ami : six caracteres, meme alphabet que le code de partie (ni 0/O ni 1/I, il
+// se dicte au telephone sans hesiter). Six et non cinq, pour qu'on ne le confonde jamais
+// avec un code de partie dans le champ « Rejoindre ». Tire au hasard et STOCKE (dans le
+// profil et dans un index /codesAmi), pas derive de l'identite : un hachage ne se
+// « retire » pas quand deux joueurs tombent sur le meme.
+function makeCodeAmi() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+// « K7P-Q2M » se lit mieux que « K7PQ2M » ; le trait ne fait pas partie du code.
+function codeAmiLisible(code) {
+  return code ? code.slice(0, 3) + "-" + code.slice(3) : "";
+}
+function nettoyerCodeAmi(brut) {
+  return String(brut || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+const AMIS_MAX = 20;                       // borne les lectures a l'ouverture du profil
+const DEFI_PERIME_MS = 10 * 60 * 1000;     // un defi non releve en dix minutes s'efface
+const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes = en ligne
+// Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
+// etiquettes de camp, sonnerait faux pour un ami.
+function nomAffiche(brut) {
+  return pseudoAffichable(brut) || "Commandant";
+}
+function horodatageMs(v) {
+  return v && typeof v.toMillis === "function" ? v.toMillis() : 0;
 }
 
 // Sièges du tournoi en ligne : chaque place d'arrivée reçoit un alias et le portrait
@@ -3150,6 +3182,68 @@ const APP_STYLES = `
         /* Une victoire par abandon adverse emprunte le meme canal qu'un message d'echec :
            elle s'annonce en or pour qu'on ne la lise pas comme un probleme. */
         .hub-avis.avis-bon { color: var(--gold-bright); font-weight: 600; }
+        /* ---------- Amis ---------- */
+        .hub-pseudo { position: relative; overflow: visible; }
+        .hub-pastille { top: -8px; right: -18px; }
+        .amis-sous-titre {
+          width: 100%; text-align: left; margin: 4px 0 0;
+          font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+        }
+        .amis-liste { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+        .amis-liste.compacte { max-width: 340px; margin-top: 6px; }
+        .amis-ligne {
+          display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
+          padding: 7px 8px 7px 11px; border-radius: 11px;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
+        }
+        .amis-ligne-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+        .amis-nom {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+          color: var(--gold-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .amis-code { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .amis-btn {
+          flex: none; padding: 7px 11px; border-radius: 9px; cursor: pointer;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+          background: none; border: 1px solid rgba(203,164,86,0.35); color: var(--bone);
+          transition: border-color .2s, background .2s;
+        }
+        .amis-btn:hover { border-color: var(--gold); }
+        .amis-btn.principal { color: #14111c; background: var(--gold-bright); border-color: var(--gold-bright); }
+        .amis-croix {
+          flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: none; border: 1px solid transparent; cursor: pointer; opacity: 0.55;
+          transition: opacity .2s, border-color .2s;
+        }
+        .amis-croix:hover { opacity: 1; border-color: rgba(224,101,90,0.5); }
+        .amis-croix svg { width: 12px; height: 12px; stroke: var(--bone); stroke-width: 2; fill: none; stroke-linecap: round; }
+        .amis-vide { font-size: 11.5px; line-height: 1.45; color: var(--muted); text-align: center; padding: 4px 6px; }
+        .amis-note { font-size: 10.5px; line-height: 1.4; color: var(--muted); text-align: center; }
+        .amis-ajout { display: flex; align-items: center; gap: 8px; width: 100%; }
+        .amis-ajout .amis-champ { flex: 1; width: auto; min-width: 0; margin: 0; font-size: 18px; padding: 9px 6px; }
+        .amis-ajout-btn { width: auto; flex: none; padding-inline: 16px; }
+        .amis-avis { font-size: 11.5px; line-height: 1.4; color: var(--red-bright); text-align: center; }
+        .amis-avis.bon { color: var(--gold-bright); }
+        .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+        .amis-mon-code-valeur {
+          font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
+          color: var(--gold-bright); text-shadow: 0 0 18px rgba(203,164,86,0.4);
+          padding: 8px 14px; border-radius: 12px;
+          background: var(--panel); border: 1.5px solid rgba(203,164,86,0.5);
+        }
+        /* Le defi recu : un encart dore, un bouton, un lien pour passer. */
+        .amis-defi {
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          width: 100%; max-width: 340px; box-sizing: border-box; padding: 11px 12px;
+          border-radius: 12px; background: rgba(203,164,86,0.1); border: 1px solid rgba(203,164,86,0.5);
+          animation: hint-pulse 1.6s ease-in-out infinite;
+        }
+        .amis-defi-texte { font-size: 13px; color: var(--bone); }
+        .amis-defi-texte b { font-family: 'Cinzel', serif; color: var(--gold-bright); letter-spacing: 0.06em; }
+        .amis-defi-boutons { display: flex; align-items: center; gap: 14px; }
+        .amis-defi-btn { width: auto; padding-inline: 18px; }
+        .reduced-motion .amis-defi { animation: none; }
         /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
            reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
         .hub-arene {
@@ -6839,6 +6933,254 @@ export default function Emprise() {
   // document Firestore "games/{code}". onlineRole : le camp qu'on joue nous-mêmes
   // dans CETTE partie en ligne (fixe pour toute la partie, contrairement à "turn").
   const [myUid, setMyUid] = useState(null);
+
+  // ---------- Amis ----------
+  // Tout repose sur l'uid anonyme, jamais sur le pseudo (non unique) ni sur le code
+  // (remplacable). Le profil public /users/{uid} porte pseudo et code ; le relationnel
+  // vit dans des sous-collections nommees par l'uid de l'autre : /amis, /demandes,
+  // /invitations. Chaque joueur n'ecoute que les siennes.
+  const [monCodeAmi, setMonCodeAmi] = useState("");
+  const [amis, setAmis] = useState([]);                         // [{ uid, depuis }]
+  const [demandesRecues, setDemandesRecues] = useState([]);     // [{ uid, t }]
+  const [invitationsRecues, setInvitationsRecues] = useState([]); // [{ uid, code, t }]
+  const [fiches, setFiches] = useState({});                     // uid -> { pseudo, codeAmi, vuLe }
+  const fichesRef = useRef({});
+  const [codeAmiSaisi, setCodeAmiSaisi] = useState("");
+  const [avisAmis, setAvisAmis] = useState(null);               // { texte, bon }
+  const [amiARetirer, setAmiARetirer] = useState(null);
+  const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
+  const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t }
+  const [defisIgnores, setDefisIgnores] = useState({});         // uid -> t
+  const [codeAmiCopie, setCodeAmiCopie] = useState(false);
+  const [adversaireUid, setAdversaireUid] = useState(null);     // l'uid d'en face, pour l'ajouter en fin de partie
+  const [amitieAvis, setAmitieAvis] = useState("");
+
+  // Le profil public : cree une fois pour toutes des que l'identite et le nom sont
+  // connus, avec son code ami tire dans une transaction qui echoue si le code est pris.
+  // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
+  // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
+  // pas en place, tout echoue en silence : la section Amis reste simplement vide.
+  useEffect(() => {
+    if (!myUid || !pseudo) return;
+    let annule = false;
+    (async () => {
+      try {
+        const ref = doc(db, "users", myUid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const d = snap.data();
+          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo, vuLe: serverTimestamp() });
+          if (!annule) setMonCodeAmi(d.codeAmi || "");
+          return;
+        }
+        for (let essai = 0; essai < 5; essai++) {
+          const code = makeCodeAmi();
+          try {
+            await runTransaction(db, async (tx) => {
+              const idx = doc(db, "codesAmi", code);
+              const pris = await tx.get(idx);
+              if (pris.exists()) throw new Error("code-pris");
+              tx.set(ref, { pseudo, codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
+              tx.set(idx, { uid: myUid });
+            });
+            if (!annule) setMonCodeAmi(code);
+            return;
+          } catch (e) { if (e.message !== "code-pris") throw e; }
+        }
+      } catch (e) { /* regles absentes ou reseau : pas d'amis cette fois */ }
+    })();
+    return () => { annule = true; };
+  }, [myUid]);
+
+  // Mes quatre ecoutes : le profil (pour le code), les amis, les demandes, les defis.
+  useEffect(() => {
+    if (!myUid) return;
+    const base = doc(db, "users", myUid);
+    const rien = () => {};
+    const u1 = onSnapshot(base, (snap) => { if (snap.exists()) setMonCodeAmi(snap.data().codeAmi || ""); }, rien);
+    const u2 = onSnapshot(collection(base, "amis"), (q) =>
+      setAmis(q.docs.map((d) => ({ uid: d.id, depuis: horodatageMs(d.data().depuis) }))), rien);
+    const u3 = onSnapshot(collection(base, "demandes"), (q) =>
+      setDemandesRecues(q.docs.map((d) => ({ uid: d.id, t: horodatageMs(d.data().envoyeeLe) || Date.now() }))), rien);
+    const u4 = onSnapshot(collection(base, "invitations"), (q) =>
+      setInvitationsRecues(q.docs.map((d) => ({ uid: d.id, code: String(d.data().code || ""), t: horodatageMs(d.data().envoyeeLe) || Date.now() }))), rien);
+    return () => { u1(); u2(); u3(); u4(); };
+  }, [myUid]);
+
+  // Les fiches des autres (pseudo, code, derniere presence) : une lecture par joueur,
+  // rafraichie au plus une fois par minute. Les noms passent par le filtre a l'AFFICHAGE,
+  // jamais au stockage : un nom ecrit avant l'existence du filtre est rattrape.
+  async function chargerFiches(uids, force) {
+    const manquants = [...new Set(uids)].filter((u) => u && u !== myUid
+      && (force || !fichesRef.current[u] || Date.now() - fichesRef.current[u].lu > 60000));
+    if (!manquants.length) return;
+    const lus = await Promise.all(manquants.map(async (u) => {
+      try {
+        const snap = await getDoc(doc(db, "users", u));
+        const d = snap.exists() ? snap.data() : {};
+        return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe), lu: Date.now() }];
+      } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, lu: Date.now() }]; }
+    }));
+    const suivant = { ...fichesRef.current };
+    for (const [u, f] of lus) suivant[u] = f;
+    fichesRef.current = suivant;
+    setFiches(suivant);
+  }
+  useEffect(() => {
+    chargerFiches([...amis.map((a) => a.uid), ...demandesRecues.map((d) => d.uid), ...invitationsRecues.map((i) => i.uid), adversaireUid]);
+  }, [amis, demandesRecues, invitationsRecues, adversaireUid]);
+
+  // Le defi en cours de validite, s'il y en a un : le plus recent, pas perime, pas ignore.
+  const defiRecu = invitationsRecues
+    .filter((i) => i.code && Date.now() - i.t < DEFI_PERIME_MS && defisIgnores[i.uid] !== i.t)
+    .sort((a, b) => b.t - a.t)[0] || null;
+  const pastilleAmis = demandesRecues.length + (defiRecu ? 1 : 0);
+
+  // Toutes les ecritures a deux documents passent par un batch : les regles verifient
+  // l'etat APRES le batch (existsAfter) et refusent les moities isolees. C'est voulu.
+  async function envoyerDemande(uidCible) {
+    if (!myUid || !uidCible || uidCible === myUid) return;
+    const b = writeBatch(db);
+    b.set(doc(db, "users", uidCible, "demandes", myUid), { envoyeeLe: serverTimestamp() });
+    b.update(doc(db, "users", myUid), { derniereDemande: serverTimestamp() }); // exige par l'anti-rafale
+    await b.commit();
+    setDemandesEnvoyees((d) => ({ ...d, [uidCible]: true }));
+  }
+  async function accepterDemande(uidAutre) {
+    if (!myUid) return;
+    const b = writeBatch(db);
+    b.delete(doc(db, "users", myUid, "demandes", uidAutre));
+    b.set(doc(db, "users", myUid, "amis", uidAutre), { depuis: serverTimestamp() });
+    b.set(doc(db, "users", uidAutre, "amis", myUid), { depuis: serverTimestamp() });
+    await b.commit();
+  }
+  function refuserDemande(uidAutre) {
+    if (myUid) deleteDoc(doc(db, "users", myUid, "demandes", uidAutre)).catch(() => {});
+  }
+  async function retirerAmi(uidAutre) {
+    if (!myUid) return;
+    const b = writeBatch(db);
+    b.delete(doc(db, "users", myUid, "amis", uidAutre));
+    b.delete(doc(db, "users", uidAutre, "amis", myUid));
+    await b.commit();
+  }
+  async function ajouterParCode() {
+    const code = nettoyerCodeAmi(codeAmiSaisi);
+    if (code.length !== 6 || !myUid) return;
+    try {
+      if (amis.length >= AMIS_MAX) { setAvisAmis({ texte: `Liste pleine : ${AMIS_MAX} amis au plus.`, bon: false }); return; }
+      const idx = await getDoc(doc(db, "codesAmi", code));
+      if (!idx.exists()) { setAvisAmis({ texte: "Code ami introuvable.", bon: false }); return; }
+      const uid = String(idx.data().uid || "");
+      if (uid === myUid) { setAvisAmis({ texte: "C'est votre propre code.", bon: false }); return; }
+      await chargerFiches([uid], true);
+      const nom = nomAffiche(fichesRef.current[uid]?.pseudo);
+      if (amis.some((a) => a.uid === uid)) { setAvisAmis({ texte: `${nom} est déjà votre ami.`, bon: false }); return; }
+      // S'il m'avait deja demande, taper son code vaut acceptation.
+      if (demandesRecues.some((d) => d.uid === uid)) { await accepterDemande(uid); setAvisAmis({ texte: "Vous êtes amis", bon: true }); setCodeAmiSaisi(""); return; }
+      if (demandesEnvoyees[uid]) { setAvisAmis({ texte: "Demande déjà envoyée.", bon: false }); return; }
+      await envoyerDemande(uid);
+      setAvisAmis({ texte: `Demande envoyée à ${nom}`, bon: true });
+      setCodeAmiSaisi("");
+    } catch (e) {
+      setAvisAmis({ texte: "Impossible d'envoyer la demande. Réessayez dans un instant.", bon: false });
+    }
+  }
+  async function copierCodeAmi() {
+    if (!monCodeAmi) return;
+    try {
+      await navigator.clipboard.writeText(monCodeAmi);
+      setCodeAmiCopie(true);
+      setTimeout(() => setCodeAmiCopie(false), 2000);
+    } catch (e) { /* le joueur lira le code a l'ecran */ }
+  }
+  // Sur telephone, la feuille de partage ouvre directement la messagerie : le joueur
+  // n'a rien a recopier. Ailleurs, on se rabat sur la copie.
+  async function partagerCodeAmi() {
+    if (!monCodeAmi) return;
+    const texte = `Rejoins-moi sur EMPRISE, mon code ami : ${monCodeAmi}`;
+    if (navigator.share) {
+      try { await navigator.share({ text: texte }); return; } catch (e) { /* annule : on copie */ }
+    }
+    copierCodeAmi();
+  }
+  // Defier : on cree la partie comme pour « Jouer avec un ami », puis on depose le code
+  // chez l'ami. Une seule invitation par inviteur (le document porte son uid) : une
+  // nouvelle partie remplace la precedente.
+  async function defierAmi(uidAmi) {
+    const code = await creerPartieEnLigne();
+    if (!code) return;
+    try {
+      await setDoc(doc(db, "users", uidAmi, "invitations", myUid), { code, envoyeeLe: serverTimestamp() });
+      setDefiEnvoye({ uid: uidAmi, t: Date.now() });
+    } catch (e) { /* le code reste affiche : il peut toujours etre envoye a la main */ }
+    setActiveModal(null);
+  }
+  async function releverDefi(inv) {
+    if (!inv || !myUid) return;
+    const ok = await joinOnlineGame(inv.code);
+    if (ok) deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
+    else setDefisIgnores((d) => ({ ...d, [inv.uid]: inv.t }));
+  }
+  function ignorerDefi(inv) {
+    if (!inv || !myUid) return;
+    setDefisIgnores((d) => ({ ...d, [inv.uid]: inv.t }));
+    deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
+  }
+  function presenceDe(fiche) {
+    if (!fiche || !fiche.vuLe) return "";
+    return Date.now() - fiche.vuLe < EN_LIGNE_MS ? "En ligne" : `Vu ${ilYa(fiche.vuLe)}`;
+  }
+  // En fin de partie en ligne : ajouter celui d'en face, d'un geste. Trois etats, comme
+  // la revanche. Si l'autre m'a deja demande, mon geste vaut acceptation.
+  function boutonAmitie() {
+    if (mode !== "online" || !gameOver || !adversaireUid || !myUid) return null;
+    if (amis.some((a) => a.uid === adversaireUid)) return null;
+    if (amitieAvis) return <div className="revanche-attente" key="am">{amitieAvis}</div>;
+    if (demandesEnvoyees[adversaireUid]) return <div className="revanche-attente" key="am">Demande d'ami envoyée</div>;
+    const ilDemande = demandesRecues.some((d) => d.uid === adversaireUid);
+    return (
+      <button key="am" className={`reset-btn revanche-btn ${ilDemande ? "revanche-invite" : ""}`}
+              onClick={() => (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
+                .catch(() => setAmitieAvis("Demande impossible pour l'instant."))}>
+        {ilDemande ? "Accepter en ami" : "Ajouter en ami"}
+      </button>
+    );
+  }
+  // La section Amis du profil, rendue aussi en version courte sur l'ecran « Affrontement
+  // en ligne » (la liste et « Defier » seulement : on y vient pour jouer, pas pour gerer).
+  function ligneAmi(a, compact) {
+    const f = fiches[a.uid];
+    const nom = nomAffiche(f && f.pseudo);
+    const presence = presenceDe(f);
+    return (
+      <div key={a.uid} className="amis-ligne">
+        <div className="amis-ligne-texte">
+          <span className="amis-nom">{nom}</span>
+          <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}{presence ? ` · ${presence}` : ""}</span>
+        </div>
+        <button className="amis-btn principal" onClick={() => defierAmi(a.uid)}>Défier</button>
+        {!compact && (
+          <button className="amis-croix" aria-label={`Retirer ${nom}`} title="Retirer" onClick={() => setAmiARetirer({ uid: a.uid, nom })}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        )}
+      </div>
+    );
+  }
+  function banniereDefi() {
+    if (!defiRecu) return null;
+    const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
+    return (
+      <div className="amis-defi" role="status">
+        <span className="amis-defi-texte"><b>{nom}</b> vous défie</span>
+        <div className="amis-defi-boutons">
+          <button className="reset-btn amis-defi-btn" onClick={() => releverDefi(defiRecu)}>Relever le défi</button>
+          <button className="landing-link" onClick={() => ignorerDefi(defiRecu)}>Ignorer</button>
+        </div>
+      </div>
+    );
+  }
   const [onlineGameId, setOnlineGameId] = useState(null);
   const [onlineRole, setOnlineRole] = useState(null); // "blue" | "red"
   const [joinCodeInput, setJoinCodeInput] = useState("");
@@ -7036,6 +7378,12 @@ export default function Emprise() {
   const [pseudoSaisi, setPseudoSaisi] = useState("");
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
+  // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
+  // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
+  useEffect(() => {
+    if (activeModal === "profil") chargerFiches(amis.map((a) => a.uid), true);
+    else { setAvisAmis(null); setCodeAmiSaisi(""); setAmiARetirer(null); }
+  }, [activeModal]);
   // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
   // affichent ainsi exactement la meme chose, comme pour les trophees et les titres.
   const [pseudosPartie, setPseudosPartie] = useState(null);
@@ -7058,6 +7406,8 @@ export default function Emprise() {
     if (nomRefuse(nom)) { setPseudoRefus("Ce nom ne peut pas être utilisé. Choisissez-en un autre."); return false; }
     ecrirePseudo(nom);
     setPseudo(nom);
+    // Le nom que voient les amis est celui du profil public : on l'y pousse aussitot.
+    if (myUid) updateDoc(doc(db, "users", myUid), { pseudo: nom }).catch(() => {});
     setPseudoSaisi("");
     setPseudoRefus("");
     return true;
@@ -7596,6 +7946,7 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
+    setAdversaireUid(null); setDefiEnvoye(null); setAmitieAvis("");
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
     // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
     // le leve alors que gameOver etait deja faux : l'effet ne se rejouait pas, le verrou
@@ -7872,9 +8223,14 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
 
-  async function createOnlineGame() {
+  // « Jouer avec un ami » et « Defier un ami » creent la meme partie ; seule la suite
+  // differe (afficher le code, ou le deposer chez l'ami). D'ou une fonction qui REND le
+  // code, et deux appelants.
+  function createOnlineGame() { setDefiEnvoye(null); return creerPartieEnLigne(); }
+
+  async function creerPartieEnLigne() {
     statsRecordedRef.current = false;
-    if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
+    if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return null; }
     setOnlineError("");
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     const premierEnLigne = tirerPremierJoueur();
@@ -7913,7 +8269,7 @@ export default function Emprise() {
           if (e.message !== "code-pris") throw e;
         }
       }
-      if (!code) { setOnlineError("Impossible de trouver un code libre. Réessayez."); return; }
+      if (!code) { setOnlineError("Impossible de trouver un code libre. Réessayez."); return null; }
       setOnlineGameId(code);
       setOnlineRole("blue");
       setMode("online");
@@ -7921,17 +8277,22 @@ export default function Emprise() {
       setTestMode(false);
       setPickerChoice([]);
       setPhase("select-blue");
+      return code;
     } catch (e) {
       setOnlineError("Impossible de créer la partie. Vérifiez la configuration Firebase.");
+      return null;
     }
   }
 
-  async function joinOnlineGame() {
+  // Appelee par le bouton « Rejoindre » (le code vient du champ) ou par « Relever le
+  // defi » (le code vient de l'invitation). Rend true si la place a ete prise.
+  async function joinOnlineGame(codeForce) {
     statsRecordedRef.current = false;
-    if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
-    const code = joinCodeInput.trim().toUpperCase();
-    if (!code) return;
+    if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return false; }
+    const code = (typeof codeForce === "string" ? codeForce : joinCodeInput).trim().toUpperCase();
+    if (!code) return false;
     setOnlineError("");
+    setDefiEnvoye(null);
     try {
       // Lecture + prise de la place Rouge dans une seule transaction : avec un getDoc
       // suivi d'un updateDoc, deux joueurs qui rejoignent en même temps lisent tous les
@@ -7942,6 +8303,9 @@ export default function Emprise() {
         const snap = await tx.get(ref);
         if (!snap.exists()) throw new Error("introuvable");
         const data = snap.data();
+        // Une partie que son createur a quittee n'est plus a rejoindre : un defi releve
+        // trop tard entrerait sinon dans une partie morte.
+        if (data.abandonPar) throw new Error("perime");
         if (data.redUid && data.redUid !== myUid) throw new Error("complet");
         if (!data.redUid) tx.update(ref, { redUid: myUid, redPseudo: pseudo || "" });
       });
@@ -7953,10 +8317,13 @@ export default function Emprise() {
       setTestMode(false);
       setPickerChoice([]);
       setPhase("select-blue"); // écran de sélection des Ordres, réutilisé par les deux rôles en ligne
+      return true;
     } catch (e) {
       if (e.message === "introuvable") setOnlineError("Code introuvable.");
+      else if (e.message === "perime") setOnlineError("Ce défi n'est plus valable.");
       else if (e.message === "complet") setOnlineError("Cette partie a déjà 2 Commandants.");
       else setOnlineError("Impossible de rejoindre. Vérifiez le code et votre connexion.");
+      return false;
     }
   }
 
@@ -8041,6 +8408,9 @@ export default function Emprise() {
         // celui qu'il protege. Il vaut aussi pour les noms deja ecrits en base avant que
         // le filtre existe, ce qu'aucune regle de securite ne saurait faire.
         setPseudosPartie({ blue: pseudoAffichable(data.bluePseudo), red: pseudoAffichable(data.redPseudo) });
+        // L'uid d'en face, pour l'ajouter en ami a la fin. Lu dans le document et compare
+        // a myUid, pas a onlineRole : l'ecouteur peut en tenir une version perimee.
+        setAdversaireUid((data.blueUid === myUid ? data.redUid : data.blueUid) || null);
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -8312,6 +8682,9 @@ export default function Emprise() {
   }
 
   function abandonnerAvantDebut() {
+    // Un defi lance puis abandonne se retire de chez l'ami : sinon il releverait une
+    // partie morte (refusee, mais autant lui epargner le message).
+    if (defiEnvoye && myUid) { deleteDoc(doc(db, "users", defiEnvoye.uid, "invitations", myUid)).catch(() => {}); setDefiEnvoye(null); }
     if (onlineGameId) {
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
       // Partir APRES avoir ete apparie est une defaite : un adversaire est en face et
@@ -9838,6 +10211,11 @@ export default function Emprise() {
               <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
                 {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
+                {/* Demandes d'ami et defis recus : la pastille se pose sur la porte du
+                    profil, la ou ils attendent. */}
+                {pastilleAmis > 0 && (
+                  <span className="chat-badge hub-pastille" aria-label={`${pastilleAmis} demande${pastilleAmis > 1 ? "s" : ""} d'ami`}>{pastilleAmis}</span>
+                )}
               </button>
               <span className="hub-trophees" title="Trophées">
                 <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
@@ -9919,6 +10297,8 @@ export default function Emprise() {
                     {onlineError}
                   </div>
                 )}
+                {/* Un defi est la seule nouvelle urgente — quelqu'un attend en face. */}
+                {banniereDefi()}
 
                 {/* Deux entrees seulement : le Classe, action phare, et la porte vers
                     tous les autres modes. Le detail vit dans un panneau, la page reste
@@ -10188,6 +10568,68 @@ export default function Emprise() {
                     <div><b>{victoires}</b><span>victoires</span></div>
                     <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
                   </div>
+
+                  <div className="profil-section-titre">Amis</div>
+                  {banniereDefi()}
+                  {demandesRecues.length > 0 && (
+                    <>
+                      <div className="amis-sous-titre">Demandes reçues</div>
+                      {demandesRecues.map((d) => {
+                        const f = fiches[d.uid];
+                        return (
+                          <div key={d.uid} className="amis-ligne">
+                            <div className="amis-ligne-texte">
+                              <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
+                              <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
+                            </div>
+                            <button className="amis-btn principal" onClick={() => accepterDemande(d.uid).catch(() => setAvisAmis({ texte: "Impossible d'accepter pour l'instant.", bon: false }))}>Accepter</button>
+                            <button className="amis-btn" onClick={() => refuserDemande(d.uid)}>Refuser</button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                  {amis.length === 0 ? (
+                    <div className="amis-vide">Aucun ami pour l'instant. Partagez votre code, ou ajoutez votre prochain adversaire en fin de partie.</div>
+                  ) : (
+                    <div className="amis-liste">{amis.map((a) => ligneAmi(a, false))}</div>
+                  )}
+                  <div className="amis-sous-titre">Ajouter un ami</div>
+                  <div className="amis-ajout">
+                    <input
+                      className="join-code-input amis-champ"
+                      placeholder="CODE AMI"
+                      maxLength={7}
+                      value={codeAmiLisible(nettoyerCodeAmi(codeAmiSaisi)).replace(/-$/, "")}
+                      onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      aria-label="Code ami"
+                    />
+                    <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== 6} onClick={ajouterParCode}>Ajouter</button>
+                  </div>
+                  {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
+                  <div className="amis-sous-titre">Votre code ami</div>
+                  {monCodeAmi ? (
+                    <>
+                      <div className="amis-mon-code">
+                        <span className="amis-mon-code-valeur">{codeAmiLisible(monCodeAmi)}</span>
+                        <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier le code" title="Copier le code">
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                            <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="code-copie">{codeAmiCopie ? "Code copié" : ""}</div>
+                      <button className="reset-btn" onClick={partagerCodeAmi}>Envoyer mon code</button>
+                      <div className="amis-note">Votre code et vos amis sont liés à cet appareil, comme vos trophées.</div>
+                    </>
+                  ) : (
+                    <div className="amis-vide">Connexion en cours… votre code apparaîtra ici.</div>
+                  )}
 
                   <div className="profil-section-titre">Le joueur que vous êtes</div>
                   {profil.titres.length > 0 ? (
@@ -11260,8 +11702,15 @@ export default function Emprise() {
             value={joinCodeInput}
             onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
           />
-          <button className="reset-btn" disabled={!joinCodeInput.trim()} onClick={joinOnlineGame}>Rejoindre</button>
+          <button className="reset-btn" disabled={!joinCodeInput.trim()} onClick={() => joinOnlineGame()}>Rejoindre</button>
           {onlineError && <div className="online-error">{onlineError}</div>}
+          {banniereDefi()}
+          {amis.length > 0 && (
+            <>
+              <div className="sub" style={{ marginTop: 18 }}>ou défier un ami</div>
+              <div className="amis-liste compacte">{amis.map((a) => ligneAmi(a, true))}</div>
+            </>
+          )}
         </div>
       )}
 
@@ -11282,7 +11731,25 @@ export default function Emprise() {
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
-              <div className="sub">Partagez ce code avec votre adversaire :</div>
+              {defiEnvoye ? (() => {
+                const f = fiches[defiEnvoye.uid];
+                const nom = nomAffiche(f && f.pseudo);
+                const absent = !f || !f.vuLe || Date.now() - f.vuLe >= EN_LIGNE_MS;
+                const longtemps = Date.now() - defiEnvoye.t > DEFI_PERIME_MS;
+                return (
+                  <>
+                    <div className="sub">Défi envoyé à <b>{nom}</b></div>
+                    <div className="sub" style={{ marginTop: 4 }}>
+                      {longtemps ? `${nom} n'a pas répondu. Le code reste valable.`
+                        : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour. Vous pouvez aussi lui envoyer ce code.`
+                        : "En attente de sa réponse..."}
+                    </div>
+                    <div className="sub" style={{ marginTop: 10 }}>ou partagez ce code</div>
+                  </>
+                );
+              })() : (
+                <div className="sub">Partagez ce code avec votre adversaire :</div>
+              )}
               <div className="game-code-display">{onlineGameId}</div>
               <button className="bouton-copier" onClick={copierCode} aria-label="Copier le code" title="Copier le code">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -11947,6 +12414,7 @@ export default function Emprise() {
               </button>
             )}
             {gameOver && boutonRevanche()}
+            {gameOver && boutonAmitie()}
             {/* Le bouton de sortie existe dans TOUTES les parties, Classe compris. On a
                 essaye de le retirer en Classe pour empecher de fuir un duel engage : cela
                 enfermait le joueur, sans aucune issue s'il devait s'arreter. La regle
@@ -12025,6 +12493,7 @@ export default function Emprise() {
               </div>
               {bilanTrophees()}
               {boutonRevanche()}
+              {boutonAmitie()}
               <button className="reset-btn cer-continuer" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); }}>
                 {tournoiOnlineId ? "Retour au tournoi" : "Continuer"}
               </button>
@@ -12058,12 +12527,26 @@ export default function Emprise() {
             </div>
             {bilanTrophees()}
             {boutonRevanche()}
+            {boutonAmitie()}
             <button className="defeat-button" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); reset(); }}>
               {tournoiOnlineId ? "Retour au tournoi" : mode === "online" ? "Retour au menu" : "Recommencer"}
             </button>
             <button className="defeat-lien" onClick={() => { setCeremonieFin(null); setCerPose(false); }}>
               Revoir le plateau
             </button>
+          </div>
+        </div>
+      )}
+
+      {amiARetirer && (
+        <div className="info-overlay" onClick={() => setAmiARetirer(null)}>
+          <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Retirer {amiARetirer.nom} de vos amis ?</div>
+            <div className="confirm-text">Il ne pourra plus vous défier d'un geste. Son code ami permet de le rajouter.</div>
+            <div className="confirm-actions">
+              <button className="reset-btn" onClick={() => setAmiARetirer(null)}>Garder</button>
+              <button className="reset-btn quit-confirm" onClick={() => { retirerAmi(amiARetirer.uid).catch(() => {}); setAmiARetirer(null); }}>Retirer</button>
+            </div>
           </div>
         </div>
       )}

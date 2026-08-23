@@ -19,6 +19,18 @@ Jeu de cartes stratégique — projet React (Vite), avec multijoueur en ligne (F
 6. Sur **Vercel**, Settings > Environment Variables, colle ces 6 valeurs dans les variables listées dans `.env.example`
 7. Redéploie (Deployments > Redeploy)
 
+## Mettre à jour les règles Firestore (à refaire à chaque changement de `firestore.rules`)
+
+Le jeu n'écrit dans Firestore que ce que les règles autorisent. Quand `firestore.rules`
+change dans le dépôt (par exemple pour les amis), il faut republier :
+
+1. Console Firebase → **Build > Firestore Database** → onglet **Règles**
+2. Sélectionne tout le texte de l'éditeur et remplace-le par le contenu complet de `firestore.rules`
+3. Clique **Publier** — c'est actif en quelques secondes, sans redéployer le site
+
+Tant que ce n'est pas fait, la section « Amis » du profil affiche « Connexion en cours… »
+et n'attribue pas de code ami : rien ne casse, la fonction attend simplement les règles.
+
 ## Tester en local (optionnel, si tu as Node.js installé)
 
 ```
