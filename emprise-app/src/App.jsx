@@ -7211,11 +7211,10 @@ export default function Emprise() {
     const envois = lireEnvois();
     if (envois.n >= DEMANDES_PAR_JOUR) throw new Error("plafond-jour");
     if (envois.envois[uidCible] && Date.now() - envois.envois[uidCible] < RENVOI_MIN_MS) throw new Error("renvoi");
-    // Une demande deja posee se remplace en la retirant d'abord : set() sur un document
-    // existant est un UPDATE, que les regles refusent, et le batch entier tomberait —
-    // « Impossible d'envoyer la demande » pour toujours. Retirer SA PROPRE demande est
-    // permis, on en est l'expediteur.
-    try { await deleteDoc(doc(db, "users", uidCible, "demandes", myUid)); } catch (e) { /* rien a retirer */ }
+    // Une demande deja posee se REECRIT : les regles autorisent l'expediteur a mettre a
+    // jour la sienne. On l'effaçait auparavant avant de la reposer, hors batch — et si
+    // l'anti-rafale refusait ensuite le batch, l'ancienne etait perdue et la nouvelle
+    // jamais creee : le destinataire voyait sa pastille s'eteindre sans rien recevoir.
     const b = writeBatch(db);
     b.set(doc(db, "users", uidCible, "demandes", myUid), { envoyeeLe: serverTimestamp() });
     b.update(doc(db, "users", myUid), { derniereDemande: serverTimestamp() }); // exige par l'anti-rafale
@@ -7764,7 +7763,7 @@ export default function Emprise() {
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const d = snap.data();
-          await updateDoc(ref, { pseudo: pseudo || "", vuLe: serverTimestamp(), trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" });
+          await updateDoc(ref, { pseudo: pseudo || "", vuLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
           if (!annule) setMonCodeAmi(d.codeAmi || "");
           return;
         }
@@ -7775,7 +7774,7 @@ export default function Emprise() {
               const idx = doc(db, "codesAmi", code);
               const pris = await tx.get(idx);
               if (pris.exists()) throw new Error("code-pris");
-              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp(), trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" });
+              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
               tx.set(idx, { uid: myUid });
             });
             if (!annule) setMonCodeAmi(code);
@@ -7792,12 +7791,16 @@ export default function Emprise() {
   }, [myUid, pseudo, essaiProfil]);
 
   // Les trophees et le titre suivent chaque partie comptee : c'est ce que les amis voient.
+  // Bornes AVANT l'envoi : les regles exigent un entier de 0 a 100000, et une valeur hors
+  // bornes ferait refuser toute mise a jour du profil — le joueur perdrait ses amis sans
+  // comprendre pourquoi. Une sauvegarde abimee ne doit pas pouvoir provoquer cela.
+  const tropheesPublics = () => Math.max(0, Math.min(100000, Math.round(stats.trophies || 0)));
   const trophyRef = useRef(null);
   useEffect(() => {
     const cle = (stats.trophies || 0) + "/" + (titrePrincipal(stats) || "");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
-    updateDoc(doc(db, "users", myUid), { trophees: stats.trophies || 0, titre: titrePrincipal(stats) || "" }).catch(() => {});
+    updateDoc(doc(db, "users", myUid), { trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" }).catch(() => {});
   }, [myUid, monCodeAmi, stats]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
@@ -9305,17 +9308,26 @@ export default function Emprise() {
           && !matchsConsommesRef.current.has(lobby.matchedGameId)) {
         const code = lobby.matchedGameId;
         matchsConsommesRef.current.add(code);
-        // Effacement du champ pour que personne ne le relise : en arrière-plan, l'entrée
-        // en partie ne doit pas attendre le réseau.
-        libererAppariement(code);
-        setFileAttente(false);
-        setOnlineStatus("");
-        setOnlineGameId(code);
-        setOnlineRole("blue");
-        setMode("online");
-        setPickerChoice([]);
-        setPartieClassee(true);
-        setPhase("select-blue");
+        // On ne croit pas le salon sur parole : la partie annoncee doit vraiment nous
+        // designer comme Azur, et etre nee d'un appariement. N'importe qui peut ecrire
+        // dans le salon ; sans cette verification, un client modifie pouvait nous faire
+        // entrer dans une partie CLASSEE qu'il avait fabriquee, plateau deja rempli.
+        (async () => {
+          try {
+            const snap = await getDoc(doc(db, "games", code));
+            const d = snap.exists() ? snap.data() : null;
+            if (!d || d.blueUid !== myUid || !d.appariement || d.gameOver) return;
+            libererAppariement(code);
+            setFileAttente(false);
+            setOnlineStatus("");
+            setOnlineGameId(code);
+            setOnlineRole("blue");
+            setMode("online");
+            setPickerChoice([]);
+            setPartieClassee(true);
+            setPhase("select-blue");
+          } catch (e) { /* on reste en file : l'annonce suivante fera foi */ }
+        })();
       }
     }, () => setOnlineError("Recherche interrompue. Vérifiez votre connexion."));
     return unsub;

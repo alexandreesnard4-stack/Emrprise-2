@@ -60,9 +60,62 @@ service cloud.firestore {
     // empêche deux joueurs d'être appariés au même adversaire.
     // À durcir en même temps que /games le jour d'un vrai lancement public : ici, un
     // client malveillant peut vider la salle d'attente ou s'y réinscrire en boucle.
-    match /matchmaking/{docId} {
+    // Forme du salon : huit champs, tous bornes. Un seul non borne suffisait a y loger
+    // ce qu'on voulait — et le client recopie waitingTitre et waitingPseudo dans le
+    // document de partie, ou ils s afficheraient tels quels chez l adversaire.
+    function salonBienForme() {
+      return request.resource.data.keys().hasOnly([
+               'waitingUid', 'waitingAt', 'waitingTrophees', 'waitingTitre', 'waitingPseudo',
+               'matchedUid', 'matchedGameId', 'matchedAt'
+             ])
+        && (!('waitingUid' in request.resource.data) || request.resource.data.waitingUid == null
+            || (request.resource.data.waitingUid is string && request.resource.data.waitingUid.size() <= 128))
+        && (!('matchedUid' in request.resource.data) || request.resource.data.matchedUid == null
+            || (request.resource.data.matchedUid is string && request.resource.data.matchedUid.size() <= 128))
+        && (!('waitingPseudo' in request.resource.data) || request.resource.data.waitingPseudo == null
+            || (request.resource.data.waitingPseudo is string && request.resource.data.waitingPseudo.size() <= 28))
+        && (!('waitingTitre' in request.resource.data) || request.resource.data.waitingTitre == null
+            || (request.resource.data.waitingTitre is string && request.resource.data.waitingTitre.size() <= 60))
+        && (!('matchedGameId' in request.resource.data) || request.resource.data.matchedGameId == null
+            || (request.resource.data.matchedGameId is string && request.resource.data.matchedGameId.size() <= 8))
+        && (!('waitingTrophees' in request.resource.data) || request.resource.data.waitingTrophees == null
+            || (request.resource.data.waitingTrophees is int
+                && request.resource.data.waitingTrophees >= 0
+                && request.resource.data.waitingTrophees <= 100000))
+        && (!('waitingAt' in request.resource.data) || request.resource.data.waitingAt == null
+            || request.resource.data.waitingAt is int)
+        && (!('matchedAt' in request.resource.data) || request.resource.data.matchedAt == null
+            || request.resource.data.matchedAt is int);
+    }
+
+    // UN SEUL document, "lobby" : le joker /{docId} laissait creer autant de documents
+    // qu'on voulait dans cette collection, que personne ne lit jamais.
+    match /matchmaking/lobby {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+
+      // Les champs sont fixes, et la place d'attente ne se prend QUE pour soi : on ne
+      // peut plus inscrire un autre joueur dans la file, ni y deposer n'importe quoi.
+      // Ce qui reste ouvert, sciemment : effacer une attente FRAICHE qui n'est pas la
+      // sienne. C'est exactement ce que fait l'appariement legitime — celui qui cree la
+      // partie libere la place de celui qu'il vient d'apparier — et le distinguer d'un
+      // sabotage demanderait de relire le document de partie a chaque ecriture. Un
+      // client acharne peut donc vider la file ; App Check est la vraie reponse, comme
+      // pour /games. La victime, elle, est protegee cote client : elle verifie que la
+      // partie annoncee la designe bien comme Azur avant d'y entrer.
+      allow create: if request.auth != null && salonBienForme()
+        && (request.resource.data.waitingUid == null
+            || request.resource.data.waitingUid == request.auth.uid);
+
+      // A la MISE A JOUR, on ne juge que ce qui a BOUGE. Juger le document fusionne
+      // refusait une ecriture legitime : celui qui nettoie l annonce qui lui etait
+      // adressee ne touche pas a la place d attente, mais un troisieme joueur a pu s y
+      // mettre entre-temps, et le document portait alors SON uid.
+      allow update: if request.auth != null && salonBienForme()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['waitingUid'])
+            || request.resource.data.waitingUid == null
+            || request.resource.data.waitingUid == request.auth.uid);
+
+      allow delete: if false;
     }
 
     // ============================== AMIS ==============================
@@ -130,10 +183,18 @@ service cloud.firestore {
     }
 
     // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
-    function horodatageSur(champ) {
-      return !(champ in request.resource.data)
-        || request.resource.data[champ] == request.time
-        || (resource != null && champ in resource.data && request.resource.data[champ] == resource.data[champ]);
+    // Ecrit deux fois plutot qu'une fonction a champ variable : la seconde forme
+    // demanderait un acces par variable, syntaxe dont on ne veut pas dependre ici.
+    function vuLeValide() {
+      return !('vuLe' in request.resource.data)
+        || request.resource.data.vuLe == request.time
+        || (resource != null && 'vuLe' in resource.data && request.resource.data.vuLe == resource.data.vuLe);
+    }
+    function derniereDemandeValide() {
+      return !('derniereDemande' in request.resource.data)
+        || request.resource.data.derniereDemande == request.time
+        || (resource != null && 'derniereDemande' in resource.data
+            && request.resource.data.derniereDemande == resource.data.derniereDemande);
     }
 
     // Anti-rafale : au plus une demande d'ami toutes les 10 secondes par expéditeur.
@@ -168,7 +229,7 @@ service cloud.firestore {
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
         && request.resource.data.creeLe == request.time
-        && horodatageSur('vuLe')
+        && vuLeValide()
         && indexPointeVersMoi(request.resource.data.codeAmi);
 
       // Mise à jour : soi-même seulement. creeLe ne bouge jamais ; les horodatages ne
@@ -180,11 +241,15 @@ service cloud.firestore {
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
         && request.resource.data.creeLe == resource.data.creeLe
-        && horodatageSur('vuLe')
-        && horodatageSur('derniereDemande')
+        // Le numero est fige : le client ne le change jamais, et pouvoir en changer a
+        // volonte permettait de reserver des identifiants sans jamais rendre les anciens.
+        // Effet de bord heureux : plus besoin de relire l'index a chaque battement de
+        // presence, une lecture facturee toutes les deux minutes par joueur.
+        && request.resource.data.codeAmi == resource.data.codeAmi
+        && vuLeValide()
+        && derniereDemandeValide()
         // Le compteur anti-rafale ne s'efface pas en reecrivant le profil sans lui.
-        && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data)
-        && indexPointeVersMoi(request.resource.data.codeAmi);
+        && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data);
 
       allow delete: if false;
 
@@ -195,7 +260,10 @@ service cloud.firestore {
         allow list: if connecte() && moi() == uid;
         allow get: if connecte() && (moi() == uid || moi() == deUid);
 
-        allow create: if connecte() && moi() == deUid
+        // « create, update » et non « create » seul : une demande deja posee se REECRIT.
+        // Sans cela le client devait l'effacer d'abord, hors batch — et si l'anti-rafale
+        // refusait ensuite le batch, la demande etait perdue des deux cotes.
+        allow create, update: if connecte() && moi() == deUid
           && deUid != uid                        // pas de demande à soi-même
           && exists(docUser(uid))                // le destinataire existe
           && !exists(docAmi(uid, deUid))         // pas déjà amis
@@ -203,8 +271,6 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['envoyeeLe'])
           && request.resource.data.envoyeeLe == request.time
           && rafaleRespectee();
-
-        allow update: if false;
 
         // Refus (destinataire) ou annulation (expéditeur). L'acceptation passe aussi par
         // ici : le destinataire supprime la demande dans le batch qui crée les deux liens.
