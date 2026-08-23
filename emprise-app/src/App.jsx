@@ -2547,7 +2547,8 @@ const APP_STYLES = `
         .landing.intro-e0 .hub-jouer-rang, .landing.intro-e1 .hub-jouer-rang,
         .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
         .landing.intro-e0 .hub-avis, .landing.intro-e1 .hub-avis,
-        .landing.intro-e0 .landing-link, .landing.intro-e1 .landing-link {
+        .landing.intro-e0 .landing-link, .landing.intro-e1 .landing-link,
+        .landing.intro-e0 .hub-arene-nom, .landing.intro-e1 .hub-arene-nom {
           opacity: 0; transform: translateY(18px);
         }
         .landing.intro-e2 .landing-emblem, .landing.intro-e3 .landing-emblem,
@@ -2558,7 +2559,8 @@ const APP_STYLES = `
         .landing.intro-e2 .hub-jouer-rang, .landing.intro-e3 .hub-jouer-rang,
         .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
         .landing.intro-e2 .hub-avis, .landing.intro-e3 .hub-avis,
-        .landing.intro-e2 .landing-link, .landing.intro-e3 .landing-link {
+        .landing.intro-e2 .landing-link, .landing.intro-e3 .landing-link,
+        .landing.intro-e2 .hub-arene-nom, .landing.intro-e3 .hub-arene-nom {
           opacity: 1; transform: translateY(0);
           transition: opacity .85s ease, transform .85s cubic-bezier(.22,.9,.3,1);
         }
@@ -2805,8 +2807,10 @@ const APP_STYLES = `
         .hub-arene:active .hub-arene-img { filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6)) brightness(1.15); }
 
         /* ---------- Galerie des arenes ---------- */
-        .arenes-voile {
+        .info-overlay.arenes-voile {
           padding: 0; align-items: stretch; justify-content: stretch;
+          /* Fond noir plein, en attendant l'illustration qui viendra derriere les arenes. */
+          background: #000000;
           animation: arenes-ouvre 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
         @keyframes arenes-ouvre {
