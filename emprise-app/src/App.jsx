@@ -3137,7 +3137,12 @@ const APP_STYLES = `
         .hub-trophees-nombre {
           font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
         }
-        .hub-haut-boutons { display: flex; gap: 8px; flex: none; }
+        /* Deux etages : le bouton Amis seul en haut — sa pastille deborde, elle a besoin
+           d air autour d elle — l historique et les reglages en dessous. */
+        .hub-haut-boutons {
+          display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: none;
+        }
+        .hub-haut-rang { display: flex; gap: 8px; }
         .histo-vide { text-align: center; padding: 14px 6px 6px; color: var(--muted); font-size: 12.5px; }
         .histo-vide p { margin: 0 0 4px; }
         .histo-vide-sous { font-size: 11px; }
@@ -3163,19 +3168,19 @@ const APP_STYLES = `
         .histo-sr { color: var(--red-bright); }
         .histo-quand { flex: none; }
         .hub-rouage {
-          width: 36px; height: 36px; flex: none;
+          width: 42px; height: 42px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
           border-radius: 10px; cursor: pointer; padding: 0;
           transition: border-color .2s, transform .35s ease;
         }
-        .hub-rouage svg { width: 19px; height: 19px; fill: rgba(203,164,86,0.75); }
+        .hub-rouage svg { width: 22px; height: 22px; fill: rgba(203,164,86,0.75); }
         /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
            l'illustration suit le mouvement. */
-        .hub-rouage-img { width: 26px; height: 26px; object-fit: contain; display: block; }
+        .hub-rouage-img { width: 30px; height: 30px; object-fit: contain; display: block; }
         /* Le miroir des parties passees : illustration detouree, plus haute que large. */
         .hub-icone-miroir {
-          width: 21px; height: 26px; object-fit: contain; display: block;
+          width: 25px; height: 31px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
@@ -3289,32 +3294,13 @@ const APP_STYLES = `
         .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: none; }
         .hub-rouage.hub-amis:active { transform: scale(0.92); }
         .hub-icone-amis {
-          width: 28px; height: 28px; object-fit: contain; display: block;
+          width: 33px; height: 33px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         .chat-badge.hub-pastille {
           position: absolute; top: -6px; right: -6px;
           pointer-events: none; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
         }
-        /* Le renvoi du profil vers l'ecran des amis. */
-        .profil-vers-amis {
-          display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
-          position: relative; padding: 9px 12px; border-radius: 11px; cursor: pointer;
-          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.25);
-          transition: border-color .2s, background .2s, transform .12s ease-in;
-        }
-        .profil-vers-amis:hover { border-color: var(--gold); background: rgba(203,164,86,0.08); }
-        .profil-vers-amis:active { transform: scale(0.98); }
-        .profil-vers-amis img { width: 26px; height: 26px; flex: none; object-fit: contain; }
-        .profil-vers-amis span {
-          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
-          letter-spacing: 0.06em; color: var(--gold-bright);
-        }
-        .profil-vers-amis-nombre {
-          margin-left: auto; font-size: 12px !important; color: var(--muted) !important;
-          font-variant-numeric: tabular-nums;
-        }
-        .chat-badge.profil-vers-amis-pastille { position: absolute; top: -6px; right: -6px; }
         .amis-liste { display: flex; flex-direction: column; gap: 6px; width: 100%; }
         .amis-liste.compacte { max-width: 340px; margin-top: 6px; }
         .amis-ligne {
@@ -10677,9 +10663,10 @@ export default function Emprise() {
               </span>
             </div>
             <span className="hub-haut-boutons">
-            {/* Les amis ont leur propre porte, a gauche de l'horloge et du rouage. La
-                pastille se pose PAR-DESSUS l'icone, coin superieur droit : le bouton est
-                en position relative, elle en absolute, et rien ne rogne son debordement. */}
+            {/* Les amis ont leur propre porte, seule sur son etage : sa pastille deborde
+                du bouton, elle ne doit rien avoir a cote qui la serre. Elle se pose
+                PAR-DESSUS l'icone, coin superieur droit — bouton en position relative,
+                pastille en absolute, et aucun ancetre qui rogne. */}
             <button
               className="hub-rouage hub-amis"
               onClick={() => setActiveModal("amis")}
@@ -10689,11 +10676,13 @@ export default function Emprise() {
                 : "Amis"}
               title="Amis"
             >
-              <img className="hub-icone-amis" src="/icones/amis.webp" alt="Amis" width="28" height="28" />
+              <img className="hub-icone-amis" src="/icones/amis.webp" alt="Amis" width="33" height="33" />
               {pastilleAmis > 0 && (
                 <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
               )}
             </button>
+            {/* Second etage : l historique et les reglages, cote a cote. */}
+            <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
@@ -10714,6 +10703,7 @@ export default function Emprise() {
                 <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
               </svg>
             </button>
+            </span>
             </span>
           </header>
 
@@ -11061,15 +11051,6 @@ export default function Emprise() {
                     </div>
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
-
-                  {/* Les amis ont leur ecran : le profil y renvoie plutot que de tout
-                      repeter, et retrouve sa longueur d'origine. */}
-                  <button className="profil-vers-amis" onClick={() => setActiveModal("amis")}>
-                    <img src="/icones/amis.webp" alt="" width="26" height="26" />
-                    <span>Mes amis</span>
-                    {amis.length > 0 && <span className="profil-vers-amis-nombre">{amis.length}</span>}
-                    {pastilleAmis > 0 && <span className="chat-badge profil-vers-amis-pastille">{pastilleAmis}</span>}
-                  </button>
 
                   <div className="profil-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
