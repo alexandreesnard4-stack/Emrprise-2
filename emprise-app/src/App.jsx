@@ -3268,6 +3268,53 @@ const APP_STYLES = `
           width: 100%; text-align: left; margin: 4px 0 0;
           font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
         }
+        /* En-tete de section illustree : l'image donne le ton, le mot le confirme. */
+        .amis-sous-titre.avec-icone {
+          display: flex; align-items: center; gap: 9px; margin-top: 10px;
+          font-size: 11px; color: var(--gold);
+        }
+        .amis-sous-titre.avec-icone img {
+          width: 36px; height: 36px; flex: none; object-fit: contain;
+          filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
+        }
+        .amis-titre { display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .amis-titre img { width: 34px; height: 34px; flex: none; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.75)); }
+        /* Le bouton Amis du bandeau. position: relative et overflow visible pour que la
+           pastille se pose par-dessus l'icone sans etre rognee. L'appui enfonce le bouton
+           par transform seul — ni filtre, ni ombre animee. */
+        .hub-rouage.hub-amis {
+          position: relative; overflow: visible;
+          transition: border-color .2s, transform .12s ease-in;
+        }
+        .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: none; }
+        .hub-rouage.hub-amis:active { transform: scale(0.92); }
+        .hub-icone-amis {
+          width: 28px; height: 28px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
+        .chat-badge.hub-pastille {
+          position: absolute; top: -6px; right: -6px;
+          pointer-events: none; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+        }
+        /* Le renvoi du profil vers l'ecran des amis. */
+        .profil-vers-amis {
+          display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
+          position: relative; padding: 9px 12px; border-radius: 11px; cursor: pointer;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.25);
+          transition: border-color .2s, background .2s, transform .12s ease-in;
+        }
+        .profil-vers-amis:hover { border-color: var(--gold); background: rgba(203,164,86,0.08); }
+        .profil-vers-amis:active { transform: scale(0.98); }
+        .profil-vers-amis img { width: 26px; height: 26px; flex: none; object-fit: contain; }
+        .profil-vers-amis span {
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
+          letter-spacing: 0.06em; color: var(--gold-bright);
+        }
+        .profil-vers-amis-nombre {
+          margin-left: auto; font-size: 12px !important; color: var(--muted) !important;
+          font-variant-numeric: tabular-nums;
+        }
+        .chat-badge.profil-vers-amis-pastille { position: absolute; top: -6px; right: -6px; }
         .amis-liste { display: flex; flex-direction: column; gap: 6px; width: 100%; }
         .amis-liste.compacte { max-width: 340px; margin-top: 6px; }
         .amis-ligne {
@@ -7642,8 +7689,8 @@ export default function Emprise() {
   // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
   useEffect(() => {
-    if (activeModal === "profil") chargerFiches(amis.map((a) => a.uid), true);
-    else { setAvisAmis(null); setCodeAmiSaisi(""); setAmiARetirer(null); }
+    if (activeModal === "profil" || activeModal === "amis") chargerFiches(amis.map((a) => a.uid), true);
+    if (activeModal !== "amis") { setAvisAmis(null); setCodeAmiSaisi(""); setAmiARetirer(null); }
   }, [activeModal]);
   // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
   // affichent ainsi exactement la meme chose, comme pour les trophees et les titres.
@@ -10624,18 +10671,29 @@ export default function Emprise() {
                 {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
               </button>
-              {/* Demandes d'ami et defis recus : la pastille se pose contre la porte du
-                  profil, la ou ils attendent. A cote du bouton et non dedans : il rogne
-                  son contenu pour couper les noms longs, elle y serait coupee aussi. */}
-              {pastilleAmis > 0 && (
-                <span className="chat-badge hub-pastille" role="status" aria-label={`${pastilleAmis} demande${pastilleAmis > 1 ? "s" : ""} d'ami`}>{pastilleAmis}</span>
-              )}
               <span className="hub-trophees" title="Trophées">
                 <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </span>
             </div>
             <span className="hub-haut-boutons">
+            {/* Les amis ont leur propre porte, a gauche de l'horloge et du rouage. La
+                pastille se pose PAR-DESSUS l'icone, coin superieur droit : le bouton est
+                en position relative, elle en absolute, et rien ne rogne son debordement. */}
+            <button
+              className="hub-rouage hub-amis"
+              onClick={() => setActiveModal("amis")}
+              aria-haspopup="dialog"
+              aria-label={pastilleAmis > 0
+                ? `Amis, ${pastilleAmis} en attente`
+                : "Amis"}
+              title="Amis"
+            >
+              <img className="hub-icone-amis" src="/icones/amis.webp" alt="Amis" width="28" height="28" />
+              {pastilleAmis > 0 && (
+                <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
+              )}
+            </button>
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
@@ -11004,88 +11062,20 @@ export default function Emprise() {
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
 
+                  {/* Les amis ont leur ecran : le profil y renvoie plutot que de tout
+                      repeter, et retrouve sa longueur d'origine. */}
+                  <button className="profil-vers-amis" onClick={() => setActiveModal("amis")}>
+                    <img src="/icones/amis.webp" alt="" width="26" height="26" />
+                    <span>Mes amis</span>
+                    {amis.length > 0 && <span className="profil-vers-amis-nombre">{amis.length}</span>}
+                    {pastilleAmis > 0 && <span className="chat-badge profil-vers-amis-pastille">{pastilleAmis}</span>}
+                  </button>
+
                   <div className="profil-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
                     <div><b>{victoires}</b><span>victoires</span></div>
                     <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
                   </div>
-
-                  <div className="profil-section-titre">Amis</div>
-                  {banniereDefi()}
-                  {demandesVisibles.length > 0 && (
-                    <>
-                      <div className="amis-sous-titre">Demandes reçues</div>
-                      {demandesVisibles.map((d) => {
-                        const f = fiches[d.uid];
-                        const nom = nomAffiche(f && f.pseudo);
-                        return (
-                          <div key={d.uid} className="amis-ligne">
-                            <div className="amis-ligne-texte">
-                              <span className="amis-nom">
-                                {nom}
-                                {f && f.trophees > 0 && (
-                                  <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
-                                )}
-                              </span>
-                              <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
-                            </div>
-                            <button className="amis-btn principal" onClick={() => accepterDemande(d.uid).catch((e) => setAvisAmis({ texte: e && e.message === "liste-pleine" ? `Liste pleine : ${AMIS_MAX} amis au plus.` : "Impossible d'accepter pour l'instant.", bon: false }))}>Accepter</button>
-                            <button className="amis-btn" onClick={() => refuserDemande(d.uid)}>Refuser</button>
-                            <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: d.uid, nom, contexte: "demande" })}>
-                              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-                  {amis.length === 0 ? (
-                    <div className="amis-vide">Aucun ami pour l'instant. Partagez votre identifiant, ou ajoutez votre prochain adversaire en fin de partie.</div>
-                  ) : (
-                    <div className="amis-liste">{amisTries.map((a) => ligneAmi(a, false))}</div>
-                  )}
-                  <div className="amis-sous-titre">Ajouter un ami</div>
-                  <div className="amis-ajout">
-                    {/* Le dièse est pose a l'ecran, hors du champ : le joueur n'a que les
-                        chiffres a entrer. inputMode numeric appelle le pave numerique du
-                        telephone, bien plus rapide que le clavier complet. */}
-                    <div className="amis-champ-cadre">
-                      <span className="amis-diese" aria-hidden="true">#</span>
-                      <input
-                        className="join-code-input amis-champ"
-                        placeholder="000000"
-                        maxLength={IDENTIFIANT_CHIFFRES}
-                        value={codeAmiSaisi}
-                        onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Identifiant du joueur"
-                      />
-                    </div>
-                    <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== IDENTIFIANT_CHIFFRES} onClick={ajouterParCode}>Ajouter</button>
-                  </div>
-                  {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
-                  <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
-                  {bloques.length > 0 && (
-                    <>
-                      <div className="amis-sous-titre">Joueurs bloqués</div>
-                      {bloques.map((b) => {
-                        const f = fiches[b.uid];
-                        return (
-                          <div key={b.uid} className="amis-ligne bloque">
-                            <div className="amis-ligne-texte">
-                              <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
-                              <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
-                            </div>
-                            <button className="amis-btn" onClick={() => debloquerJoueur(b.uid)}>Débloquer</button>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
 
                   <div className="profil-section-titre">Le joueur que vous êtes</div>
                   {profil.titres.length > 0 ? (
@@ -11129,6 +11119,120 @@ export default function Emprise() {
               </div>
             );
           })()}
+
+          {/* ---------- Ecran Amis ---------- */}
+          {activeModal === "amis" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title amis-titre">
+                  <img src="/icones/amis.webp" alt="" width="34" height="34" />
+                  Amis
+                </div>
+                {monCodeAmi && (
+                  <>
+                    <div className="profil-identifiant">
+                      <span className="profil-identifiant-valeur">{codeAmiLisible(monCodeAmi)}</span>
+                      <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                          <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                        </svg>
+                      </button>
+                      <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
+                  </>
+                )}
+                {banniereDefi()}
+                {demandesVisibles.length > 0 && (
+                  <>
+                    <div className="amis-sous-titre avec-icone">
+                      <img src="/icones/ami-demandes.webp" alt="Demandes" width="36" height="36" />
+                      Demandes reçues
+                    </div>
+                    {demandesVisibles.map((d) => {
+                      const f = fiches[d.uid];
+                      const nom = nomAffiche(f && f.pseudo);
+                      return (
+                        <div key={d.uid} className="amis-ligne">
+                          <div className="amis-ligne-texte">
+                            <span className="amis-nom">
+                              {nom}
+                              {f && f.trophees > 0 && (
+                                <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
+                              )}
+                            </span>
+                            <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
+                          </div>
+                          <button className="amis-btn principal" onClick={() => accepterDemande(d.uid).catch((e) => setAvisAmis({ texte: e && e.message === "liste-pleine" ? `Liste pleine : ${AMIS_MAX} amis au plus.` : "Impossible d'accepter pour l'instant.", bon: false }))}>Accepter</button>
+                          <button className="amis-btn" onClick={() => refuserDemande(d.uid)}>Refuser</button>
+                          <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: d.uid, nom, contexte: "demande" })}>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+                {amis.length === 0 ? (
+                  <div className="amis-vide">Aucun ami pour l'instant. Partagez votre identifiant, ou ajoutez votre prochain adversaire en fin de partie.</div>
+                ) : (
+                  <div className="amis-liste">{amisTries.map((a) => ligneAmi(a, false))}</div>
+                )}
+                <div className="amis-sous-titre avec-icone">
+                  <img src="/icones/ami-ajouter.webp" alt="Ajouter un ami" width="36" height="36" />
+                  Ajouter un ami
+                </div>
+                <div className="amis-ajout">
+                  {/* Le dièse est pose a l'ecran, hors du champ : le joueur n'a que les
+                      chiffres a entrer. inputMode numeric appelle le pave numerique du
+                      telephone, bien plus rapide que le clavier complet. */}
+                  <div className="amis-champ-cadre">
+                    <span className="amis-diese" aria-hidden="true">#</span>
+                    <input
+                      className="join-code-input amis-champ"
+                      placeholder="000000"
+                      maxLength={IDENTIFIANT_CHIFFRES}
+                      value={codeAmiSaisi}
+                      onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      aria-label="Identifiant du joueur"
+                    />
+                  </div>
+                  <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== IDENTIFIANT_CHIFFRES} onClick={ajouterParCode}>Ajouter</button>
+                </div>
+                {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
+                <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
+                {bloques.length > 0 && (
+                  <>
+                    <div className="amis-sous-titre">Joueurs bloqués</div>
+                    {bloques.map((b) => {
+                      const f = fiches[b.uid];
+                      return (
+                        <div key={b.uid} className="amis-ligne bloque">
+                          <div className="amis-ligne-texte">
+                            <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
+                            <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
+                          </div>
+                          <button className="amis-btn" onClick={() => debloquerJoueur(b.uid)}>Débloquer</button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
 
           {activeModal === "modes" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
