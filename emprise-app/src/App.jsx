@@ -7045,6 +7045,7 @@ export default function Emprise() {
   const [amitieAvis, setAmitieAvis] = useState("");
 
 
+
   // Mes quatre ecoutes : le profil (pour le code), les amis, les demandes, les defis.
   useEffect(() => {
     if (!myUid) return;
@@ -7096,6 +7097,11 @@ export default function Emprise() {
   // l'etat APRES le batch (existsAfter) et refusent les moities isolees. C'est voulu.
   async function envoyerDemande(uidCible) {
     if (!myUid || !uidCible || uidCible === myUid) return;
+    // Une demande deja posee se remplace en la retirant d'abord : set() sur un document
+    // existant est un UPDATE, que les regles refusent, et le batch entier tomberait —
+    // « Impossible d'envoyer la demande » pour toujours. Retirer SA PROPRE demande est
+    // permis, on en est l'expediteur.
+    try { await deleteDoc(doc(db, "users", uidCible, "demandes", myUid)); } catch (e) { /* rien a retirer */ }
     const b = writeBatch(db);
     b.set(doc(db, "users", uidCible, "demandes", myUid), { envoyeeLe: serverTimestamp() });
     b.update(doc(db, "users", myUid), { derniereDemande: serverTimestamp() }); // exige par l'anti-rafale
@@ -7104,8 +7110,19 @@ export default function Emprise() {
   }
   async function accepterDemande(uidAutre) {
     if (!myUid) return;
+    // Deja amis — l'autre a accepte le premier, ou nos demandes se sont croisees : il ne
+    // reste qu'a ranger la demande. Recreer les liens serait un update, donc un refus.
+    if (amis.some((a) => a.uid === uidAutre)) {
+      try { await deleteDoc(doc(db, "users", myUid, "demandes", uidAutre)); } catch (e) { /* deja rangee */ }
+      return;
+    }
+    if (amis.length >= AMIS_MAX) throw new Error("liste-pleine");
     const b = writeBatch(db);
     b.delete(doc(db, "users", myUid, "demandes", uidAutre));
+    // Sa demande a lui part aussi, si elle existe : sans cela il garderait une demande
+    // croisee que « Accepter » ne pourrait plus honorer, et sa pastille ne s'eteindrait
+    // jamais. Nous en sommes l'expediteur, la regle nous autorise a l'effacer.
+    b.delete(doc(db, "users", uidAutre, "demandes", myUid));
     b.set(doc(db, "users", myUid, "amis", uidAutre), { depuis: serverTimestamp() });
     b.set(doc(db, "users", uidAutre, "amis", myUid), { depuis: serverTimestamp() });
     await b.commit();
@@ -7168,18 +7185,29 @@ export default function Emprise() {
   // nouvelle partie remplace la precedente.
   async function defierAmi(uidAmi) {
     const code = await creerPartieEnLigne();
-    if (!code) return;
+    // Sans ce message, un echec de creation laissait le bouton « Defier » sans le moindre
+    // effet visible : le joueur appuyait dans le vide.
+    if (!code) { setAvisAmis({ texte: "Impossible de créer la partie. Réessayez.", bon: false }); return; }
+    setActiveModal(null);
     try {
       await setDoc(doc(db, "users", uidAmi, "invitations", myUid), { code, envoyeeLe: serverTimestamp() });
       setDefiEnvoye({ uid: uidAmi, t: Date.now() });
     } catch (e) { /* le code reste affiche : il peut toujours etre envoye a la main */ }
-    setActiveModal(null);
   }
   async function releverDefi(inv) {
     if (!inv || !myUid) return;
     const ok = await joinOnlineGame(inv.code);
-    if (ok) deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
-    else setDefisIgnores((d) => ({ ...d, [inv.uid]: inv.t }));
+    if (ok) {
+      // Refermer le panneau : ouvert, il couvrait la partie, et son verrou de defilement
+      // restait pose tout du long — puis il se rouvrait seul au retour au hub.
+      setActiveModal(null);
+      deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
+    } else {
+      // Le defi ne vaut plus rien : on le RETIRE au lieu de le masquer, sinon il
+      // reapparaissait au lancement suivant.
+      setDefisIgnores((d) => ({ ...d, [inv.uid]: inv.t }));
+      deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
+    }
   }
   function ignorerDefi(inv) {
     if (!inv || !myUid) return;
@@ -7195,14 +7223,16 @@ export default function Emprise() {
   function boutonAmitie() {
     if (mode !== "online" || !gameOver || !adversaireUid || !myUid) return null;
     if (amis.some((a) => a.uid === adversaireUid)) return null;
-    if (amitieAvis) return <div className="revanche-attente" key="am">{amitieAvis}</div>;
+    // L'etat reel passe avant le message : une demande partie se dit partie, meme si une
+    // tentative anterieure avait echoue. Et l'echec reste rejouable, au lieu de figer le
+    // bouton sur un refus definitif.
     if (demandesEnvoyees[adversaireUid]) return <div className="revanche-attente" key="am">Demande d'ami envoyée</div>;
     const ilDemande = demandesRecues.some((d) => d.uid === adversaireUid);
     return (
-      <button key="am" className={`reset-btn revanche-btn ${ilDemande ? "revanche-invite" : ""}`}
-              onClick={() => (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
-                .catch(() => setAmitieAvis("Demande impossible pour l'instant."))}>
-        {ilDemande ? "Accepter en ami" : "Ajouter en ami"}
+      <button key="am" className={`reset-btn revanche-btn ${ilDemande && !amitieAvis ? "revanche-invite" : ""}`}
+              onClick={() => { setAmitieAvis(""); (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
+                .catch(() => setAmitieAvis("Impossible — réessayer")); }}>
+        {amitieAvis || (ilDemande ? "Accepter en ami" : "Ajouter en ami")}
       </button>
     );
   }
@@ -7443,6 +7473,10 @@ export default function Emprise() {
   // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
   // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
   // pas en place, tout echoue en silence : la section Amis reste simplement vide.
+  // Une nouvelle tentative apres un echec : sans elle, remettre la marque a zero ne
+  // servait a rien, l'effet ne se rejouait pas (ses dependances n'avaient pas bouge) et
+  // le joueur restait sans code ami jusqu'au prochain lancement.
+  const [essaiProfil, setEssaiProfil] = useState(0);
   const profilSyncRef = useRef("");
   useEffect(() => {
     if (!myUid || !pseudo || profilSyncRef.current === myUid + "/" + pseudo) return;
@@ -7472,9 +7506,28 @@ export default function Emprise() {
             return;
           } catch (e) { if (e.message !== "code-pris") throw e; }
         }
-      } catch (e) { profilSyncRef.current = ""; /* regles absentes ou reseau : on retentera */ }
+      } catch (e) {
+        // Regles absentes ou reseau coupe : on repasse dans vingt secondes.
+        profilSyncRef.current = "";
+        if (!annule) setTimeout(() => setEssaiProfil((n) => n + 1), 20000);
+      }
     })();
     return () => { annule = true; };
+  }, [myUid, pseudo, essaiProfil]);
+
+  // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
+  // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
+  // s'ecrit quand l'application est en arriere-plan : c'est justement ce qui fait
+  // vieillir la marque et bascule l'ami sur « Vu il y a... ».
+  useEffect(() => {
+    if (!myUid || !pseudo) return;
+    const direPresence = () => {
+      if (document.visibilityState !== "visible") return;
+      updateDoc(doc(db, "users", myUid), { vuLe: serverTimestamp() }).catch(() => {});
+    };
+    const id = setInterval(direPresence, 120000);
+    document.addEventListener("visibilitychange", direPresence);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", direPresence); };
   }, [myUid, pseudo]);
   // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
@@ -7867,9 +7920,12 @@ export default function Emprise() {
       ? titresPartie[camp]
       : (onlineRole === camp ? titrePrincipal(stats) : "");
     if (!titre) return null;
+    // Le titre vient du document de partie, donc de l'autre joueur : il ne peut valoir
+    // que l'un des titres du jeu. Tout le reste est ecarte, comme pour son pseudo.
     const combo = COMBOS.find((c) => c.nom === titre);
+    if (!combo) return null;
     return (
-      <span className="titre-flottant" title={combo ? combo.recit : "Style de jeu"}>{titre}</span>
+      <span className="titre-flottant" title={combo.recit}>{combo.nom}</span>
     );
   }
 
@@ -8940,6 +8996,12 @@ export default function Emprise() {
             tx.set(ref, {
               status: "waiting-orders", createdAt: serverTimestamp(),
               blueUid: ancienne.redUid, redUid: ancienne.blueUid,
+              // Les noms suivent leur camp, echange comme le reste : sans eux, les deux
+              // joueurs s'affichaient « Adversaire » apres une revanche. Celui qui vient
+              // d'en face repasse par le filtre.
+              bluePseudo: pseudoAffichable(ancienne.redPseudo), redPseudo: pseudoAffichable(ancienne.bluePseudo),
+              blueTrophees: ancienne.redTrophees ?? null, redTrophees: ancienne.blueTrophees ?? null,
+              blueTitre: ancienne.redTitre || "", redTitre: ancienne.blueTitre || "",
               blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
               board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
@@ -10707,8 +10769,8 @@ export default function Emprise() {
                     <input
                       className="join-code-input amis-champ"
                       placeholder="CODE AMI"
-                      maxLength={7}
-                      value={codeAmiLisible(nettoyerCodeAmi(codeAmiSaisi)).replace(/-$/, "")}
+                      maxLength={6}
+                      value={codeAmiSaisi}
                       onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
                       onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
                       autoCapitalize="characters"
