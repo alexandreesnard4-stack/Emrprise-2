@@ -9208,6 +9208,14 @@ export default function Emprise() {
     if (code === onlineGameId) return;
     revancheCreationRef.current = false;
     dernierCoupDistantRef.current = null;
+    // La revanche est une NOUVELLE partie : le verrou des statistiques doit se rouvrir
+    // (ferme a la fin de la manche precedente, il faisait passer toute la revanche sans
+    // etre comptee), et la pile des coups doit se vider — elle nourrissait le suivi des
+    // combos avec les etats de la partie d avant, et son premier coup ne remettait pas
+    // le compteur a zero puisque la pile n etait jamais vide.
+    statsRecordedRef.current = false;
+    setHistory([]);
+    combosRef.current = nouveauSuiviCombos();
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
     setRevancheVotes(null);
@@ -9739,6 +9747,43 @@ export default function Emprise() {
     }
   }
 
+  // ---------- Le bouton Retour du telephone ----------
+  // Jusqu'ici il quittait le jeu, d'ou qu'on vienne : en pleine partie, un pouce qui
+  // effleure le bord de l'ecran et tout etait perdu. Il fait desormais ce que le joueur
+  // attend : fermer ce qui est ouvert, remonter d'un ecran, et demander confirmation en
+  // partie. Le mecanisme : une entree sentinelle dans l'historique du navigateur tant
+  // qu'il y a quelque chose a fermer ; Retour la consomme (popstate), on agit, et
+  // l'effet la repose. Au hub, panneaux fermes, plus de sentinelle : Retour quitte,
+  // comme il doit.
+  const retourRef = useRef(null);
+  retourRef.current = () => {
+    // Du plus recent au plus ancien : on ferme la couche du dessus, une par pression.
+    if (signalement) { setSignalement(null); return true; }
+    if (joueurMenu) { setJoueurMenu(null); return true; }
+    if (amiARetirer) { setAmiARetirer(null); return true; }
+    if (confirmQuit) { setConfirmQuit(false); return true; }
+    if (infoAbility) { setInfoAbility(null); return true; }
+    if (ordreDetail) { setOrdreDetail(null); return true; }
+    if (activeModal) { setActiveModal(null); return true; }
+    if (ceremonieFin) { setCeremonieFin(null); setCerPose(false); return true; }
+    if (phase === "play") { setConfirmQuit(true); return true; }
+    if (phase === "tutorial") { skipTutorial(); return true; }
+    if (phase !== "landing") { goBack(); return true; }
+    return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
+  };
+  const retourACouvrir = !!(signalement || joueurMenu || amiARetirer || confirmQuit
+    || infoAbility || ordreDetail || activeModal || ceremonieFin || phase !== "landing");
+  useEffect(() => {
+    if (retourACouvrir && !(window.history.state && window.history.state.emprise)) {
+      try { window.history.pushState({ emprise: true }, ""); } catch (e) { /* navigation privee capricieuse */ }
+    }
+  }, [retourACouvrir, phase, activeModal, ordreDetail, infoAbility, confirmQuit, amiARetirer, joueurMenu, signalement, ceremonieFin]);
+  useEffect(() => {
+    const surRetour = () => { retourRef.current && retourRef.current(); };
+    window.addEventListener("popstate", surRetour);
+    return () => window.removeEventListener("popstate", surRetour);
+  }, []);
+
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
@@ -10099,8 +10144,11 @@ export default function Emprise() {
     // d'Azur occupant le meme rang — chaque camp numerote sa main a partir de zero.
     const campAugure = mode === "local" ? turn : "blue";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
+    // Les Scribes cachent leurs rangs a l ADVERSAIRE. Au bac a sable il n y en a pas :
+    // on y joue seul, des deux cotes, precisement pour tout voir — le voile n y montrait
+    // que des « ? » illisibles.
     const isConcealed = (card) =>
-      card.ability === "scribe" &&
+      card.ability === "scribe" && !testMode &&
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
@@ -12719,7 +12767,7 @@ export default function Emprise() {
                       extraClass={`${isBeingPreviewed ? "previewing" : ""} ${dernierCoup === i ? "dernier-coup" : ""}`}
                       poisoned={!!(displayCard && (poisonedCells[i] || willBePoisoned))}
                       hiddenFromFoe={cacheeAuxAutres}
-                      concealed={displayCard.scribeJustPlaced && (mode === "bot" ? displayCard.scribePlacedBy === "red" : mode === "online" ? displayCard.scribePlacedBy !== onlineRole : displayCard.scribePlacedBy !== turn)}
+                      concealed={displayCard.scribeJustPlaced && !testMode && (mode === "bot" ? displayCard.scribePlacedBy === "red" : mode === "online" ? displayCard.scribePlacedBy !== onlineRole : displayCard.scribePlacedBy !== turn)}
                       previewResonanceDirs={previewResonanceDirs}
                     />
                   )}
