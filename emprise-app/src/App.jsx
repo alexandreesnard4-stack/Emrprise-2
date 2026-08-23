@@ -3140,9 +3140,9 @@ const APP_STYLES = `
         }
         /* La carte du detail : un portrait en HAUTEUR, plus grand qu'en grille, et en
            fondu — pas de cadre, ses bords s'effacent dans le panneau. */
-        .ordre-detail-carte { flex: 0 0 46%; max-width: 190px; }
+        .ordre-detail-carte { flex: 0 0 44%; max-width: 180px; }
         .ordre-detail-carte .vague-maitrise.grand {
-          aspect-ratio: 3 / 4; border: none; border-radius: 0; box-shadow: none; background: none;
+          aspect-ratio: 2 / 3; border: none; border-radius: 0; box-shadow: none; background: none;
           -webkit-mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
           mask-image: radial-gradient(82% 78% at 50% 48%, #000 46%, rgba(0,0,0,0.6) 72%, transparent 100%);
           animation: ordre-detail-fondu 0.9s ease-out both;
@@ -3154,30 +3154,35 @@ const APP_STYLES = `
         .ordre-detail-carte .vague-maitrise.grand img { object-position: center 20%; }
         @media (prefers-reduced-motion: reduce) { .ordre-detail-carte .vague-maitrise.grand { animation: none; } }
         .ordre-detail-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        /* Le pourcentage n'est plus qu'une mesure : une petite pastille sous le nom. */
         .ordre-detail-pourcent {
-          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; line-height: 1;
-          color: var(--gold-bright); text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+          align-self: flex-start; margin-top: 3px;
+          padding: 2px 9px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+          color: var(--gold); background: rgba(203,164,86,0.12);
+          border: 1px solid rgba(203,164,86,0.35);
         }
         .ordre-detail-nom {
-          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
-          letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone);
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
         }
+        /* Le rang ouvre le panneau : c'est lui qui dit quel joueur on est de cet Ordre. */
         .ordre-detail-rang {
-          display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
-          margin-top: 3px; padding: 2px 9px 2px 4px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
-          color: var(--gold-bright); background: rgba(203,164,86,0.14); border: 1px solid rgba(203,164,86,0.45);
+          display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+          font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700; line-height: 1.1;
+          letter-spacing: 0.05em; text-transform: uppercase;
+          color: var(--gold-bright); text-shadow: 0 2px 8px rgba(0,0,0,0.8);
         }
         .ordre-detail-rang-num {
-          padding: 1px 6px; border-radius: 999px; font-size: 9.5px;
-          background: rgba(203,164,86,0.25);
+          flex: none; padding: 1px 7px; border-radius: 999px;
+          font-size: 9.5px; letter-spacing: 0.04em; color: var(--gold);
+          background: rgba(203,164,86,0.18); border: 1px solid rgba(203,164,86,0.3);
         }
         .ordre-detail-parties { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
         .ordre-detail-desc {
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
         }
-        .ordre-detail-fermer { position: absolute; top: -14px; right: -14px; width: 34px; height: 34px; }
         @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
         /* ---------- Barre de navigation : socle de pierre et metal ----------
            Le rendu vise une barre d'interface de jeu, pas une barre d'onglets de site :
@@ -9404,19 +9409,17 @@ export default function Emprise() {
                     <VagueMaitrise order={order} taux={m.taux} grand />
                   </div>
                   <div className="ordre-detail-texte">
-                    <div className="ordre-detail-pourcent">{m.pourcent} %</div>
-                    <div className="ordre-detail-nom">{order.name}</div>
                     <div className="ordre-detail-rang">
-                      <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
                       {m.rang.nom}
+                      <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
                     </div>
+                    <div className="ordre-detail-nom">{order.name}</div>
+                    <div className="ordre-detail-pourcent">{m.pourcent} %</div>
                     {/* Ni compte de parties, ni "encore X pour..." : chiffrer le chemin en
                         fait une corvee. Le rang et le pourcentage suffisent, le reste se
                         decouvre en jouant. */}
                     <div className="ordre-detail-parties">
-                      {m.parties === 0
-                        ? "Jamais joué"
-                        : m.parties >= MAITRISE_PARTIES_MAX
+                      {m.parties >= MAITRISE_PARTIES_MAX
                         ? "Maîtrise complète"
                         : m.suivant
                         ? `Prochain rang : ${m.suivant.nom}`
@@ -9424,9 +9427,6 @@ export default function Emprise() {
                     </div>
                     <p className="ordre-detail-desc">{order.desc}</p>
                   </div>
-                  <button className="arenes-fermer ordre-detail-fermer" onClick={() => setOrdreDetail(null)} aria-label="Fermer">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                  </button>
                 </div>
               </div>
             );
