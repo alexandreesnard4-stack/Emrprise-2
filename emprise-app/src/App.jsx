@@ -2788,6 +2788,9 @@ const APP_STYLES = `
         .hub-avis {
           max-width: 340px; margin: 8px 0 0; cursor: pointer;
         }
+        /* Une victoire par abandon adverse emprunte le meme canal qu'un message d'echec :
+           elle s'annonce en or pour qu'on ne la lise pas comme un probleme. */
+        .hub-avis.avis-bon { color: var(--gold-bright); font-weight: 600; }
         /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
            reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
         .hub-arene {
@@ -6518,6 +6521,9 @@ export default function Emprise() {
   }
   const [activeModal, setActiveModal] = useState(null);
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
+  // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
+  // abandon adverse passe par le meme canal : elle doit s'annoncer en or, pas en rouge.
+  const [avisBon, setAvisBon] = useState(false);
   useEffect(() => {
     if (!ordreDetail) return;
     const onKey = (e) => { if (e.key === "Escape") setOrdreDetail(null); };
@@ -7005,7 +7011,7 @@ export default function Emprise() {
     setTestMode(false); setConfirmQuit(false);
     setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null); setTourneyBanPick(null);
     setTourney({ active: false, round: 0, ban: null });
-    setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setOnlineStatus("");
+    setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null);
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
@@ -7285,6 +7291,7 @@ export default function Emprise() {
   }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
 
   async function createOnlineGame() {
+    statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
     setOnlineError("");
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
@@ -7337,6 +7344,7 @@ export default function Emprise() {
   }
 
   async function joinOnlineGame() {
+    statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
     const code = joinCodeInput.trim().toUpperCase();
     if (!code) return;
@@ -7469,8 +7477,9 @@ export default function Emprise() {
           }
         }
       } else {
-        // L'adversaire est parti avant même que la partie ne démarre : pas de victoire
-        // (rien n'a été joué), juste un message et le retour d'où l'on venait.
+        // L'adversaire est parti avant même que la partie ne démarre. En Classé cela vaut
+        // victoire : il y avait bien un duel engagé, et le laisser partir sans rien coûter
+        // ni rien rapporter invitait à quitter dès qu'un adversaire déplaisait.
         if (finForcee) {
           if (tournoiOnlineId) {
             // Match de tournoi : l'abandon adverse nous donne la victoire du match.
@@ -7481,17 +7490,37 @@ export default function Emprise() {
             retournerAuTournoi();
             return;
           }
-          setOnlineGameId(null); setOnlineRole(null); setOnlineStatus("");
-          // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
-          // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
-          setVainqueurForce(null); setFinMotif(null);
           // On lit le Classé sur le DOCUMENT et non sur l'état React : cet écouteur ne se
           // réabonne qu'au changement de partie, sa fermeture garderait donc une valeur
           // périmée de partieClassee. Le document, lui, dit la vérité de cette partie-là.
           const venaitDuClasse = !!data.appariement;
+          const parForfait = data.finMotif === "forfait";
+          // La victoire du camp resté. Le verrou est indispensable : cet écouteur se
+          // déclenche à CHAQUE écriture du document, il compterait sinon plusieurs fois.
+          // Les Ordres viennent eux aussi du document, jamais de l'état React, pour la
+          // même raison de fermeture périmée.
+          if (venaitDuClasse && !statsRecordedRef.current) {
+            statsRecordedRef.current = true;
+            const mesOrdres = (onlineRole === "red" ? data.redOrderKeys : data.blueOrderKeys) || [];
+            recordGameStats(onlineRole, mesOrdres, TROPHEES_VICTOIRE, [], false, onlineRole).then(setStats);
+            setHistorique(ecrireHistorique({
+              t: Date.now(), classee: true, sb: 0, sr: 0,
+              vainqueur: onlineRole, camp: onlineRole,
+              trophees: TROPHEES_VICTOIRE, motif: parForfait ? "forfait" : "abandon",
+            }));
+          }
+          setOnlineGameId(null); setOnlineRole(null); setOnlineStatus("");
+          // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
+          // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
+          setVainqueurForce(null); setFinMotif(null);
           setPartieClassee(false);
           oublierPartieEnLigne();
-          setOnlineError("L'adversaire a quitté avant le début de la partie.");
+          setAvisBon(venaitDuClasse);
+          setOnlineError(
+            venaitDuClasse
+              ? `${parForfait ? "L'adversaire ne s'est pas présenté" : "L'adversaire a quitté"} : victoire, +${TROPHEES_VICTOIRE} trophées.`
+              : "L'adversaire a quitté avant le début de la partie."
+          );
           setPickerChoice([]);
           if (venaitDuClasse) { setMode(null); setPhase("landing"); }
           else setPhase("online-menu");
@@ -7565,6 +7594,7 @@ export default function Emprise() {
     setPickerChoice([]);
     setMode("online");
     setFileAttente(true);
+    statsRecordedRef.current = false;
     setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
@@ -7690,6 +7720,20 @@ export default function Emprise() {
   function abandonnerAvantDebut() {
     if (onlineGameId) {
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
+      // Partir APRES avoir ete apparie est une defaite : un adversaire est en face et
+      // attend. Seule la recherche se quitte sans rien devoir — goBack la traite avant
+      // d'arriver ici, on ne peut donc pas etre penalise pour avoir renonce a chercher.
+      // Le verrou evite de compter deux fois si l'ecouteur repasse par la.
+      if (partieClassee && !statsRecordedRef.current) {
+        statsRecordedRef.current = true;
+        const mesOrdres = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
+        const vainqueur = onlineRole === "blue" ? "red" : "blue";
+        recordGameStats(vainqueur, mesOrdres, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
+        setHistorique(ecrireHistorique({
+          t: Date.now(), classee: true, sb: 0, sr: 0,
+          vainqueur, camp: onlineRole, trophees: TROPHEES_DEFAITE, motif: "abandon",
+        }));
+      }
       if (tournoiOnlineId) {
         tournoiResultatRef.current = onlineGameId;
         ecrireResultatTournoi(onlineGameId, onlineRole === "blue" ? "red" : "blue");
@@ -9234,7 +9278,7 @@ export default function Emprise() {
                     ici : sans cet avis, le joueur se retrouvait au hub sans savoir
                     pourquoi. Un clic le chasse. */}
                 {onlineError && (
-                  <div className="online-error hub-avis" role="status" onClick={() => setOnlineError("")}>
+                  <div className={`online-error hub-avis ${avisBon ? "avis-bon" : ""}`} role="status" onClick={() => { setOnlineError(""); setAvisBon(false); }}>
                     {onlineError}
                   </div>
                 )}
