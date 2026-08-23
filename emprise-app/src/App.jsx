@@ -3315,36 +3315,92 @@ const APP_STYLES = `
         .hub-jouer-modes-btn svg { width: 16px; height: 16px; fill: var(--gold-bright); }
         .hub-jouer-modes-btn .hub-jouer-classe-titre { color: var(--gold-bright); }
         .hub-jouer-modes-btn .hub-jouer-classe-sous { color: var(--muted); }
-        /* Panneau des modes : les tuiles du hub, rangees par famille. */
-        .modes-groupe-titre {
+        /* Panneau des modes : un selecteur de jeu de cartes, pas une page de reglages.
+           Trois onglets en tete, puis de grandes bannieres illustrees — le portrait de
+           l'Ordre en fond, voile par un degrade sombre qui laisse le texte lisible a
+           gauche. Plus de liste ni de cases vides : trois ou quatre bannieres a la fois. */
+        /* Sous-titres de section du profil. */
+        .profil-section-titre {
           width: 100%; text-align: left;
           font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
           letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
           margin: 10px 0 6px; padding-bottom: 4px;
           border-bottom: 1px solid rgba(203,164,86,0.18);
         }
-        .modes-groupe {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
+        .modes-panel { position: relative; padding-top: 18px; }
+        .modes-panel .info-panel-title { margin-bottom: 2px; }
+        .modes-fermer {
+          position: absolute; top: 12px; right: 12px; z-index: 2;
+          width: 30px; height: 30px; padding: 0; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(0,0,0,0.35); border: 1px solid rgba(203,164,86,0.35);
+          cursor: pointer; transition: border-color .2s, background .2s;
         }
-        .modes-panel .reset-btn { margin-top: 14px; }
-        .hub-mode-tuile {
-          display: flex; align-items: center; gap: 9px;
-          padding: 8px 10px; min-height: 46px; box-sizing: border-box;
-          background: var(--panel); border: 1px solid rgba(203,164,86,0.2);
-          border-radius: 11px; cursor: pointer; color: var(--bone); text-align: left;
-          transition: border-color .2s, transform .15s;
+        .modes-fermer:hover { border-color: var(--gold-bright); background: rgba(203,164,86,0.12); }
+        .modes-fermer svg { width: 14px; height: 14px; stroke: var(--gold-bright); stroke-width: 2; fill: none; stroke-linecap: round; }
+        .modes-onglets {
+          display: flex; gap: 4px; width: 100%; padding: 3px; box-sizing: border-box;
+          background: rgba(0,0,0,0.35); border: 1px solid rgba(203,164,86,0.18); border-radius: 12px;
         }
-        .hub-mode-tuile:hover { border-color: var(--gold); }
-        .hub-mode-tuile:active { transform: scale(0.97); }
-        .hub-mode-tuile img {
-          width: 30px; height: 30px; border-radius: 8px; object-fit: cover; flex: none;
-          border: 1px solid rgba(203,164,86,0.3);
+        .modes-onglet {
+          flex: 1; padding: 8px 4px; border-radius: 9px; border: 1px solid transparent;
+          background: none; cursor: pointer; color: var(--muted);
+          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+          transition: color .2s, background .2s, border-color .2s;
         }
-        .hub-mode-tuile span {
-          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
-          letter-spacing: 0.04em; line-height: 1.3;
+        .modes-onglet:hover { color: var(--bone); }
+        .modes-onglet.actif {
+          color: var(--gold-bright); background: rgba(203,164,86,0.12);
+          border-color: rgba(203,164,86,0.45);
         }
-        .hub-mode-tuile.test { opacity: 0.72; }
+        .modes-bannieres { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+        .mode-banniere {
+          position: relative; overflow: hidden; width: 100%; height: 78px;
+          padding: 0; border-radius: 13px; cursor: pointer; text-align: left;
+          background: #120e16; border: 1px solid rgba(203,164,86,0.28);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+          transition: border-color .2s, box-shadow .2s, transform .15s;
+          animation: banniere-entree .32s cubic-bezier(.2,.8,.3,1) both;
+        }
+        @keyframes banniere-entree {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .mode-banniere:hover, .mode-banniere:focus-visible {
+          border-color: var(--gold-bright); outline: none;
+          box-shadow: 0 0 15px rgba(232,200,119,0.3), 0 6px 18px rgba(0,0,0,0.45);
+        }
+        .mode-banniere:active { transform: scale(0.985); }
+        /* Le portrait occupe la moitie droite ; le degrade le fond dans le panneau a
+           gauche pour que le titre se lise sur du sombre. Deux voiles : l'un attenue
+           l'image entiere, l'autre fait la transition. */
+        .mode-banniere-fond {
+          position: absolute; inset: 0; z-index: 0;
+          background-size: cover; background-position: 70% 30%;
+          filter: saturate(0.85) brightness(0.75);
+          transition: transform .5s ease, filter .3s;
+        }
+        .mode-banniere:hover .mode-banniere-fond { transform: scale(1.04); filter: saturate(1) brightness(0.85); }
+        .mode-banniere::after {
+          content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+          background: linear-gradient(90deg, #120e16 0%, #120e16 34%, rgba(18,14,22,0.82) 52%, rgba(18,14,22,0.15) 100%);
+        }
+        .mode-banniere-texte {
+          position: relative; z-index: 2;
+          display: flex; flex-direction: column; gap: 4px; justify-content: center;
+          height: 100%; padding: 0 14px; max-width: 68%; box-sizing: border-box;
+        }
+        .mode-banniere-titre {
+          font-family: 'Cinzel', serif; font-size: 14.5px; font-weight: 700;
+          letter-spacing: 0.05em; color: var(--gold-bright); line-height: 1.15;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+        }
+        .mode-banniere-phrase {
+          font-size: 11px; line-height: 1.35; color: var(--bone); opacity: 0.85;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        }
+        .reduced-motion .mode-banniere { animation: none; }
         /* Page de maitrise : 4 Ordres par ligne, chacun avec sa vague et son
            pourcentage. Trois lignes tiennent sous le titre sans defiler. */
         .hub-ordres-grille4 {
@@ -6973,6 +7029,32 @@ export default function Emprise() {
     return true;
   }
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
+  // Onglet ouvert dans le panneau des modes. Trois familles, pour ne montrer que trois ou
+  // quatre bannieres a la fois, grandes, au lieu de neuf petites cases empilees.
+  const [familleModes, setFamilleModes] = useState("solo");
+  const FAMILLES_MODES = [
+    { cle: "solo", nom: "Solo" },
+    { cle: "multi", nom: "Multi & local" },
+    { cle: "entrainement", nom: "Entraînement" },
+  ];
+  const MODES_DE_JEU = [
+    { famille: "solo", titre: "Contre un Écho", phrase: "4 niveaux de difficulté", ordre: "eveil",
+      lancer: () => chooseMode("bot") },
+    { famille: "solo", titre: "Mode Histoire", phrase: "8 chapitres, un par Ordre", ordre: "cendres",
+      lancer: () => setPhase("chapters") },
+    { famille: "solo", titre: "Tournoi", phrase: "8 Commandants, un seul champion", ordre: "maudits",
+      lancer: () => setPhase("tourney-menu") },
+    { famille: "solo", titre: "Confluence", phrase: "8 Ordres draftés, même main pour les deux", ordre: "portee",
+      lancer: () => chooseConfluenceBot() },
+    { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", ordre: "guardian",
+      lancer: () => chooseMode("local") },
+    { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", ordre: "mue",
+      lancer: () => chooseConfluenceLocal() },
+    { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", ordre: "devoreuse",
+      lancer: () => { setOnlineError(""); setPhase("online-menu"); } },
+    { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", ordre: "scribes",
+      lancer: () => chooseTestMode() },
+  ];
   // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
   // abandon adverse passe par le meme canal : elle doit s'annoncer en or, pas en rouge.
   const [avisBon, setAvisBon] = useState(false);
@@ -10062,7 +10144,7 @@ export default function Emprise() {
                     <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
                   </div>
 
-                  <div className="modes-groupe-titre">Le joueur que vous êtes</div>
+                  <div className="profil-section-titre">Le joueur que vous êtes</div>
                   {profil.titres.length > 0 ? (
                     profil.titres.map((t, i) => (
                       <div key={t.combo.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
@@ -10086,7 +10168,7 @@ export default function Emprise() {
 
                   {profil.classement.length > 0 && (
                     <>
-                      <div className="modes-groupe-titre">Combos réalisés</div>
+                      <div className="profil-section-titre">Combos réalisés</div>
                       <div className="profil-liste">
                         {profil.classement.map((t) => (
                           <div key={t.combo.key} className="profil-ligne" title={t.combo.signe}>
@@ -10108,57 +10190,39 @@ export default function Emprise() {
           {activeModal === "modes" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel modes-panel" onClick={(e) => e.stopPropagation()}>
+                <button className="modes-fermer" onClick={() => setActiveModal(null)} aria-label="Fermer">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
                 <div className="info-panel-title">Modes de jeu</div>
 
-                <div className="modes-groupe-titre">Contre un Écho</div>
-                <div className="modes-groupe">
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("bot"); }} aria-label="Contre un Écho : Solo, 4 niveaux de difficulté" title="Solo, 4 niveaux de difficulté">
-                    <img src={ORDERS.find((o) => o.key === "eveil")?.portrait} alt="" />
-                    <span>Contre un Écho</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("chapters"); }} aria-label="Mode Histoire : 8 chapitres solo, un par Ordre" title="8 chapitres solo, un par Ordre">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>Mode Histoire</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceBot(); }} aria-label="Confluence (Écho) : 8 Ordres draftés à tour de rôle, même main pour les deux" title="8 Ordres draftés à tour de rôle, même main pour les deux">
-                    <img src={ORDERS.find((o) => o.key === "portee")?.portrait} alt="" />
-                    <span>Confluence (Écho)</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setPhase("tourney-menu"); }} aria-label="Tournoi : 8 Commandants, trois tours, un seul champion" title="8 Commandants, trois tours, un seul champion">
-                    <img src={ORDERS.find((o) => o.key === "maudits")?.portrait} alt="" />
-                    <span>Tournoi</span>
-                  </button>
+                <div className="modes-onglets" role="tablist">
+                  {FAMILLES_MODES.map((f) => (
+                    <button key={f.cle} role="tab" aria-selected={familleModes === f.cle}
+                            className={`modes-onglet ${familleModes === f.cle ? "actif" : ""}`}
+                            onClick={() => setFamilleModes(f.cle)}>
+                      {f.nom}
+                    </button>
+                  ))}
                 </div>
 
-                <div className="modes-groupe-titre">À deux sur le même écran</div>
-                <div className="modes-groupe">
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseMode("local"); }} aria-label="2 Commandants : Chacun son tour, sur le même téléphone" title="Chacun son tour, sur le même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "cendres")?.portrait} alt="" />
-                    <span>2 Commandants</span>
-                  </button>
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); chooseConfluenceLocal(); }} aria-label="Confluence (à 2) : 8 Ordres draftés à tour de rôle, même téléphone" title="8 Ordres draftés à tour de rôle, même téléphone">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Confluence (à 2)</span>
-                  </button>
+                {/* La cle change avec l'onglet : React remonte la liste et rejoue l'entree
+                    des bannieres, qui glissent l'une apres l'autre. */}
+                <div className="modes-bannieres" key={familleModes}>
+                  {MODES_DE_JEU.filter((m) => m.famille === familleModes).map((m, i) => {
+                    const portrait = ORDERS.find((o) => o.key === m.ordre)?.portrait;
+                    return (
+                      <button key={m.titre} className="mode-banniere" style={{ animationDelay: `${i * 60}ms` }}
+                              onClick={() => { setActiveModal(null); m.lancer(); }}
+                              aria-label={`${m.titre} : ${m.phrase}`}>
+                        <span className="mode-banniere-fond" style={{ backgroundImage: `url(${portrait})` }} aria-hidden="true" />
+                        <span className="mode-banniere-texte">
+                          <span className="mode-banniere-titre">{m.titre}</span>
+                          <span className="mode-banniere-phrase">{m.phrase}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-
-                <div className="modes-groupe-titre">En ligne</div>
-                <div className="modes-groupe">
-                  <button className="hub-mode-tuile" onClick={() => { setActiveModal(null); setOnlineError(""); setPhase("online-menu"); }} aria-label="Jouer avec un ami : À distance, avec un code de partie à partager" title="À distance, avec un code de partie à partager">
-                    <img src={ORDERS.find((o) => o.key === "mue")?.portrait} alt="" />
-                    <span>Jouer avec un ami</span>
-                  </button>
-                </div>
-
-                <div className="modes-groupe-titre">Bac à sable</div>
-                <div className="modes-groupe">
-                  <button className="hub-mode-tuile test" onClick={() => { setActiveModal(null); chooseTestMode(); }} aria-label="Mode test : Bac à sable : les 2 camps, tous les Ordres, sans minuteur" title="Bac à sable : les 2 camps, tous les Ordres, sans minuteur">
-                    <img src={ORDERS.find((o) => o.key === "guardian")?.portrait} alt="" />
-                    <span>Mode test</span>
-                  </button>
-                </div>
-
-                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
               </div>
             </div>
           )}
