@@ -2454,6 +2454,16 @@ const APP_STYLES = `
           animation-iteration-count: 1 !important;
           transition-duration: 0.001s !important;
         }
+        /* Le sablier du minuteur echappe a la regle : il ne decore pas, il INFORME — il
+           dit que le temps court pendant qu'on choisit ses Ordres. Le fige, et le joueur
+           croit l'horloge arretee. C'est d'ailleurs ce que le reglage promet : raccourcir
+           les effets de capacite et sauter les ceremonies, pas eteindre les indicateurs.
+           Il tourne plus lentement qu'a l'ordinaire, par egard pour qui a demande moins
+           de mouvement. */
+        .reduced-motion .ordres-sablier {
+          animation-duration: 4.2s !important;
+          animation-iteration-count: infinite !important;
+        }
         /* La regle ci-dessus fige les animations mais laisse les elements en place. Pour
            le brasier de la carte du mode Histoire, on veut en plus qu'il ne reste QUE la
            lueur chaude : les langues de feu et les braises figees en plein vol seraient
@@ -2673,7 +2683,12 @@ const APP_STYLES = `
           padding: 3px 9px 3px 6px; border-radius: 999px;
           background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
         }
-        .hub-icone-coupe { width: 14px; height: 14px; fill: var(--gold-bright); }
+        /* La coupe est une illustration detouree : plus haute que large, on ne la rogne
+           pas, et une ombre portee la detache du bandeau. */
+        .hub-icone-coupe {
+          width: 15px; height: 19px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         .hub-trophees-nombre {
           font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
         }
@@ -2713,8 +2728,16 @@ const APP_STYLES = `
         /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
            l'illustration suit le mouvement. */
         .hub-rouage-img { width: 26px; height: 26px; object-fit: contain; display: block; }
+        /* Le miroir des parties passees : illustration detouree, plus haute que large. */
+        .hub-icone-miroir {
+          width: 21px; height: 26px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
+        /* Le rouage tourne, pas le miroir : il se contente de s'approcher. */
+        .hub-horloge:hover { transform: scale(1.06); }
+        .hub-horloge:active { transform: scale(0.94); }
         .hub-pages {
           flex: 1; width: 100%; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; align-items: center;
@@ -5065,7 +5088,10 @@ const APP_STYLES = `
           color: var(--gold-bright); background: rgba(8,6,12,0.8);
           border: 1px solid rgba(203,164,86,0.45);
         }
-        .trophees-flottant svg { width: 17px; height: 17px; fill: var(--gold-bright); }
+        .trophees-flottant img {
+          width: 16px; height: 21px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* Titre de style en Classe : face aux trophees, a droite de la rangee d'Ordres. */
         .titre-flottant {
           flex: none; max-width: 44vw; padding: 3px 9px; border-radius: 999px;
@@ -5130,6 +5156,18 @@ const APP_STYLES = `
         .revanche-attente { font-size: 11px; color: var(--muted); text-align: center; font-style: italic; }
         /* Code du tournoi : lisible sans crier — l'arbre au-dessous est la vraie vedette,
            contrairement au mode "Jouer avec un ami" où le code occupe l'écran. */
+        /* Le code et son bouton de copie, cote a cote. */
+        .code-tournoi-rang { display: flex; align-items: center; gap: 10px; }
+        /* Bouton de copie : l'icone dit tout, le libelle ne servait qu'a la repeter. */
+        .bouton-copier {
+          flex: none; width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.4);
+          transition: border-color .2s, background .2s, transform .12s;
+        }
+        .bouton-copier:hover { border-color: var(--gold); background: rgba(203,164,86,0.12); }
+        .bouton-copier:active { transform: scale(0.93); }
+        .bouton-copier svg { width: 19px; height: 19px; fill: var(--gold-bright); }
         .code-tournoi {
           font-family: 'Cinzel', serif; font-size: clamp(24px, 7vw, 38px); font-weight: 700;
           letter-spacing: 0.18em; text-indent: 0.18em; color: var(--gold-bright);
@@ -6828,9 +6866,7 @@ export default function Emprise() {
       : (onlineRole === camp ? (stats.trophies || 0) : 0);
     return (
       <span className="trophees-flottant" title="Trophées">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
-        </svg>
+        <img src="/nav/trophee.webp" alt="" />
         {valeur}
       </span>
     );
@@ -7926,6 +7962,15 @@ export default function Emprise() {
   // lettres dans une conversation est plus pénible que sur un clavier. L'API n'existe
   // qu'en contexte sécurisé (https ou localhost) : en cas d'échec on ne dit rien, le
   // code reste affiché en grand juste au-dessus.
+  async function copierCodeTournoi() {
+    if (!tournoiOnlineId) return;
+    try {
+      await navigator.clipboard.writeText(tournoiOnlineId);
+      setCodeCopie(true);
+      setTimeout(() => setCodeCopie(false), 2000);
+    } catch (e) { /* le joueur lira le code a l'ecran */ }
+  }
+
   async function copierCode() {
     if (!onlineGameId) return;
     try {
@@ -9208,9 +9253,7 @@ export default function Emprise() {
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
               </button>
               <span className="hub-trophees" title="Trophées">
-                <svg className="hub-icone-coupe" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4zm-1 4v1a2 2 0 0 0 2 2V8H6zm12 0h-2v3a2 2 0 0 0 2-2V8z" />
-                </svg>
+                <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </span>
             </div>
@@ -9221,9 +9264,7 @@ export default function Emprise() {
               aria-label="Dernières parties classées"
               title="Dernières parties classées"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.2l3.5 2.1-1 1.7L11 13.5V7h2z" />
-              </svg>
+              <img className="hub-icone-miroir" src="/nav/historique.webp" alt="" />
             </button>
             <button
               className="hub-rouage"
@@ -10353,7 +10394,16 @@ export default function Emprise() {
             {statut === "waiting" && (
               <>
                 <div className="sub">Partagez ce code : le tournoi démarre dès que les 8 sièges sont pris.</div>
-                <div className="code-tournoi">{tournoiOnlineId}</div>
+                <div className="code-tournoi-rang">
+                  <div className="code-tournoi">{tournoiOnlineId}</div>
+                  <button className="bouton-copier" onClick={copierCodeTournoi} aria-label="Copier le code" title="Copier le code">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                      <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
                 <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
               </>
             )}
@@ -10628,7 +10678,12 @@ export default function Emprise() {
             <>
               <div className="sub">Partagez ce code avec votre adversaire :</div>
               <div className="game-code-display">{onlineGameId}</div>
-              <button className="landing-link" onClick={copierCode}>Copier le code</button>
+              <button className="bouton-copier" onClick={copierCode} aria-label="Copier le code" title="Copier le code">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                  <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                </svg>
+              </button>
               <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
             </>
           )}
@@ -11279,19 +11334,17 @@ export default function Emprise() {
               </button>
             )}
             {gameOver && boutonRevanche()}
-            {/* En Classe, tant que la partie n'est pas finie, aucun bouton pour partir :
-                un duel classe se joue jusqu'au bout. Le bouton reparait des la fin, ou il
-                sert a lancer la partie suivante. Un adversaire qui cesse de jouer ne peut
-                pas nous retenir pour autant : le forfait tranche tout seul apres deux
-                tours sans coup. */}
-            {!(partieClassee && !gameOver) && (
+            {/* Le bouton de sortie existe dans TOUTES les parties, Classe compris. On a
+                essaye de le retirer en Classe pour empecher de fuir un duel engage : cela
+                enfermait le joueur, sans aucune issue s'il devait s'arreter. La regle
+                passe desormais par le prix et non par la porte — partir compte comme une
+                defaite et coute ses trophees, l'adversaire remporte la partie. */}
             <button
               className={`reset-btn ${gameOver ? "" : "quitter-discret"}`}
               onClick={gameOver ? (storyChapterKey ? continueChapter : (tourney.active ? finishTourneyMatch : tournoiOnlineId ? retournerAuTournoi : reset)) : () => setConfirmQuit(true)}
             >
               {gameOver ? (storyChapterKey ? (storyChapterJustCompleted ? "Voir la récompense" : "Continuer") : (tourney.active ? "Continuer le tournoi" : tournoiOnlineId ? "Retour au tournoi" : "Nouvelle partie")) : (<><svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /><path d="m16 16 5-4-5-4" /><path d="M21 12H9" /></svg>Quitter</>)}
             </button>
-            )}
           </div>
 
           {infoAbility && (
