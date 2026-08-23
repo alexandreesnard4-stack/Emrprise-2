@@ -592,6 +592,7 @@ function titrePrincipal(stats) {
 // peuvent porter le meme nom : c'est un affichage, l'identite reelle reste l'identifiant
 // anonyme de Firebase, invisible et unique.
 const PSEUDO_MAX = 14;
+const PSEUDO_MIN = 3;
 const CLE_PSEUDO = "emprise-pseudo";
 let pseudoMemoire = null; // repli si aucun stockage durable n'est disponible
 
@@ -687,6 +688,7 @@ const NOMS_INTERDITS_PARTOUT = [
   "quatorzemots",
   // Racisme — formes longues, sans derive anodin
   "bougnoule", "bougnol", "crouille", "niakoue", "chinetoque", "chintok", "bamboula",
+  "salaupe", "suicide", "nigg", "fdp", "kys", "kkk", "zog",
   "moricaud", "ratonnade", "negresse", "negrillon", "negroid", "nigger", "nigga", "niggah",
   "niggas", "sandnigger", "wetback", "towelhead", "raghead", "jigaboo", "junglebunny",
   "tarbaby", "chinaman", "whitetrash", "halfbreed",
@@ -760,7 +762,7 @@ const NOMS_INTERDITS_ENTIERS = new Set([
   "pisse", "fesse", "fesses", "foutre", "trique", "sperme", "gode", "viol", "viols",
   "violer", "violeur", "rape", "bordel", "gogol", "mongol", "kys", "cp", "pedo", "loli",
   // Injures racistes courtes, homonymes a risque : le mot entier seulement.
-  "bicot", "melon", "macaque", "singe", "bridee", "sidi", "boche", "rital", "polak",
+  "bicot", "raton", "zob", "retard", "heraut", "melon", "macaque", "singe", "bridee", "sidi", "boche", "rital", "polak",
   "chink", "gook", "coon", "kike", "paki", "honky", "squaw", "redskin", "gyppo", "pikey",
   // Usurpation : se faire passer pour le jeu ou son administration.
   "admin", "administrateur", "modo", "staff", "support", "systeme", "system", "root",
@@ -830,8 +832,12 @@ function reduireListe(liste, options) {
   return [...vus];
 }
 // Un terme reduit a moins de quatre lettres ne discrimine plus rien : il se retrouverait
-// par hasard dans des noms honnetes. On l abandonne plutot que de refuser a tort.
-const TERMES_PARTOUT = VARIANTES_DE_LECTURE.map((o) => reduireListe(NOMS_INTERDITS_PARTOUT, o).filter((t) => t.length >= 4));
+// par hasard dans des noms honnetes. On l abandonne plutot que de refuser a tort — sauf
+// une poignee de sigles dont aucun mot francais ni anglais ne porte les lettres a la
+// suite, verifies un par un.
+const SIGLES_SURS = new Set(["fdp", "kys", "kkk", "zog"]);
+const TERMES_PARTOUT = VARIANTES_DE_LECTURE.map((o) =>
+  reduireListe(NOMS_INTERDITS_PARTOUT, o).filter((t) => t.length >= 4 || SIGLES_SURS.has(t)));
 
 // Codes chiffres a connotation extremiste. Les codes ISOLES (88, 14, 18) restent permis :
 // une annee de naissance, un age, un numero de maillot. Seules les combinaisons sans
@@ -875,6 +881,12 @@ function nomRefuse(nom, durSeulement) {
   JUGEMENTS.set(cle, verdict);
   return verdict;
 }
+const PARURE = /^[x_.0-9-]+|[x_.0-9-]+$/g;
+function noyauDuNom(lecture) {
+  const noyau = lecture.replace(PARURE, "");
+  return noyau.length >= 3 && noyau !== lecture ? noyau : null;
+}
+
 function jugerNom(propre, durSeulement) {
   const chiffre = chiffrerLeNom(propre);
   for (const code of CODES_INTERDITS) if (chiffre.includes(code)) return true;
@@ -893,10 +905,10 @@ function jugerNom(propre, durSeulement) {
       }
     }
     if (durSeulement) continue;
-    const sansQueue = lecture.replace(/[0-9]+$/, "");
     const permis = PERMIS_REDUITS[i];
-    if (permis.includes(lecture) || permis.includes(sansQueue)) continue;
-    if (TERMES_ENTIERS[i].has(lecture) || TERMES_ENTIERS[i].has(sansQueue)) return true;
+    const formes = [lecture, lecture.replace(/[0-9]+$/, ""), noyauDuNom(lecture)].filter(Boolean);
+    if (formes.some((f) => permis.includes(f))) continue;
+    if (formes.some((f) => TERMES_ENTIERS[i].has(f))) return true;
   }
   return false;
 }
@@ -7485,6 +7497,7 @@ export default function Emprise() {
   function validerPseudo() {
     const nom = nettoyerPseudo(pseudoSaisi);
     if (!nom) return false;
+    if (nom.length < PSEUDO_MIN) { setPseudoRefus(`Trois caractères au minimum.`); return false; }
     // Le message ne nomme jamais le mot en cause. Le repeter, c'est le reafficher ; et le
     // designer transforme le champ en oracle ou l'on cherche a tatons la formule qui
     // passe. En cas de faux positif, c'est aussi une accusation adressee a quelqu'un qui
