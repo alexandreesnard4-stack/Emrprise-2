@@ -519,6 +519,52 @@ function titrePrincipal(stats) {
   return t.titres.length ? t.titres[0].combo.nom : null;
 }
 
+// ---------- Pseudo du joueur ----------
+// Range a part des statistiques : celles-ci se remettent a zero depuis les reglages, et
+// perdre son nom en effacant ses parties serait une mauvaise surprise. Deux joueurs
+// peuvent porter le meme nom : c'est un affichage, l'identite reelle reste l'identifiant
+// anonyme de Firebase, invisible et unique.
+const PSEUDO_MAX = 14;
+const CLE_PSEUDO = "emprise-pseudo";
+let pseudoMemoire = null; // repli si aucun stockage durable n'est disponible
+
+// Ne laisse passer que ce qui s'affiche : lettres (accents compris), chiffres, espace,
+// trait d'union, apostrophe. Les caracteres de controle et les espaces multiples, qui
+// permettraient de fabriquer un nom vide ou trompeur, sont ecartes.
+
+// Nettoyage PENDANT la frappe : identique au nettoyage final, sauf qu'un espace en fin
+// de nom survit — sans lui, impossible d'ecrire un nom en deux mots, le trim avalant
+// l'espace des qu'il est tape. Nettoyer a la frappe plutot qu'a la validation permet
+// aussi de compter juste : sinon un caractere refuse mangeait le quota des 14.
+function pseudoEnSaisie(brut) {
+  return String(brut || "")
+    .replace(/[^\p{L}\p{N} '\-]/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/^\s+/, "")
+    .slice(0, PSEUDO_MAX);
+}
+
+function nettoyerPseudo(brut) {
+  return String(brut || "")
+    .replace(/[^\p{L}\p{N} '\-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, PSEUDO_MAX);
+}
+
+function lirePseudo() {
+  try {
+    const v = localStorage.getItem(CLE_PSEUDO);
+    if (v !== null) return nettoyerPseudo(v);
+  } catch (e) { /* stockage bloque : on retombe sur la memoire */ }
+  return pseudoMemoire || "";
+}
+
+function ecrirePseudo(nom) {
+  pseudoMemoire = nom;
+  try { localStorage.setItem(CLE_PSEUDO, nom); } catch (e) { /* non persiste cette session */ }
+}
+
 // ---------- Maitrise des Ordres ----------
 // Un Ordre se maitrise en le jouant : 6 500 parties pour en faire le tour. La progression
 // se lit en pourcentage de ce total, et franchit sept rangs en chemin. Les paliers ne
@@ -5083,6 +5129,30 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 8.5px; font-weight: 600;
           letter-spacing: 0.08em; color: var(--gold); text-transform: none;
         }
+        /* Premiere ouverture : on demande son nom. Ecran plein, au-dessus de tout, sans
+           aucune sortie — c'est la seule fois ou le jeu bloque le passage. */
+        .pseudo-ecran {
+          position: fixed; inset: 0; z-index: 200;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 14px; padding: 32px 26px; box-sizing: border-box;
+          background: #000000; text-align: center;
+        }
+        .pseudo-invite {
+          margin: 0; font-size: 13.5px; color: var(--bone); letter-spacing: 0.02em;
+        }
+        .pseudo-champ {
+          width: 100%; max-width: 300px; box-sizing: border-box;
+          padding: 12px 16px; border-radius: 12px;
+          background: rgba(255,255,255,0.05); border: 1px solid rgba(203,164,86,0.45);
+          font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700;
+          letter-spacing: 0.08em; text-align: center; color: var(--gold-bright);
+          outline: none;
+        }
+        .pseudo-champ:focus { border-color: var(--gold-bright); background: rgba(255,255,255,0.08); }
+        .pseudo-champ::placeholder { color: var(--muted); font-weight: 400; letter-spacing: 0.04em; }
+        .pseudo-reste { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
+        .pseudo-ecran .reset-btn:disabled { opacity: 0.4; cursor: default; }
+
         /* Panneau de profil. Un joueur chevronne peut cumuler trois titres ET la liste
            des dix combos : le panneau defile plutot que de deborder de l'ecran, ce qui
            rendait le bouton Fermer inatteignable sur les petits telephones. */
@@ -6544,6 +6614,18 @@ export default function Emprise() {
     });
   }
   const [activeModal, setActiveModal] = useState(null);
+  const [pseudo, setPseudo] = useState(lirePseudo);
+  const [pseudoSaisi, setPseudoSaisi] = useState("");
+  // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
+  // affichent ainsi exactement la meme chose, comme pour les trophees et les titres.
+  const [pseudosPartie, setPseudosPartie] = useState(null);
+  function validerPseudo() {
+    const nom = nettoyerPseudo(pseudoSaisi);
+    if (!nom) return;
+    ecrirePseudo(nom);
+    setPseudo(nom);
+    setPseudoSaisi("");
+  }
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
   // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
   // abandon adverse passe par le meme canal : elle doit s'annoncer en or, pas en rouge.
@@ -6817,14 +6899,30 @@ export default function Emprise() {
   // Classé. Ces deux-là vivaient en pastilles flottantes calées sur les bords de l'écran,
   // loin du joueur qu'elles décrivent ; elles appartiennent à son nom, elles s'y rangent
   // donc, et les trophées sont assez gros pour se lire d'un coup d'œil en pleine partie.
+  // Comment s'appelle un camp a l'ecran. En ligne, chacun porte son pseudo — la couleur
+  // de l'etiquette dit deja de quel camp il s'agit, le repeter n'apprend rien. Contre un
+  // Echo, le joueur porte son nom et la machine le sien. En duel local, deux humains se
+  // partagent l'appareil et un seul profil : les couleurs restent le seul repere.
+  function nomDuCamp(camp) {
+    const rouge = camp === "red";
+    if (mode === "online") {
+      if (onlineRole === camp) return pseudo || "Vous";
+      return (pseudosPartie && pseudosPartie[camp]) || "Adversaire";
+    }
+    if (mode === "bot") {
+      return rouge
+        ? `Écho · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}`
+        : (pseudo || "Vous");
+    }
+    return rouge ? "Écarlate" : "Azur";
+  }
+
   function labelCamp(camp) {
     const rouge = camp === "red";
     return (
       <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
         <span className="turn-label-nom">
-          {rouge ? "Écarlate" : "Azur"}
-          {mode === "bot" ? (rouge ? ` (Écho) · ${DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}` : " (Vous)") : ""}
-          {mode === "online" ? (onlineRole === camp ? " (Vous)" : " (Adversaire)") : ""}
+          {nomDuCamp(camp)}
           {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
         </span>
         {pucesTrophees(camp)}
@@ -7035,7 +7133,7 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null);
+    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
     // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
     // le leve alors que gameOver etait deja faux : l'effet ne se rejouait pas, le verrou
@@ -7331,6 +7429,7 @@ export default function Emprise() {
       poisonedCells: Array(CELLS).fill(""),
       turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
       gameOver: false,
+      bluePseudo: pseudo || "", redPseudo: "",
     };
     // Un code tiré au hasard peut retomber sur une partie déjà existante : on crée dans
     // une transaction qui échoue si le document existe, et on retire un autre code —
@@ -7382,7 +7481,7 @@ export default function Emprise() {
         if (!snap.exists()) throw new Error("introuvable");
         const data = snap.data();
         if (data.redUid && data.redUid !== myUid) throw new Error("complet");
-        if (!data.redUid) tx.update(ref, { redUid: myUid });
+        if (!data.redUid) tx.update(ref, { redUid: myUid, redPseudo: pseudo || "" });
       });
       setBoardSize(STANDARD_ROWS, STANDARD_COLS);
       setOnlineGameId(code);
@@ -7475,6 +7574,7 @@ export default function Emprise() {
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
+        setPseudosPartie({ blue: data.bluePseudo || "", red: data.redPseudo || "" });
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
@@ -7642,6 +7742,7 @@ export default function Emprise() {
             // Le titre suit le meme chemin que les trophees : recopie dans le document de
             // la partie, il s'affiche a l'identique sur les deux ecrans.
             waitingTitre: titrePrincipal(stats) || "",
+            waitingPseudo: pseudo || "",
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
           return null;
@@ -7675,6 +7776,8 @@ export default function Emprise() {
           redTrophees: stats.trophies || 0,
           blueTitre: lobby.waitingTitre || "",
           redTitre: titrePrincipal(stats) || "",
+          bluePseudo: lobby.waitingPseudo || "",
+          redPseudo: pseudo || "",
         });
         tx.set(lobbyRef, {
           waitingUid: null, waitingAt: null,
@@ -9213,6 +9316,30 @@ export default function Emprise() {
     >
       <style>{APP_STYLES}</style>
 
+      {/* Premiere ouverture : on demande son nom avant toute chose. L'ecran recouvre tout
+          (z-index au-dessus de l'accueil) et ne se ferme qu'une fois un nom donne : le
+          joueur entre dans le jeu avec une identite, jamais sous un nom d'emprunt pose
+          par defaut. Il pourra en changer depuis son profil. */}
+      {!pseudo && (
+        <div className="pseudo-ecran">
+          <h1 className="landing-title">EMPRISE</h1>
+          <p className="pseudo-invite">Quel nom vous donnez-vous ?</p>
+          <input
+            className="pseudo-champ"
+            type="text"
+            value={pseudoSaisi}
+            onChange={(e) => setPseudoSaisi(pseudoEnSaisie(e.target.value))}
+            onKeyDown={(e) => { if (e.key === "Enter") validerPseudo(); }}
+            placeholder="Votre nom"
+            maxLength={PSEUDO_MAX}
+            autoFocus
+            aria-label="Votre nom"
+          />
+          <div className="pseudo-reste">{PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length} caractères restants</div>
+          <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
+        </div>
+      )}
+
       {phase === "landing" && (
         <div className={`landing hub intro-e${introEtape}`}>
           {/* Voile noir de la première étape : recouvre tout, puis s'efface pour laisser
@@ -9225,7 +9352,7 @@ export default function Emprise() {
               {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
                   Il reste en dur pour l'instant, faute de comptes nommes. */}
               <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
-                CARNAGE
+                {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
               </button>
               <span className="hub-trophees" title="Trophées">
@@ -9533,7 +9660,7 @@ export default function Emprise() {
             return (
               <div className="info-overlay" onClick={() => setActiveModal(null)}>
                 <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="info-panel-title">CARNAGE</div>
+                  <div className="info-panel-title">{pseudo}</div>
 
                   <div className="profil-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
@@ -9849,7 +9976,7 @@ export default function Emprise() {
           {/* Le bandeau des deux camps ne se justifie qu'au moment ou l'on compose sa
               main : partout ailleurs il repete une evidence et mange de la hauteur. */}
           {(phase === "select-blue" || phase === "select-red") && <div className="eyebrow">Pacte Azur vs Horde Écarlate</div>}
-          <h1 className="title">EMPRISE</h1>
+          {phase !== "select-blue" && phase !== "select-red" && <h1 className="title">EMPRISE</h1>}
         </>
       )}
 
