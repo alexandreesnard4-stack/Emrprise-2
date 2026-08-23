@@ -10508,7 +10508,6 @@ export default function Emprise() {
                       <div className="ordre-detail-bientot">Arrive prochainement</div>
                       <div className="ordre-detail-nom">{order.name}</div>
                       <OrdreDecompte order={order} />
-                      <p className="ordre-detail-desc">{order.desc}</p>
                     </div>
                   ) : (
                   <div className="ordre-detail-texte">
