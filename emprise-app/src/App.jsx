@@ -3183,8 +3183,8 @@ const APP_STYLES = `
            elle s'annonce en or pour qu'on ne la lise pas comme un probleme. */
         .hub-avis.avis-bon { color: var(--gold-bright); font-weight: 600; }
         /* ---------- Amis ---------- */
-        .hub-pseudo { position: relative; overflow: visible; }
-        .hub-pastille { top: -8px; right: -18px; }
+        /* Deux classes : la regle .chat-badge, ecrite plus bas, gagnerait sinon. */
+        .chat-badge.hub-pastille { position: static; flex: none; margin-left: -4px; align-self: flex-start; }
         .amis-sous-titre {
           width: 100%; text-align: left; margin: 4px 0 0;
           font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
@@ -3474,14 +3474,16 @@ const APP_STYLES = `
            l'image entiere, l'autre fait la transition. */
         .mode-banniere-fond {
           position: absolute; inset: 0; z-index: 0;
-          background-size: cover; background-position: 70% 30%;
-          filter: saturate(0.85) brightness(0.75);
+          background-size: cover; background-position: right center;
+          filter: saturate(0.95) brightness(0.92);
           transition: transform .5s ease, filter .3s;
         }
-        .mode-banniere:hover .mode-banniere-fond { transform: scale(1.04); filter: saturate(1) brightness(0.85); }
+        .mode-banniere:hover .mode-banniere-fond { transform: scale(1.04); filter: saturate(1.05) brightness(1.05); }
+        /* Les bannieres sont peintes sombres a gauche : le voile n a plus qu a assurer le
+           contraste du titre, sans eteindre le decor. */
         .mode-banniere::after {
           content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-          background: linear-gradient(90deg, #120e16 0%, #120e16 34%, rgba(18,14,22,0.82) 52%, rgba(18,14,22,0.15) 100%);
+          background: linear-gradient(90deg, #120e16 0%, rgba(18,14,22,0.92) 30%, rgba(18,14,22,0.55) 55%, rgba(18,14,22,0) 100%);
         }
         .mode-banniere-texte {
           position: relative; z-index: 2;
@@ -6955,42 +6957,6 @@ export default function Emprise() {
   const [adversaireUid, setAdversaireUid] = useState(null);     // l'uid d'en face, pour l'ajouter en fin de partie
   const [amitieAvis, setAmitieAvis] = useState("");
 
-  // Le profil public : cree une fois pour toutes des que l'identite et le nom sont
-  // connus, avec son code ami tire dans une transaction qui echoue si le code est pris.
-  // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
-  // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
-  // pas en place, tout echoue en silence : la section Amis reste simplement vide.
-  useEffect(() => {
-    if (!myUid || !pseudo) return;
-    let annule = false;
-    (async () => {
-      try {
-        const ref = doc(db, "users", myUid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          const d = snap.data();
-          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo, vuLe: serverTimestamp() });
-          if (!annule) setMonCodeAmi(d.codeAmi || "");
-          return;
-        }
-        for (let essai = 0; essai < 5; essai++) {
-          const code = makeCodeAmi();
-          try {
-            await runTransaction(db, async (tx) => {
-              const idx = doc(db, "codesAmi", code);
-              const pris = await tx.get(idx);
-              if (pris.exists()) throw new Error("code-pris");
-              tx.set(ref, { pseudo, codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
-              tx.set(idx, { uid: myUid });
-            });
-            if (!annule) setMonCodeAmi(code);
-            return;
-          } catch (e) { if (e.message !== "code-pris") throw e; }
-        }
-      } catch (e) { /* regles absentes ou reseau : pas d'amis cette fois */ }
-    })();
-    return () => { annule = true; };
-  }, [myUid]);
 
   // Mes quatre ecoutes : le profil (pour le code), les amis, les demandes, les defis.
   useEffect(() => {
@@ -7032,7 +6998,10 @@ export default function Emprise() {
 
   // Le defi en cours de validite, s'il y en a un : le plus recent, pas perime, pas ignore.
   const defiRecu = invitationsRecues
-    .filter((i) => i.code && Date.now() - i.t < DEFI_PERIME_MS && defisIgnores[i.uid] !== i.t)
+    .filter((i) => /^[A-HJ-NP-Z2-9]{5}$/.test(i.code)
+      && amis.some((a) => a.uid === i.uid)
+      && Date.now() - i.t < DEFI_PERIME_MS
+      && defisIgnores[i.uid] !== i.t)
     .sort((a, b) => b.t - a.t)[0] || null;
   const pastilleAmis = demandesRecues.length + (defiRecu ? 1 : 0);
 
@@ -7062,6 +7031,9 @@ export default function Emprise() {
     const b = writeBatch(db);
     b.delete(doc(db, "users", myUid, "amis", uidAutre));
     b.delete(doc(db, "users", uidAutre, "amis", myUid));
+    // Les defis en cours tombent avec le lien, dans les deux sens.
+    b.delete(doc(db, "users", myUid, "invitations", uidAutre));
+    b.delete(doc(db, "users", uidAutre, "invitations", myUid));
     await b.commit();
   }
   async function ajouterParCode() {
@@ -7378,6 +7350,45 @@ export default function Emprise() {
   const [pseudoSaisi, setPseudoSaisi] = useState("");
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
+
+  // Le profil public : cree une fois pour toutes des que l'identite et le nom sont
+  // connus, avec son code ami tire dans une transaction qui echoue si le code est pris.
+  // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
+  // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
+  // pas en place, tout echoue en silence : la section Amis reste simplement vide.
+  const profilSyncRef = useRef("");
+  useEffect(() => {
+    if (!myUid || !pseudo || profilSyncRef.current === myUid + "/" + pseudo) return;
+    profilSyncRef.current = myUid + "/" + pseudo;
+    let annule = false;
+    (async () => {
+      try {
+        const ref = doc(db, "users", myUid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const d = snap.data();
+          await updateDoc(ref, d.pseudo === pseudo ? { vuLe: serverTimestamp() } : { pseudo, vuLe: serverTimestamp() });
+          if (!annule) setMonCodeAmi(d.codeAmi || "");
+          return;
+        }
+        for (let essai = 0; essai < 5; essai++) {
+          const code = makeCodeAmi();
+          try {
+            await runTransaction(db, async (tx) => {
+              const idx = doc(db, "codesAmi", code);
+              const pris = await tx.get(idx);
+              if (pris.exists()) throw new Error("code-pris");
+              tx.set(ref, { pseudo, codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp() });
+              tx.set(idx, { uid: myUid });
+            });
+            if (!annule) setMonCodeAmi(code);
+            return;
+          } catch (e) { if (e.message !== "code-pris") throw e; }
+        }
+      } catch (e) { profilSyncRef.current = ""; /* regles absentes ou reseau : on retentera */ }
+    })();
+    return () => { annule = true; };
+  }, [myUid, pseudo]);
   // A l ouverture du profil, les fiches des amis se rafraichissent ; a la fermeture,
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
   useEffect(() => {
@@ -7422,21 +7433,21 @@ export default function Emprise() {
     { cle: "entrainement", nom: "Entraînement" },
   ];
   const MODES_DE_JEU = [
-    { famille: "solo", titre: "Contre un Écho", phrase: "4 niveaux de difficulté", ordre: "eveil",
+    { famille: "solo", titre: "Contre un Écho", phrase: "4 niveaux de difficulté", image: "/modes/echo.webp",
       lancer: () => chooseMode("bot") },
-    { famille: "solo", titre: "Mode Histoire", phrase: "8 chapitres, un par Ordre", ordre: "cendres",
+    { famille: "solo", titre: "Mode Histoire", phrase: "8 chapitres, un par Ordre", image: "/modes/histoire.webp",
       lancer: () => setPhase("chapters") },
-    { famille: "solo", titre: "Tournoi", phrase: "8 Commandants, un seul champion", ordre: "maudits",
+    { famille: "solo", titre: "Tournoi", phrase: "8 Commandants, un seul champion", image: "/modes/tournoi.webp",
       lancer: () => setPhase("tourney-menu") },
-    { famille: "solo", titre: "Confluence", phrase: "8 Ordres draftés, même main pour les deux", ordre: "portee",
+    { famille: "solo", titre: "Confluence", phrase: "8 Ordres draftés, même main pour les deux", image: "/modes/confluence.webp",
       lancer: () => chooseConfluenceBot() },
-    { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", ordre: "guardian",
+    { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", image: "/modes/local.webp",
       lancer: () => chooseMode("local") },
-    { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", ordre: "mue",
+    { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", image: "/modes/confluence2.webp",
       lancer: () => chooseConfluenceLocal() },
-    { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", ordre: "devoreuse",
+    { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", image: "/modes/ami.webp",
       lancer: () => { setOnlineError(""); setPhase("online-menu"); } },
-    { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", ordre: "scribes",
+    { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", image: "/modes/bac.webp",
       lancer: () => chooseTestMode() },
   ];
   // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
@@ -10211,12 +10222,13 @@ export default function Emprise() {
               <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
                 {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
-                {/* Demandes d'ami et defis recus : la pastille se pose sur la porte du
-                    profil, la ou ils attendent. */}
-                {pastilleAmis > 0 && (
-                  <span className="chat-badge hub-pastille" aria-label={`${pastilleAmis} demande${pastilleAmis > 1 ? "s" : ""} d'ami`}>{pastilleAmis}</span>
-                )}
               </button>
+              {/* Demandes d'ami et defis recus : la pastille se pose contre la porte du
+                  profil, la ou ils attendent. A cote du bouton et non dedans : il rogne
+                  son contenu pour couper les noms longs, elle y serait coupee aussi. */}
+              {pastilleAmis > 0 && (
+                <span className="chat-badge hub-pastille" role="status" aria-label={`${pastilleAmis} demande${pastilleAmis > 1 ? "s" : ""} d'ami`}>{pastilleAmis}</span>
+              )}
               <span className="hub-trophees" title="Trophées">
                 <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
@@ -10696,12 +10708,11 @@ export default function Emprise() {
                     des bannieres, qui glissent l'une apres l'autre. */}
                 <div className="modes-bannieres" key={familleModes}>
                   {MODES_DE_JEU.filter((m) => m.famille === familleModes).map((m, i) => {
-                    const portrait = ORDERS.find((o) => o.key === m.ordre)?.portrait;
                     return (
                       <button key={m.titre} className="mode-banniere" style={{ animationDelay: `${i * 60}ms` }}
                               onClick={() => { setActiveModal(null); m.lancer(); }}
                               aria-label={`${m.titre} : ${m.phrase}`}>
-                        <span className="mode-banniere-fond" style={{ backgroundImage: `url(${portrait})` }} aria-hidden="true" />
+                        <span className="mode-banniere-fond" style={{ backgroundImage: `url(${m.image})` }} aria-hidden="true" />
                         <span className="mode-banniere-texte">
                           <span className="mode-banniere-titre">{m.titre}</span>
                           <span className="mode-banniere-phrase">{m.phrase}</span>
