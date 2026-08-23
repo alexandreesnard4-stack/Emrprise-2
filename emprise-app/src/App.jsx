@@ -3888,6 +3888,21 @@ const APP_STYLES = `
         .cer-sb { color: var(--blue-bright); } .cer-sr { color: var(--red-bright); }
         .cer-sep { color: var(--muted); font-size: 18px; }
         .cer-piste { width: 100%; }
+        /* Bilan de trophees d une partie classee : sous le score, avant les boutons. */
+        .cer-trophees {
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 5px 14px 5px 10px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700; line-height: 1;
+          border: 1px solid; animation: cer-trophees-entree .5s cubic-bezier(.2,.9,.3,1.2) .35s both;
+        }
+        .cer-trophees img { width: 18px; height: 24px; object-fit: contain; display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+        .cer-trophees.gain { color: var(--gold-bright); border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.1); }
+        .cer-trophees.perte { color: var(--red-bright); border-color: rgba(224,101,90,0.5); background: rgba(224,101,90,0.1); }
+        @keyframes cer-trophees-entree {
+          from { opacity: 0; transform: scale(0.6); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .reduced-motion .cer-trophees { animation: none; }
         .cer-recap .bdf-cote { transition: none; }
         .cer-continuer { width: 100%; }
         .cer-braises { position: absolute; inset: 0; pointer-events: none; }
@@ -6486,6 +6501,7 @@ const APP_STYLES = `
            ou bouger le plateau reste dessous. Le panneau est un cul-de-sac tactile. */
         .info-overlay {
           position: fixed; inset: 0; background: rgba(8,6,12,0.72); display: flex; align-items: center;
+          touch-action: none; overscroll-behavior: contain;
           /* z-index 90 et non 50 : les vignettes d'Ordre sont a 66 (elles doivent passer
              au-dessus du voile de l'eventail, lui-meme a 65). A 50, elles traversaient
              donc le panneau : en Confluence, ou chaque camp aligne huit vignettes, elles
@@ -6497,6 +6513,7 @@ const APP_STYLES = `
         .info-panel {
           background: var(--panel); border: 1px solid var(--gold); border-radius: 16px; padding: 20px;
           max-width: 340px; width: 100%; max-height: 88dvh; overflow-y: auto;
+          touch-action: pan-y; overscroll-behavior: contain;
           display: flex; flex-direction: column; align-items: stretch; gap: 12px;
           box-shadow: 0 20px 50px rgba(0,0,0,0.6);
         }
@@ -6828,6 +6845,11 @@ export default function Emprise() {
   // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
   // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
   const [ordreAttente, setOrdreAttente] = useState(null);
+  // Toute entree dans l ecran d attente se voit attribuer un portrait, pas seulement la
+  // recherche : l attente des Ordres de l adversaire en a un aussi.
+  useEffect(() => {
+    if (phase === "online-waiting") setOrdreAttente((o) => o || AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
+  }, [phase]);
   // Appariements déjà consommés par cet appareil : garde synchrone contre une seconde
   // lecture du même champ (l'écouteur se déclenche à chaque écriture du document).
   const matchsConsommesRef = useRef(new Set());
@@ -6998,6 +7020,15 @@ export default function Emprise() {
     });
   }
   const [activeModal, setActiveModal] = useState(null);
+  // Sous un panneau, la page ne glisse plus au doigt : on ouvrait le « i » en partie et
+  // le plateau bougeait derriere le voile.
+  useEffect(() => {
+    const ouvert = !!infoAbility || !!activeModal;
+    if (!ouvert) return;
+    const avant = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = avant; };
+  }, [infoAbility, activeModal]);
   const [pseudo, setPseudo] = useState(lirePseudo);
   const [pseudoSaisi, setPseudoSaisi] = useState("");
   const [editionPseudo, setEditionPseudo] = useState(false);
@@ -8986,6 +9017,17 @@ export default function Emprise() {
         setPhase("select-blue");
       }
     }
+  }
+
+  function bilanTrophees() {
+    if (!partieClassee || !onlineRole || !gameOver) return null;
+    const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
+    return (
+      <div className={`cer-trophees ${gain >= 0 ? "gain" : "perte"}`} aria-label={`${gain >= 0 ? "Gain" : "Perte"} de ${Math.abs(gain)} trophées`}>
+        <img src="/nav/trophee.webp" alt="" />
+        <span>{gain >= 0 ? "+" : "−"}{Math.abs(gain)}</span>
+      </div>
+    );
   }
 
   // Arène affichée sur le plateau : le sélecteur temporaire prime (il sert justement à
@@ -11248,6 +11290,13 @@ export default function Emprise() {
               <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
             </>
           )}
+          {!fileAttente && ordreAttente && (
+            <div className="attente-ordre">
+              <div className="attente-ordre-cadre">
+                <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+              </div>
+            </div>
+          )}
           {!fileAttente && <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
@@ -11971,6 +12020,7 @@ export default function Emprise() {
                 <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
+              {bilanTrophees()}
               {boutonRevanche()}
               <button className="reset-btn cer-continuer" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); }}>
                 {tournoiOnlineId ? "Retour au tournoi" : "Continuer"}
@@ -12003,6 +12053,7 @@ export default function Emprise() {
               <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
+            {bilanTrophees()}
             {boutonRevanche()}
             <button className="defeat-button" onClick={tournoiOnlineId ? retournerAuTournoi : () => { setCeremonieFin(null); setCerPose(false); reset(); }}>
               {tournoiOnlineId ? "Retour au tournoi" : mode === "online" ? "Retour au menu" : "Recommencer"}
