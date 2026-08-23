@@ -186,18 +186,19 @@ function OrdreDecompte({ order }) {
     return <div className="ordre-detail-bientot-proche">Son heure est venue.</div>;
   }
   const total = Math.floor(reste / 1000);
+  const jours = Math.floor(total / 86400);
   const cadrans = [
-    [Math.floor(total / 86400), "j", "jours"],
-    [Math.floor((total % 86400) / 3600), "h", "heures"],
-    [Math.floor((total % 3600) / 60), "m", "minutes"],
-    [total % 60, "s", "secondes"],
+    [jours, "j"],
+    [Math.floor((total % 86400) / 3600), "h"],
+    [Math.floor((total % 3600) / 60), "m"],
+    [total % 60, "s"],
   ];
   return (
-    <div className="ordre-decompte" role="timer" aria-label={`Disponible dans ${cadrans[0][0]} jours`}>
-      {cadrans.map(([valeur, court, long]) => (
-        <div key={court} className="ordre-decompte-case" title={long}>
-          <b>{String(valeur).padStart(2, "0")}</b><span>{court}</span>
-        </div>
+    <div className="ordre-decompte" role="timer" aria-label={`Disponible dans ${jours} jours`}>
+      {cadrans.map(([valeur, unite]) => (
+        <span key={unite}>
+          <b>{String(valeur).padStart(2, "0")}</b>{unite}
+        </span>
       ))}
     </div>
   );
@@ -3742,22 +3743,18 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.08em; color: var(--gold-bright); margin: 6px 0;
         }
-        /* La colonne de droite du panneau est etroite : quatre cadrans en ligne s y
-           chevauchaient. Deux rangees de deux, en grille. */
+        /* Une seule ligne, sans cadre : quatre cases encadrees faisaient un tableau de
+           bord pour une information unique. Chiffres tabulaires, sinon la largeur danse
+           a chaque seconde. */
         .ordre-decompte {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
-          margin: 10px 0 4px; width: 100%;
+          display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+          margin: 8px 0 6px;
+          font-size: 10px; color: var(--muted); letter-spacing: 0.04em;
         }
-        .ordre-decompte-case {
-          min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 2px;
-          padding: 6px 2px; border-radius: 8px; box-sizing: border-box;
-          background: rgba(255,255,255,0.04); border: 1px solid rgba(203,164,86,0.22);
+        .ordre-decompte b {
+          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
+          color: var(--gold-bright); font-variant-numeric: tabular-nums; margin-right: 1px;
         }
-        .ordre-decompte-case b {
-          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; line-height: 1;
-          color: var(--gold-bright); font-variant-numeric: tabular-nums;
-        }
-        .ordre-decompte-case span { font-size: 9px; color: var(--muted); }
         .ordre-detail-desc {
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
