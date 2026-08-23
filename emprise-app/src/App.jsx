@@ -3137,12 +3137,13 @@ const APP_STYLES = `
         .hub-trophees-nombre {
           font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
         }
-        /* Deux etages : le bouton Amis seul en haut — sa pastille deborde, elle a besoin
-           d air autour d elle — l historique et les reglages en dessous. */
+        /* Deux rangs : l historique et les reglages en haut, les amis dessous, cales a
+           droite pour tomber sous le rouage. L ecart de 10 px entre les rangs laisse a la
+           pastille la place de deborder par le haut sans toucher le bouton du dessus. */
         .hub-haut-boutons {
-          display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: none;
+          display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none;
         }
-        .hub-haut-rang { display: flex; gap: 8px; }
+        .hub-haut-rang { display: flex; gap: 12px; }
         .histo-vide { text-align: center; padding: 14px 6px 6px; color: var(--muted); font-size: 12.5px; }
         .histo-vide p { margin: 0 0 4px; }
         .histo-vide-sous { font-size: 11px; }
@@ -3168,19 +3169,19 @@ const APP_STYLES = `
         .histo-sr { color: var(--red-bright); }
         .histo-quand { flex: none; }
         .hub-rouage {
-          width: 42px; height: 42px; flex: none;
+          width: 48px; height: 48px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
           border-radius: 10px; cursor: pointer; padding: 0;
           transition: border-color .2s, transform .35s ease;
         }
-        .hub-rouage svg { width: 22px; height: 22px; fill: rgba(203,164,86,0.75); }
+        .hub-rouage svg { width: 25px; height: 25px; fill: rgba(203,164,86,0.75); }
         /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
            l'illustration suit le mouvement. */
-        .hub-rouage-img { width: 30px; height: 30px; object-fit: contain; display: block; }
+        .hub-rouage-img { width: 34px; height: 34px; object-fit: contain; display: block; }
         /* Le miroir des parties passees : illustration detouree, plus haute que large. */
         .hub-icone-miroir {
-          width: 25px; height: 31px; object-fit: contain; display: block;
+          width: 29px; height: 36px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
@@ -3294,7 +3295,7 @@ const APP_STYLES = `
         .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: none; }
         .hub-rouage.hub-amis:active { transform: scale(0.92); }
         .hub-icone-amis {
-          width: 33px; height: 33px; object-fit: contain; display: block;
+          width: 38px; height: 38px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         .chat-badge.hub-pastille {
@@ -3309,9 +3310,14 @@ const APP_STYLES = `
           background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
         }
         .amis-ligne-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
-        .amis-nom {
+        /* Le nom se coupe, la puce de trophees non : elle vivait DANS l element tronque
+           et disparaissait avec la fin du nom — sur une ligne de demande, plus etroite,
+           meme un nom court perdait ses trophees. */
+        .amis-nom { display: flex; align-items: center; gap: 0; min-width: 0; }
+        .amis-nom-texte {
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
           color: var(--gold-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          min-width: 0;
         }
         .amis-code { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .amis-btn {
@@ -3331,8 +3337,8 @@ const APP_STYLES = `
         .amis-croix:hover { opacity: 1; border-color: rgba(224,101,90,0.5); }
         .amis-croix svg { width: 12px; height: 12px; stroke: var(--bone); stroke-width: 2; fill: none; stroke-linecap: round; }
         .amis-trophees {
-          display: inline-flex; align-items: center; gap: 3px; margin-left: 7px;
-          font-size: 11px; color: var(--gold); vertical-align: middle;
+          display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; flex: none;
+          font-size: 11px; color: var(--gold);
         }
         .amis-trophees img { width: 11px; height: 14px; object-fit: contain; }
         .amis-ligne.bloque { opacity: 0.7; }
@@ -10663,25 +10669,6 @@ export default function Emprise() {
               </span>
             </div>
             <span className="hub-haut-boutons">
-            {/* Les amis ont leur propre porte, seule sur son etage : sa pastille deborde
-                du bouton, elle ne doit rien avoir a cote qui la serre. Elle se pose
-                PAR-DESSUS l'icone, coin superieur droit — bouton en position relative,
-                pastille en absolute, et aucun ancetre qui rogne. */}
-            <button
-              className="hub-rouage hub-amis"
-              onClick={() => setActiveModal("amis")}
-              aria-haspopup="dialog"
-              aria-label={pastilleAmis > 0
-                ? `Amis, ${pastilleAmis} en attente`
-                : "Amis"}
-              title="Amis"
-            >
-              <img className="hub-icone-amis" src="/icones/amis.webp" alt="Amis" width="33" height="33" />
-              {pastilleAmis > 0 && (
-                <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
-              )}
-            </button>
-            {/* Second etage : l historique et les reglages, cote a cote. */}
             <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
@@ -10704,6 +10691,24 @@ export default function Emprise() {
               </svg>
             </button>
             </span>
+            {/* Les amis ont leur propre porte, sous le rouage des reglages. La pastille
+                se pose PAR-DESSUS l'icone, coin superieur droit : bouton en position
+                relative, pastille en absolute, et aucun ancetre qui rogne. L'ecart entre
+                les deux rangs lui laisse la place de deborder sans toucher le rouage. */}
+            <button
+              className="hub-rouage hub-amis"
+              onClick={() => setActiveModal("amis")}
+              aria-haspopup="dialog"
+              aria-label={pastilleAmis > 0
+                ? `Amis, ${pastilleAmis} en attente`
+                : "Amis"}
+              title="Amis"
+            >
+              <img className="hub-icone-amis" src="/icones/amis.webp" alt="Amis" width="38" height="38" />
+              {pastilleAmis > 0 && (
+                <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
+              )}
+            </button>
             </span>
           </header>
 
@@ -11142,7 +11147,7 @@ export default function Emprise() {
                         <div key={d.uid} className="amis-ligne">
                           <div className="amis-ligne-texte">
                             <span className="amis-nom">
-                              {nom}
+                              <span className="amis-nom-texte">{nom}</span>
                               {f && f.trophees > 0 && (
                                 <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
                               )}
@@ -11200,7 +11205,7 @@ export default function Emprise() {
                       return (
                         <div key={b.uid} className="amis-ligne bloque">
                           <div className="amis-ligne-texte">
-                            <span className="amis-nom">{nomAffiche(f && f.pseudo)}</span>
+                            <span className="amis-nom"><span className="amis-nom-texte">{nomAffiche(f && f.pseudo)}</span></span>
                             <span className="amis-code">{codeAmiLisible(f && f.codeAmi)}</span>
                           </div>
                           <button className="amis-btn" onClick={() => debloquerJoueur(b.uid)}>Débloquer</button>
