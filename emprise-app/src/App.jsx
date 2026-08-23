@@ -15,23 +15,32 @@ function makeGameCode() {
 }
 
 // ---------- Amis ----------
-// Le code ami : six caracteres, meme alphabet que le code de partie (ni 0/O ni 1/I, il
-// se dicte au telephone sans hesiter). Six et non cinq, pour qu'on ne le confonde jamais
-// avec un code de partie dans le champ « Rejoindre ». Tire au hasard et STOCKE (dans le
-// profil et dans un index /codesAmi), pas derive de l'identite : un hachage ne se
-// « retire » pas quand deux joueurs tombent sur le meme.
+// L'identifiant du joueur : six chiffres, precedes d'un dièse. Les pseudos ne sont pas
+// uniques — deux CARNAGE peuvent coexister — et c'est le numero qui distingue.
+//
+// Des CHIFFRES et non des lettres, pour trois raisons : sur telephone le champ appelle le
+// pave numerique au lieu du clavier complet ; un nombre se dicte de tete, en deux groupes
+// de trois ; et aucun caractere ne prete a confusion (pas de O contre 0, de I contre 1).
+// Six chiffres font un million d'identifiants : passer a sept est une ligne a changer.
+//
+// Tire au hasard et STOCKE (dans le profil et dans l'index /codesAmi), jamais derive de
+// l'identite : un hachage ne se « retire » pas quand deux joueurs tombent sur le meme.
+// Au hasard et non a la suite : un numero sequentiel dirait le nombre de joueurs et
+// l'ordre d'arrivee, et exigerait un compteur partage que tout le monde se disputerait.
+const IDENTIFIANT_CHIFFRES = 6;
 function makeCodeAmi() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < IDENTIFIANT_CHIFFRES; i++) code += Math.floor(Math.random() * 10);
   return code;
 }
-// « K7P-Q2M » se lit mieux que « K7PQ2M » ; le trait ne fait pas partie du code.
+// Affichage : le dièse fait partie de la lecture, jamais du code stocke.
 function codeAmiLisible(code) {
-  return code ? code.slice(0, 3) + "-" + code.slice(3) : "";
+  return code ? "#" + code : "";
 }
+// A la saisie, le joueur n'a que des chiffres a taper : le dièse est deja a l'ecran. On
+// le tolere quand meme s'il colle un identifiant complet.
 function nettoyerCodeAmi(brut) {
-  return String(brut || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  return String(brut || "").replace(/[^0-9]/g, "").slice(0, IDENTIFIANT_CHIFFRES);
 }
 const AMIS_MAX = 20;                       // borne les lectures a l'ouverture du profil
 const DEFI_PERIME_MS = 10 * 60 * 1000;     // un defi non releve en dix minutes s'efface
@@ -3268,13 +3277,29 @@ const APP_STYLES = `
         .amis-vide { font-size: 11.5px; line-height: 1.45; color: var(--muted); text-align: center; padding: 4px 6px; }
         .amis-note { font-size: 10.5px; line-height: 1.4; color: var(--muted); text-align: center; }
         .amis-ajout { display: flex; align-items: center; gap: 8px; width: 100%; }
-        .amis-ajout .amis-champ { flex: 1; width: auto; min-width: 0; margin: 0; font-size: 18px; padding: 9px 6px; }
+        /* Le dièse et le champ ne font qu'un cadre : le joueur voit « # » puis tape. */
+        .amis-champ-cadre {
+          flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px;
+          padding: 0 4px 0 10px; border-radius: 10px;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.35);
+        }
+        .amis-champ-cadre:focus-within { border-color: var(--gold); }
+        .amis-diese {
+          flex: none; font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700;
+          color: var(--gold); line-height: 1;
+        }
+        .amis-ajout .amis-champ {
+          flex: 1; width: auto; min-width: 0; margin: 0; font-size: 18px; padding: 9px 2px;
+          background: none; border: none; letter-spacing: 0.14em;
+        }
+        .amis-ajout .amis-champ:focus { border: none; }
         .amis-ajout-btn { width: auto; flex: none; padding-inline: 16px; }
         .amis-avis { font-size: 11.5px; line-height: 1.4; color: var(--red-bright); text-align: center; }
         .amis-avis.bon { color: var(--gold-bright); }
         .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
         .amis-mon-code-valeur {
           font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
+          font-variant-numeric: tabular-nums;
           color: var(--gold-bright); text-shadow: 0 0 18px rgba(203,164,86,0.4);
           padding: 8px 14px; border-radius: 12px;
           background: var(--panel); border: 1.5px solid rgba(203,164,86,0.5);
@@ -7142,13 +7167,13 @@ export default function Emprise() {
   }
   async function ajouterParCode() {
     const code = nettoyerCodeAmi(codeAmiSaisi);
-    if (code.length !== 6 || !myUid) return;
+    if (code.length !== IDENTIFIANT_CHIFFRES || !myUid) return;
     try {
       if (amis.length >= AMIS_MAX) { setAvisAmis({ texte: `Liste pleine : ${AMIS_MAX} amis au plus.`, bon: false }); return; }
       const idx = await getDoc(doc(db, "codesAmi", code));
-      if (!idx.exists()) { setAvisAmis({ texte: "Code ami introuvable.", bon: false }); return; }
+      if (!idx.exists()) { setAvisAmis({ texte: "Identifiant introuvable.", bon: false }); return; }
       const uid = String(idx.data().uid || "");
-      if (uid === myUid) { setAvisAmis({ texte: "C'est votre propre code.", bon: false }); return; }
+      if (uid === myUid) { setAvisAmis({ texte: "C'est votre propre identifiant.", bon: false }); return; }
       await chargerFiches([uid], true);
       const nom = nomAffiche(fichesRef.current[uid]?.pseudo);
       if (amis.some((a) => a.uid === uid)) { setAvisAmis({ texte: `${nom} est déjà votre ami.`, bon: false }); return; }
@@ -7165,7 +7190,7 @@ export default function Emprise() {
   async function copierCodeAmi() {
     if (!monCodeAmi) return;
     try {
-      await navigator.clipboard.writeText(monCodeAmi);
+      await navigator.clipboard.writeText("#" + monCodeAmi);
       setCodeAmiCopie(true);
       setTimeout(() => setCodeAmiCopie(false), 2000);
     } catch (e) { /* le joueur lira le code a l'ecran */ }
@@ -7174,7 +7199,7 @@ export default function Emprise() {
   // n'a rien a recopier. Ailleurs, on se rabat sur la copie.
   async function partagerCodeAmi() {
     if (!monCodeAmi) return;
-    const texte = `Rejoins-moi sur EMPRISE, mon code ami : ${monCodeAmi}`;
+    const texte = `Rejoins-moi sur EMPRISE, mon identifiant : #${monCodeAmi}`;
     if (navigator.share) {
       try { await navigator.share({ text: texte }); return; } catch (e) { /* annule : on copie */ }
     }
@@ -7469,13 +7494,13 @@ export default function Emprise() {
   const [pseudoRefus, setPseudoRefus] = useState("");
 
   // Le profil public : cree une fois pour toutes des que l'identite et le nom sont
-  // connus, avec son code ami tire dans une transaction qui echoue si le code est pris.
+  // connus, avec son identifiant tire dans une transaction qui echoue s'il est deja pris.
   // Ensuite, a chaque lancement, on y pousse le nom du moment et l'heure de passage
   // (c'est ce qui fait le « En ligne » chez les amis). Si les regles Firestore ne sont
   // pas en place, tout echoue en silence : la section Amis reste simplement vide.
   // Une nouvelle tentative apres un echec : sans elle, remettre la marque a zero ne
   // servait a rien, l'effet ne se rejouait pas (ses dependances n'avaient pas bouge) et
-  // le joueur restait sans code ami jusqu'au prochain lancement.
+  // le joueur restait sans identifiant jusqu'au prochain lancement.
   const [essaiProfil, setEssaiProfil] = useState(0);
   const profilSyncRef = useRef("");
   useEffect(() => {
@@ -10760,45 +10785,52 @@ export default function Emprise() {
                     </>
                   )}
                   {amis.length === 0 ? (
-                    <div className="amis-vide">Aucun ami pour l'instant. Partagez votre code, ou ajoutez votre prochain adversaire en fin de partie.</div>
+                    <div className="amis-vide">Aucun ami pour l'instant. Partagez votre identifiant, ou ajoutez votre prochain adversaire en fin de partie.</div>
                   ) : (
                     <div className="amis-liste">{amis.map((a) => ligneAmi(a, false))}</div>
                   )}
                   <div className="amis-sous-titre">Ajouter un ami</div>
                   <div className="amis-ajout">
-                    <input
-                      className="join-code-input amis-champ"
-                      placeholder="CODE AMI"
-                      maxLength={6}
-                      value={codeAmiSaisi}
-                      onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
-                      autoCapitalize="characters"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      aria-label="Code ami"
-                    />
-                    <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== 6} onClick={ajouterParCode}>Ajouter</button>
+                    {/* Le dièse est pose a l'ecran, hors du champ : le joueur n'a que les
+                        chiffres a entrer. inputMode numeric appelle le pave numerique du
+                        telephone, bien plus rapide que le clavier complet. */}
+                    <div className="amis-champ-cadre">
+                      <span className="amis-diese" aria-hidden="true">#</span>
+                      <input
+                        className="join-code-input amis-champ"
+                        placeholder="000000"
+                        maxLength={IDENTIFIANT_CHIFFRES}
+                        value={codeAmiSaisi}
+                        onChange={(e) => { setCodeAmiSaisi(nettoyerCodeAmi(e.target.value)); setAvisAmis(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") ajouterParCode(); }}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Identifiant du joueur"
+                      />
+                    </div>
+                    <button className="reset-btn amis-ajout-btn" disabled={nettoyerCodeAmi(codeAmiSaisi).length !== IDENTIFIANT_CHIFFRES} onClick={ajouterParCode}>Ajouter</button>
                   </div>
                   {avisAmis && <div className={`amis-avis ${avisAmis.bon ? "bon" : ""}`} role="status">{avisAmis.texte}</div>}
-                  <div className="amis-sous-titre">Votre code ami</div>
+                  <div className="amis-sous-titre">Votre identifiant</div>
                   {monCodeAmi ? (
                     <>
                       <div className="amis-mon-code">
                         <span className="amis-mon-code-valeur">{codeAmiLisible(monCodeAmi)}</span>
-                        <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier le code" title="Copier le code">
+                        <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
                             <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                           </svg>
                         </button>
                       </div>
-                      <div className="code-copie">{codeAmiCopie ? "Code copié" : ""}</div>
-                      <button className="reset-btn" onClick={partagerCodeAmi}>Envoyer mon code</button>
-                      <div className="amis-note">Votre code et vos amis sont liés à cet appareil, comme vos trophées.</div>
+                      <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
+                      <button className="reset-btn" onClick={partagerCodeAmi}>Envoyer mon identifiant</button>
+                      <div className="amis-note">Votre identifiant et vos amis sont liés à cet appareil, comme vos trophées.</div>
                     </>
                   ) : (
-                    <div className="amis-vide">Connexion en cours… votre code apparaîtra ici.</div>
+                    <div className="amis-vide">Connexion en cours… votre identifiant apparaîtra ici.</div>
                   )}
 
                   <div className="profil-section-titre">Le joueur que vous êtes</div>
@@ -12711,7 +12743,7 @@ export default function Emprise() {
         <div className="info-overlay" onClick={() => setAmiARetirer(null)}>
           <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
             <div className="info-panel-title">Retirer {amiARetirer.nom} de vos amis ?</div>
-            <div className="confirm-text">Il ne pourra plus vous défier d'un geste. Son code ami permet de le rajouter.</div>
+            <div className="confirm-text">Il ne pourra plus vous défier d'un geste. Son identifiant permet de le rajouter.</div>
             <div className="confirm-actions">
               <button className="reset-btn" onClick={() => setAmiARetirer(null)}>Garder</button>
               <button className="reset-btn quit-confirm" onClick={() => { retirerAmi(amiARetirer.uid).catch(() => {}); setAmiARetirer(null); }}>Retirer</button>

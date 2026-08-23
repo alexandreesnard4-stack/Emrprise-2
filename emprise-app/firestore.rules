@@ -74,7 +74,7 @@ service cloud.firestore {
     //   /users/{uid}/demandes/{deUid}      demande d'ami reçue par uid, envoyée par deUid
     //   /users/{uid}/amis/{amiUid}         lien d'amitié, écrit en double (chez les deux)
     //   /users/{uid}/invitations/{deUid}   défi (invitation à une partie) envoyé par l'ami deUid
-    // plus un index /codesAmi/{code} = { uid } pour retrouver un joueur par son code.
+    // plus un index /codesAmi/{code} = { uid } pour retrouver un joueur par son numero.
     //
     // Pourquoi des sous-collections et pas des tableaux dans le profil ? Une demande
     // d'ami, c'est un INCONNU qui écrit chez vous. Avec un tableau, il faudrait lui
@@ -105,8 +105,9 @@ service cloud.firestore {
     // d'autre que lui ne le verra tel quel.
     function pseudoValide(p) { return p is string && p.size() <= 28; }
 
-    // Code ami : 6 caractères, même alphabet que les codes de partie (ni 0/O ni 1/I).
-    function codeAmiValide(c) { return c is string && c.matches('^[A-HJ-NP-Z2-9]{6}$'); }
+    // Identifiant du joueur : six chiffres. Les pseudos ne sont pas uniques ; deux
+    // CARNAGE peuvent coexister, et c'est ce numero qui les distingue.
+    function codeAmiValide(c) { return c is string && c.matches('^[0-9]{6}$'); }
 
     // Après le batch en cours, l'index /codesAmi/{code} doit exister et pointer vers
     // moi : un profil ne peut jamais annoncer un code qui ne mène pas à lui.
@@ -254,7 +255,7 @@ service cloud.firestore {
 
     // ---------- Index des codes amis ----------
     // /codesAmi/{code} = { uid }. Lecture « get » seulement : pour trouver quelqu'un il
-    // faut connaître son code, on ne peut pas lister. Un code ne se crée que pour soi,
+    // faut connaître son numero, on ne peut pas lister. Un code ne se crée que pour soi,
     // dans la transaction qui écrit aussi le profil (getAfter vérifie la cohérence), et
     // ne se modifie jamais : écrire sur un code déjà pris est un « update », refusé —
     // impossible d'écraser le code d'un autre.
