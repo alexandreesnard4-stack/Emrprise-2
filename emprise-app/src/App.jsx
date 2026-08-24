@@ -1498,7 +1498,10 @@ async function readStatsRaw() {
     }
   }
   try {
-    if (typeof localStorage !== "undefined") return localStorage.getItem("emprise-stats");
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-stats");
+      if (v != null) return v;
+    }
   } catch (e) { /* stockage bloqué */ }
   return memoryStats;
 }
@@ -1584,7 +1587,10 @@ async function readStoryRaw() {
     }
   }
   try {
-    if (typeof localStorage !== "undefined") return localStorage.getItem("emprise-story");
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-story");
+      if (v != null) return v;
+    }
   } catch (e) { /* stockage bloqué */ }
   return memoryStory;
 }
@@ -1624,10 +1630,23 @@ async function recordChapterWin(orderKey) {
 // de bon. idempotent — rejouer un chapitre déjà terminé n'ajoute pas de doublon.
 async function completeChapter(orderKey) {
   const progress = await loadStoryProgress();
-  progress.chapterWins[orderKey] = (progress.chapterWins[orderKey] || 0) + 1;
-  if (!progress.completedChapters.includes(orderKey)) progress.completedChapters.push(orderKey);
+  // Idempotent POUR DE BON. L'increment etait hors de la garde : rejouer le Seigneur de
+  // Guerre d'un chapitre deja fini faisait grimper le compteur sans fin, et l'ecran
+  // annoncait "Partie 7 / 6", puis 8, puis 12.
+  if (!progress.completedChapters.includes(orderKey)) {
+    progress.chapterWins[orderKey] = (progress.chapterWins[orderKey] || 0) + 1;
+    progress.completedChapters.push(orderKey);
+  }
   await writeStoryRaw(JSON.stringify(progress));
   return progress;
+}
+
+// Le numero de la partie en cours dans son chapitre, borne au nombre de parties : un
+// chapitre termine qu'on rejoue reste a sa derniere partie, celle du Seigneur de Guerre.
+function numeroPartieChapitre(progress, chapterMeta) {
+  if (!chapterMeta) return 1;
+  const gagnees = (progress.chapterWins && progress.chapterWins[chapterMeta.orderKey]) || 0;
+  return Math.min(gagnees + 1, chapterMeta.numGames);
 }
 
 // Calcule le niveau de difficulté du bot pour une partie donnée d'un chapitre du mode
@@ -7031,7 +7050,10 @@ const APP_STYLES = `
            le même que celui des Ordres verrouillés (900-1320ms), puis révélation du nom
            et de l'effet. Sautée entièrement quand les animations réduites sont actives :
            l'écran de récompense s'affiche alors directement. */
-        .order-picker.hc-cache { opacity: 0; pointer-events: none; }
+        /* visibility et non seulement opacity : transparent, l'ecran restait dans
+           l'ordre de tabulation, et un joueur au clavier pouvait le quitter sans jamais
+           voir sa recompense. */
+        .order-picker.hc-cache { opacity: 0; pointer-events: none; visibility: hidden; }
         .order-picker.hc-entre { animation: hc-recompense 0.7s ease-out; }
         @keyframes hc-recompense { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .heraut-ceremonie {
@@ -8477,7 +8499,7 @@ export default function Emprise() {
       // terminé et le Héraut débloqué, plutôt qu'une simple victoire de plus.
       if (storyChapterKey && winner === "blue") {
         const chapterMeta = STORY_CHAPTERS.find((c) => c.orderKey === storyChapterKey);
-        const gameIndex = (storyProgress.chapterWins[storyChapterKey] || 0) + 1;
+        const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
         if (chapterMeta && gameIndex >= chapterMeta.numGames) {
           setStoryChapterJustCompleted(storyChapterKey);
           completeChapter(storyChapterKey).then(setStoryProgress);
@@ -8525,6 +8547,13 @@ export default function Emprise() {
       setBotDifficulty(data.botDifficulty || "intermediaire");
       setBlueOrders(isConfluence ? AVAILABLE_ORDERS : (data.blueOrderKeys || []).map((k) => ORDERS.find((l) => l.key === k)).filter(Boolean));
       setRedOrders(isConfluence ? AVAILABLE_ORDERS : (data.redOrderKeys || []).map((k) => ORDERS.find((l) => l.key === k)).filter(Boolean));
+      // Une partie d'Histoire redevient une partie d'Histoire : son chapitre, son 2e
+      // Ordre, et le Repentir et l'Augure qu'elle accorde. Une sauvegarde d'avant ce
+      // correctif n'en porte pas : elle reprend en partie solo, comme avant.
+      setStoryChapterKey(data.storyChapterKey || null);
+      setStorySecondPick(data.storySecondPick || null);
+      setAllowUndo(!!data.allowUndo);
+      setAllowHint(!!data.allowHint);
       setHistory([]);
       setHint(null);
       setPhase("play");
@@ -9717,7 +9746,7 @@ export default function Emprise() {
     if (!storySecondPick) return;
     const chapterMeta = STORY_CHAPTERS.find((c) => c.orderKey === storyChapterKey);
     const secondOrder = ORDERS.find((o) => o.key === storySecondPick);
-    const gameIndex = (storyProgress.chapterWins[storyChapterKey] || 0) + 1;
+    const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
     const diff = storyDifficultyFor(gameIndex, chapterMeta.numGames);
 
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
@@ -9790,6 +9819,9 @@ export default function Emprise() {
   function chooseMode(m) {
     setMode(m);
     setTestMode(false);
+    // Ceinture : entrer dans un autre mode ferme le chapitre, quel que soit le chemin
+    // emprunte pour sortir de la carte.
+    setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null);
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     // Le duel local passe d'abord par ses options de partie (rotation de l'écran) ;
     // l'Écho garde son parcours difficulté puis assistance.
@@ -9992,9 +10024,16 @@ export default function Emprise() {
       setPhase("tourney-online-menu");
     } else if (phase === "tourney-menu") {
       setPhase("landing");
+    } else if (phase === "chapter-complete") {
+      setStoryChapterJustCompleted(null); setStoryChapterKey(null); setStorySecondPick(null);
+      setPhase("chapters");
     } else if (phase === "chapter-pick-order") {
       setPhase("chapters");
     } else if (phase === "chapters") {
+      // Quitter la carte, c'est quitter le chapitre. Sans cet oubli explicite,
+      // storyChapterKey survivait au hub et creditait au chapitre la premiere partie
+      // gagnee ensuite, contre un Echo ou en local.
+      setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null);
       setPhase("landing");
     } else if (phase === "select-difficulty") {
       setMode(null);
@@ -10315,6 +10354,10 @@ export default function Emprise() {
   // rejouerait aussitôt le même coup et l'annulation semblerait ne rien faire.
   function undo() {
     if (history.length === 0 || drag) return;
+    // Une partie finie ne se reprend pas. Sans cette ligne, annuler puis rejouer le
+    // dernier coup recomptait l'issue a chaque tour : victoires de chapitre, parties
+    // jouees, maitrise des Ordres.
+    if (gameOver) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
     if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
     // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
@@ -10685,6 +10728,9 @@ export default function Emprise() {
         poisonedCells, turn, firstPlayer, mode, gameOver, confluenceActive, botDifficulty,
         blueOrderKeys: blueOrders.map((l) => l.key),
         redOrderKeys: redOrders.map((l) => l.key),
+        // Le chapitre et ses assistances font partie de la partie : sans eux, la reprise
+        // rendait une partie d'Histoire meconnaissable.
+        storyChapterKey, storySecondPick, allowUndo, allowHint,
       };
       sessionStorage.setItem("emprise-save", JSON.stringify(data));
       setHasSavedGame(true);
@@ -12078,7 +12124,7 @@ export default function Emprise() {
       {phase === "chapter-pick-order" && (() => {
         const chapterMeta = STORY_CHAPTERS.find((c) => c.orderKey === storyChapterKey);
         if (!chapterMeta) return null;
-        const gameIndex = (storyProgress.chapterWins[storyChapterKey] || 0) + 1;
+        const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
         const diffKey = storyDifficultyFor(gameIndex, chapterMeta.numGames);
         const diffLabel = DIFFICULTIES.find((d) => d.key === diffKey)?.label || diffKey;
         // Les Ordres "prochainement" restent dans la liste, en teaser verrouillé : le mode
@@ -13255,7 +13301,7 @@ export default function Emprise() {
 
           <div className="action-row">
             {mode !== "online" && (testMode || allowUndo) && (
-              <button className="reset-btn undo-btn" onClick={undo} disabled={history.length === 0 || !!drag}>
+              <button className="reset-btn undo-btn" onClick={undo} disabled={gameOver || history.length === 0 || !!drag}>
                 <svg className="btn-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
                 Annuler
               </button>
