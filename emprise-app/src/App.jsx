@@ -352,6 +352,10 @@ function ComingSoonThumb({ order }) {
 }
 
 const TURN_SECONDS = 105; // durée du minuteur par tour (1 min 45)
+// L'apercu des mains, entre amis, se referme seul au bout de ce delai. Sans cette borne,
+// un joueur parti boire un cafe devant cet ecran se faisait declarer forfait par son ami
+// (FORFAIT_APRES_S) sans avoir jamais vu le plateau.
+const APERCU_MS = 20000;
 // Minuteur du choix des Ordres, en ligne uniquement : sans lui, un joueur qui pose son
 // telephone bloque l'autre sur un ecran d'attente. A l'echeance, la selection en cours
 // est confirmee ; si elle est incomplete, deux Ordres sont tires au sort.
@@ -7353,6 +7357,11 @@ export default function Emprise() {
   const [amiARetirer, setAmiARetirer] = useState(null);
   const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
   const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t }
+  // Cette partie a-t-elle ete ouverte depuis l'ecran des Amis ? On revient d'ou l'on
+  // venait : celui qui defie un ami, ou qui releve son defi, n'a jamais vu l'ecran des
+  // codes de partie. L'y deposer en quittant lui montrait une page ou il n'avait rien a
+  // faire, et lui redemandait un code que personne ne lui avait donne.
+  const venuDesAmisRef = useRef(false);
   const [defisIgnores, setDefisIgnores] = useState({});         // uid -> t
   const [codeAmiCopie, setCodeAmiCopie] = useState(false);
   const [adversaireUid, setAdversaireUid] = useState(null);     // l'uid d'en face, pour l'ajouter en fin de partie
@@ -7569,12 +7578,14 @@ export default function Emprise() {
     try {
       await setDoc(doc(db, "users", uidAmi, "invitations", myUid), { code, envoyeeLe: serverTimestamp() });
       setDefiEnvoye({ uid: uidAmi, t: Date.now() });
+      venuDesAmisRef.current = true;
     } catch (e) { /* le code reste affiche : il peut toujours etre envoye a la main */ }
   }
   async function releverDefi(inv) {
     if (!inv || !myUid) return;
     const ok = await joinOnlineGame(inv.code);
     if (ok) {
+      venuDesAmisRef.current = true;
       // Refermer le panneau : ouvert, il couvrait la partie, et son verrou de defilement
       // restait pose tout du long — puis il se rouvrait seul au retour au hub.
       setActiveModal(null);
@@ -7735,6 +7746,8 @@ export default function Emprise() {
   // Vrai le temps d'une reprise : indique à l'écouteur qu'il doit router vers le bon
   // écran (jeu ou choix des Ordres) au lieu de laisser le joueur sur l'écran d'attente.
   const repriseRef = useRef(false);
+  // Partie dont l'apercu des mains a deja ete montre : une seule fois par partie.
+  const apercuFaitRef = useRef(null);
   const repriseTesteeRef = useRef(false); // la purge des cles de reprise n'a lieu qu'une fois
   // Fin de partie décidée hors plateau : "blue"/"red" quand un camp gagne par abandon ou
   // forfait de l'adversaire, quel que soit le score. Dérivé du document Firestore à chaque
@@ -7976,7 +7989,7 @@ export default function Emprise() {
     { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", image: "/modes/confluence2.webp",
       lancer: () => chooseConfluenceLocal() },
     { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", image: "/modes/ami.webp",
-      lancer: () => { setOnlineError(""); setPhase("online-menu"); } },
+      lancer: () => { setOnlineError(""); venuDesAmisRef.current = false; setPhase("online-menu"); } },
     { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", image: "/modes/bac.webp",
       lancer: () => chooseTestMode() },
   ];
@@ -8586,6 +8599,7 @@ export default function Emprise() {
     clearSavedGame();
     oublierPartieEnLigne();
     setHubPage("jouer"); // quitter une partie ramene toujours a la page Jouer du hub
+    venuDesAmisRef.current = false;
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
@@ -9089,7 +9103,21 @@ export default function Emprise() {
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
-        setPhase((p) => (p === "play" ? p : "play"));
+        // Apercu des mains avant le premier coup, dans les parties ENTRE AMIS seulement.
+        // Il ne revele rien que la partie ne montre deja — les deux mains sont visibles
+        // tout du long, seuls les Scribes gardent leurs rangs caches. Il offre un temps
+        // d'arret avant que l'horloge parte. Jamais en Classe ni en tournoi : on n'y fait
+        // pas patienter un adversaire apparie. Jamais non plus sur une reprise en cours
+        // de partie (lastMove present) : il n'y aurait plus rien a decouvrir.
+        const entreAmis = !data.appariement && !tournoiOnlineId;
+        if (entreAmis && apercuFaitRef.current !== onlineGameId && !data.lastMove && !data.gameOver) {
+          apercuFaitRef.current = onlineGameId;
+          setPhase("preview");
+        } else {
+          // Une fois sur l'apercu, l'ecouteur ne nous en arrache plus : c'est le joueur
+          // qui decide d'entrer, ou le delai qui l'y pousse.
+          setPhase((p) => (p === "preview" ? p : "play"));
+        }
         repriseRef.current = false; // reprise aboutie : la partie est retrouvée
 
         // Coup de l'adversaire : on rejoue chez nous les animations qu'il a vues (chute
@@ -9148,8 +9176,9 @@ export default function Emprise() {
               : "L'adversaire a quitté avant le début de la partie."
           );
           setPickerChoice([]);
-          if (venaitDuClasse) { setMode(null); setPhase("landing"); }
+          if (venaitDuClasse || venuDesAmisRef.current) { setMode(null); setPhase("landing"); }
           else setPhase("online-menu");
+          venuDesAmisRef.current = false;
           return;
         }
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
@@ -9221,6 +9250,7 @@ export default function Emprise() {
     setMode("online");
     setFileAttente(true);
     statsRecordedRef.current = false;
+    venuDesAmisRef.current = false;
     setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
     // Une illustration neuve a chaque recherche : deux attentes de suite ne se ressemblent pas.
     setImageAttente(IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
@@ -9377,8 +9407,9 @@ export default function Emprise() {
     const venaitDuClasse = partieClassee;
     setPartieClassee(false);
     if (tournoiOnlineId) setPhase("tourney-online");
-    else if (venaitDuClasse) { setMode(null); setPhase("landing"); }
+    else if (venaitDuClasse || venuDesAmisRef.current) { setMode(null); setPhase("landing"); }
     else setPhase("online-menu");
+    venuDesAmisRef.current = false;
   }
 
   function quitterPartieEnLigne() {
@@ -10087,6 +10118,8 @@ export default function Emprise() {
       setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
       setPhase(mode === "bot" ? "select-assist" : "landing");
     } else if (phase === "preview") {
+      // En ligne, revenir en arriere n'a pas de sens : on entre sur le plateau.
+      if (mode === "online") { setPhase("play"); return; }
       if (confluenceActive) {
         // Le draft précédent est terminé : revenir signifie le relancer à zéro.
         setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
@@ -10791,6 +10824,14 @@ export default function Emprise() {
     setTimeLeft(TURN_SECONDS);
     autoForfaitRef.current = false;
   }, [turn, phase]);
+
+  // L'apercu en ligne se referme seul : le minuteur de forfait de l'adversaire, lui,
+  // tourne pendant ce temps. Regarder ne doit pas pouvoir couter la partie.
+  useEffect(() => {
+    if (phase !== "preview" || mode !== "online") return;
+    const t = setTimeout(() => setPhase("play"), APERCU_MS);
+    return () => clearTimeout(t);
+  }, [phase, mode]);
 
   // Garde-fou d'inactivité en ligne : le minuteur de l'adversaire tourne sur SON appareil.
   // S'il ferme l'application ou verrouille son téléphone, rien n'auto-joue pour lui et la
@@ -12977,7 +13018,9 @@ export default function Emprise() {
         };
         return (
           <div className="order-picker">
-            <button className="back-btn" onClick={goBack}>← Retour</button>
+            {/* En ligne il n'y a nulle part ou revenir : la partie est deja ouverte chez
+                l'adversaire. Le bouton disparait plutot que de mentir. */}
+            {mode !== "online" && <button className="back-btn" onClick={goBack}>← Retour</button>}
             {isConfluence ? (
               <>
                 <h2>Votre main</h2>
@@ -12992,24 +13035,44 @@ export default function Emprise() {
               </>
             ) : (
               <>
-                <h2>Cartes de l'adversaire</h2>
-                <div className="sub">
-                  {DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}
-                </div>
-                <div className="hand-row" style={{ maxWidth: 320 }}>
-                  {apercuParOrdre(redHand).map((card) => (
-                    <Card key={card.id} card={card} owner="red" extraClass="hand" concealed={card.ability === "scribe"} />
-                  ))}
-                </div>
-                <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
-                <div className="hand-row" style={{ maxWidth: 320 }}>
-                  {apercuParOrdre(blueHand).map((card) => (
-                    <Card key={card.id} card={card} owner="blue" extraClass="hand" />
-                  ))}
-                </div>
+                {/* En ligne, mon camp n'est pas toujours AZUR : contre l'Echo je suis
+                    toujours bleu, mais celui qui RELEVE un defi est ecarlate. On lit donc
+                    les deux mains par le role, jamais par la couleur. */}
+                {(() => {
+                  const enLigne = mode === "online" && onlineRole;
+                  const monCamp = enLigne ? onlineRole : "blue";
+                  const campAdverse = monCamp === "blue" ? "red" : "blue";
+                  const mainAdverse = campAdverse === "red" ? redHand : blueHand;
+                  const maMain = monCamp === "red" ? redHand : blueHand;
+                  const nomAdverse = enLigne ? pseudosPartie[campAdverse] : "";
+                  return (
+                    <>
+                      <div className="sub">
+                        {enLigne
+                          ? (nomAdverse || "Votre adversaire")
+                          : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}
+                      </div>
+                      <div className="hand-row" style={{ maxWidth: 320 }}>
+                        {apercuParOrdre(mainAdverse).map((card) => (
+                          <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
+                        ))}
+                      </div>
+                      <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
+                      <div className="hand-row" style={{ maxWidth: 320 }}>
+                        {apercuParOrdre(maMain).map((card) => (
+                          <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </>
             )}
-            <button className="reset-btn" onClick={startMatch}>Commencer la partie</button>
+            {/* En ligne la partie EXISTE deja : ce bouton n'en cree pas une, il ouvre le
+                plateau. Appeler startMatch y aurait rebati une partie locale par-dessus. */}
+            <button className="reset-btn" onClick={mode === "online" ? () => setPhase("play") : startMatch}>
+              Commencer la partie
+            </button>
           </div>
         );
       })()}
