@@ -3109,12 +3109,13 @@ const APP_STYLES = `
         }
         .hub-haut {
           width: 100%; box-sizing: border-box;
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex; align-items: flex-start; justify-content: space-between;
           padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
           background: linear-gradient(180deg, rgba(10,8,15,0.92), rgba(10,8,15,0.55) 75%, transparent);
           flex: none;
         }
-        .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        /* Aligne sur la premiere rangee de boutons, pas sur le milieu du bloc. */
+        .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 48px; }
         .hub-pseudo {
           background: none; border: none; padding: 0; cursor: pointer; text-align: left;
           font: inherit;
@@ -3199,6 +3200,8 @@ const APP_STYLES = `
           .hub-pages { overflow-y: auto; -webkit-overflow-scrolling: touch; }
         }
         .hub-page {
+          /* Repere du calque de defi, qui se pose par-dessus sans prendre de place. */
+          position: relative;
           width: 100%; max-width: 540px; box-sizing: border-box; height: 100%;
           padding: 4px 18px 10px;
           display: flex; flex-direction: column; align-items: center; gap: 9px;
@@ -3424,6 +3427,23 @@ const APP_STYLES = `
         .amis-defi-texte b { font-family: 'Cinzel', serif; color: var(--gold-bright); letter-spacing: 0.06em; }
         .amis-defi-boutons { display: flex; align-items: center; gap: 14px; }
         .amis-defi-btn { width: auto; padding-inline: 18px; }
+        /* Le temps qui reste, dans la banniere : chiffres tabulaires pour que la largeur
+           ne danse pas de seconde en seconde. */
+        .amis-defi-temps {
+          margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          font-variant-numeric: tabular-nums; color: var(--gold-bright);
+          background: rgba(203,164,86,0.16); border: 1px solid rgba(203,164,86,0.35);
+        }
+        /* Au hub, le defi flotte SUR l'arene au lieu de la comprimer : posee en haut de
+           page, la banniere recouvrait le titre du jeu. L'arene, grande et sombre, est
+           l'endroit ou elle se lit le mieux — et c'est elle que le defi concerne. */
+        .hub-defi-calque {
+          position: absolute; left: 0; right: 0; top: 34%; z-index: 46;
+          display: flex; justify-content: center; padding: 0 14px; box-sizing: border-box;
+          pointer-events: none;
+        }
+        .hub-defi-calque .amis-defi { pointer-events: auto; }
         .reduced-motion .amis-defi { animation: none; }
         /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
            reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
@@ -7163,6 +7183,8 @@ export default function Emprise() {
   // vit dans des sous-collections nommees par l'uid de l'autre : /amis, /demandes,
   // /invitations. Chaque joueur n'ecoute que les siennes.
   const [monCodeAmi, setMonCodeAmi] = useState("");
+  const decalageServeurRef = useRef(0);
+  const maintenantServeur = () => Date.now() + decalageServeurRef.current;
   const [amis, setAmis] = useState([]);                         // [{ uid, depuis }]
   const [demandesRecues, setDemandesRecues] = useState([]);     // [{ uid, t }]
   const [invitationsRecues, setInvitationsRecues] = useState([]); // [{ uid, code, t }]
@@ -7189,7 +7211,14 @@ export default function Emprise() {
     if (!myUid) return;
     const base = doc(db, "users", myUid);
     const rien = () => {};
-    const u1 = onSnapshot(base, (snap) => { if (snap.exists()) setMonCodeAmi(snap.data().codeAmi || ""); }, rien);
+    const u1 = onSnapshot(base, (snap) => {
+      if (!snap.exists()) return;
+      setMonCodeAmi(snap.data().codeAmi || "");
+      // Notre propre vuLe vient d'etre ecrit en heure serveur : sa difference avec
+      // l'heure locale mesure le decalage de l'horloge de l'appareil.
+      const vs = horodatageMs(snap.data().vuLe);
+      if (vs) decalageServeurRef.current = vs - Date.now();
+    }, rien);
     const u2 = onSnapshot(collection(base, "amis"), (q) =>
       setAmis(q.docs.map((d) => ({ uid: d.id, depuis: horodatageMs(d.data().depuis) }))), rien);
     const u3 = onSnapshot(collection(base, "demandes"), (q) =>
@@ -7231,7 +7260,7 @@ export default function Emprise() {
   const defiRecu = invitationsRecues
     .filter((i) => /^[A-HJ-NP-Z2-9]{5}$/.test(i.code)
       && amis.some((a) => a.uid === i.uid)
-      && Date.now() - i.t < DEFI_PERIME_MS
+      && maintenantServeur() - i.t < DEFI_PERIME_MS
       && defisIgnores[i.uid] !== i.t)
     .sort((a, b) => b.t - a.t)[0] || null;
   // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
@@ -7406,7 +7435,8 @@ export default function Emprise() {
   }
   function presenceDe(fiche) {
     if (!fiche || !fiche.vuLe) return "";
-    return Date.now() - fiche.vuLe < EN_LIGNE_MS ? "En ligne" : `Vu ${ilYa(fiche.vuLe)}`;
+    const age = maintenantServeur() - fiche.vuLe;
+    return age < EN_LIGNE_MS ? "En ligne" : `Vu ${ilYa(Date.now() - age)}`;
   }
   // En fin de partie en ligne : ajouter celui d'en face, d'un geste. Trois etats, comme
   // la revanche. Si l'autre m'a deja demande, mon geste vaut acceptation.
@@ -7467,12 +7497,47 @@ export default function Emprise() {
   }
   // Les amis se rangent par trophees, les plus titres en tete.
   const amisTries = [...amis].sort((x, y) => ((fiches[y.uid] && fiches[y.uid].trophees) || 0) - ((fiches[x.uid] && fiches[x.uid].trophees) || 0));
+  // Le temps qui reste au defi. Un compteur d'une seconde, monte seulement tant qu'un
+  // defi est en cours : sans lui, la banniere restait a l'ecran passe son heure, jusqu'au
+  // prochain rendu provoque par autre chose.
+  const [defiRestant, setDefiRestant] = useState(0);
+  useEffect(() => {
+    if (!defiRecu) { setDefiRestant(0); return; }
+    // Borne haute : l'estimation du decalage d'horloge peut donner quelques secondes
+    // de trop, et « 10:03 » sur un defi de dix minutes trahirait la mecanique.
+    const calcul = () => setDefiRestant(Math.min(DEFI_PERIME_MS, Math.max(0, DEFI_PERIME_MS - (maintenantServeur() - defiRecu.t))));
+    calcul();
+    const id = setInterval(calcul, 1000);
+    return () => clearInterval(id);
+  }, [defiRecu && defiRecu.uid, defiRecu && defiRecu.t]);
+  // Passe l'heure, le defi s'efface de lui-meme : on le retire aussi de chez nous, sinon
+  // il reparaitrait au prochain lancement. La peremption se RECALCULE ici plutot que de
+  // lire l'etat de la minuterie : a l'arrivee d'un defi, cet etat vaut encore zero (il ne
+  // sera pose qu'au rendu suivant) et s'y fier tuait chaque defi a la naissance.
+  useEffect(() => {
+    if (!defiRecu || !myUid) return;
+    const juger = () => {
+      if (maintenantServeur() - defiRecu.t >= DEFI_PERIME_MS) {
+        setDefisIgnores((d) => ({ ...d, [defiRecu.uid]: defiRecu.t }));
+        deleteDoc(doc(db, "users", myUid, "invitations", defiRecu.uid)).catch(() => {});
+      }
+    };
+    juger();
+    const id = setInterval(juger, 5000);
+    return () => clearInterval(id);
+  }, [defiRecu && defiRecu.uid, defiRecu && defiRecu.t, myUid]);
+
   function banniereDefi() {
     if (!defiRecu) return null;
     const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
+    const s = Math.ceil(defiRestant / 1000);
+    const minuterie = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
     return (
       <div className="amis-defi" role="status">
-        <span className="amis-defi-texte"><b>{nom}</b> vous défie</span>
+        <span className="amis-defi-texte">
+          <b>{nom}</b> vous défie
+          <span className="amis-defi-temps" aria-label={`Il reste ${Math.ceil(s / 60)} minutes`}>{minuterie}</span>
+        </span>
         <div className="amis-defi-boutons">
           <button className="reset-btn amis-defi-btn" onClick={() => releverDefi(defiRecu)}>Relever le défi</button>
           <button className="landing-link" onClick={() => ignorerDefi(defiRecu)}>Ignorer</button>
@@ -10763,8 +10828,11 @@ export default function Emprise() {
                     {onlineError}
                   </div>
                 )}
-                {/* Un defi est la seule nouvelle urgente — quelqu'un attend en face. */}
-                {banniereDefi()}
+                {/* Un defi est la seule nouvelle urgente — quelqu'un attend en face. Il se
+                    pose PAR-DESSUS l'arene, sans prendre de place dans la colonne : sinon
+                    l'arene se reduisait pour lui faire de la place, et le hub sautait a
+                    chaque defi recu. */}
+                {defiRecu && <div className="hub-defi-calque">{banniereDefi()}</div>}
 
                 {/* Deux entrees seulement : le Classe, action phare, et la porte vers
                     tous les autres modes. Le detail vit dans un panneau, la page reste
@@ -12280,30 +12348,33 @@ export default function Emprise() {
               {defiEnvoye ? (() => {
                 const f = fiches[defiEnvoye.uid];
                 const nom = nomAffiche(f && f.pseudo);
-                const absent = !f || !f.vuLe || Date.now() - f.vuLe >= EN_LIGNE_MS;
+                const absent = !f || !f.vuLe || maintenantServeur() - f.vuLe >= EN_LIGNE_MS;
                 const longtemps = Date.now() - defiEnvoye.t > DEFI_PERIME_MS;
+                // Pas de code ici : l'ami a recu le defi, il n'a rien a taper. L'afficher
+                // ne faisait qu'encombrer un ecran ou il n'y a rien a faire qu'attendre.
                 return (
                   <>
                     <div className="sub">Défi envoyé à <b>{nom}</b></div>
                     <div className="sub" style={{ marginTop: 4 }}>
-                      {longtemps ? `${nom} n'a pas répondu. Le code reste valable.`
-                        : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour. Vous pouvez aussi lui envoyer ce code.`
+                      {longtemps ? `${nom} n'a pas répondu.`
+                        : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour.`
                         : "En attente de sa réponse..."}
                     </div>
-                    <div className="sub" style={{ marginTop: 10 }}>ou partagez ce code</div>
                   </>
                 );
               })() : (
-                <div className="sub">Partagez ce code avec votre adversaire :</div>
+                <>
+                  <div className="sub">Partagez ce code avec votre adversaire :</div>
+                  <div className="game-code-display">{onlineGameId}</div>
+                </>
               )}
-              <div className="game-code-display">{onlineGameId}</div>
-              <button className="bouton-copier" onClick={copierCode} aria-label="Copier le code" title="Copier le code">
+              {!defiEnvoye && <button className="bouton-copier" onClick={copierCode} aria-label="Copier le code" title="Copier le code">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
                   <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                 </svg>
-              </button>
-              <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
+              </button>}
+              <div className="code-copie">{!defiEnvoye && codeCopie ? "Code copié" : ""}</div>
             </>
           )}
           {!fileAttente && ordreAttente && (
