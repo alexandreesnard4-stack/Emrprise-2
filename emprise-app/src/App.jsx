@@ -8135,6 +8135,10 @@ export default function Emprise() {
   // Références des timers d'animation "fire-and-forget" (hors useEffect) : on les annule
   // avant d'en reprogrammer un nouveau, et tous ensemble si le composant est démonté.
   const flashTimerRef = useRef(null);
+  // Instant (Date.now) où les animations DIFFEREES en cours (flips d'Onde) se terminent.
+  // L'Echo la consulte pour ne jamais poser sa carte au milieu d'une cascade — sa pose
+  // remplacerait les classes d'animation en attente et les flips ne se joueraient jamais.
+  const animsFinishAtRef = useRef(0);
   const shakeTimerRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
@@ -10514,7 +10518,13 @@ export default function Emprise() {
       if (!map[e.index]) map[e.index] = [];
       map[e.index].push(e);
     });
-    setFlashes(map);
+    // FUSION, pas remplacement. Les effets differes du tour precedent (flips d'Onde
+    // programmes a 4000 ms et plus) doivent survivre a la pose suivante : avant, le coup
+    // de l'Echo a 3200 ms remplacait toute la carte des effets et retirait les classes
+    // d'animation AVANT que les flips retardes aient commence — les animations « ne se
+    // jouaient pas toujours ». Les cellules re-flashees sont remplacees (le nouvel
+    // evenement gagne et relance l'animation), les autres gardent les leurs.
+    setFlashes((prev) => ({ ...prev, ...map }));
     // Durée totale à couvrir avant d'effacer les effets : la plus longue animation en jeu
     // (1.8s pour Résonance) + le délai accumulé par la chaîne Onde la plus longue (300ms/niveau).
     const maxComboLevel = Math.max(0, ...events.filter((e) => typeof e.comboLevel === "number").map((e) => e.comboLevel));
@@ -10522,6 +10532,9 @@ export default function Emprise() {
     // Le minimum (3600) couvre aussi la pose lente du bot (3.5s) pour ne pas couper son
     // animation juste avant la fin.
     const clearDelay = maxComboLevel > 0 ? 4000 + maxComboLevel * 300 + 2400 : 3600;
+    // Seule une chaine d'Onde prolonge l'horizon des animations differees ; un coup
+    // ordinaire ne ralentit pas le rythme de l'Echo.
+    if (maxComboLevel > 0) animsFinishAtRef.current = Date.now() + clearDelay;
     clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlashes({}), clearDelay);
     // Secousse du plateau uniquement quand au moins une capture a lieu — pas sur
@@ -11113,10 +11126,14 @@ export default function Emprise() {
   // Tour du bot (uniquement en mode "vs Bot")
   useEffect(() => {
     if (mode !== "bot" || phase !== "play" || gameOver || turn !== "red") return;
+    // L'Echo ne joue jamais au milieu d'une cascade d'Onde : si des flips differes du
+    // coup precedent sont encore programmes, il attend leur fin, plus 400 ms de
+    // respiration. Sans chaine en cours, son rythme reste inchange (3,2 s).
+    const attente = Math.max(3200, animsFinishAtRef.current - Date.now() + 400);
     const timer = setTimeout(() => {
       const move = botChooseMove(board, redHand, blueHand, "red", "blue", botDifficulty, poisonedCells);
       if (move) placeCardAt("red", move.cardIdx, move.cellIdx);
-    }, 3200);
+    }, attente);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, turn, phase, gameOver, board, redHand, blueHand, botDifficulty]);
