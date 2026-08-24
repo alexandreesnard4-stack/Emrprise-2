@@ -3141,6 +3141,14 @@ const APP_STYLES = `
         /* Deux rangs : l historique et les reglages en haut, les amis dessous, cales a
            droite pour tomber sous le rouage. L ecart de 10 px entre les rangs laisse a la
            pastille la place de deborder par le haut sans toucher le bouton du dessus. */
+        .hub-haut-boutons { animation: hub-boutons-reviennent 0.26s ease-out both; }
+        @keyframes hub-boutons-reviennent {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hub-haut-boutons { animation: none; }
+        }
         .hub-haut-boutons {
           display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none;
         }
@@ -3193,6 +3201,9 @@ const APP_STYLES = `
         .hub-pages {
           flex: 1; width: 100%; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; align-items: center;
+          /* pan-y : le navigateur garde le defilement vertical, mais nous laisse les
+             gestes horizontaux — sans quoi il les avalerait avant nous. */
+          touch-action: pan-y;
         }
         /* Filet de securite sur les ecrans tres bas : mieux vaut un defilement
            que du contenu inatteignable. */
@@ -7834,6 +7845,43 @@ export default function Emprise() {
     if (page === hubPage) return;
     setHubSens(HUB_ORDRE_PAGES.indexOf(page) > HUB_ORDRE_PAGES.indexOf(hubPage) ? "droite" : "gauche");
     setHubPage(page);
+  }
+
+  // ---------- Glisser d'une page du hub a l'autre ----------
+  // Le doigt fait ce que les onglets font, sans viser. Trois precautions :
+  //  - un glissement franchement HORIZONTAL seulement, sinon on volerait le defilement
+  //    vertical des petits ecrans et le geste de la galerie des arenes ;
+  //  - il faut depasser 55 px, pour qu'un doigt qui derape sur un bouton ne change pas
+  //    de page par accident ;
+  //  - a la fin d'un vrai glissement, le CLIC qui suit est avale : sans cela, glisser en
+  //    partant de l'arene ou du bouton CLASSE ouvrait la galerie ou lançait une partie.
+  const glisseRef = useRef(null);
+  const glisseFaiteRef = useRef(false);
+  const GLISSE_MIN = 55;
+  function glisseDebut(e) {
+    if (e.pointerType === "mouse" && e.buttons !== 1) return;
+    glisseRef.current = { x: e.clientX, y: e.clientY };
+    glisseFaiteRef.current = false;
+  }
+  function glisseFin(e) {
+    const d = glisseRef.current;
+    glisseRef.current = null;
+    if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) < GLISSE_MIN || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const i = HUB_ORDRE_PAGES.indexOf(hubPage);
+    // Glisser vers la GAUCHE avance vers la page de droite : le contenu suit le doigt.
+    const suivant = HUB_ORDRE_PAGES[dx < 0 ? i + 1 : i - 1];
+    if (!suivant) return;
+    glisseFaiteRef.current = true;
+    allerPageHub(suivant);
+  }
+  // Le clic de fin de glissement n'atteint jamais le bouton qui se trouvait dessous.
+  function glisseAvaleLeClic(e) {
+    if (!glisseFaiteRef.current) return;
+    glisseFaiteRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
   } // null | "stats" | "rules" | "story" | "settings" — un seul panneau ouvert à la fois
   // ---------- Séquence d'entrée de l'écran d'accueil ----------
   // Trois temps : noir total, puis l'illustration des Abysses monte du noir en fondu,
@@ -10743,7 +10791,8 @@ export default function Emprise() {
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </span>
             </div>
-            <span className="hub-haut-boutons">
+            {hubPage !== "ordres" && (
+            <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
             <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
@@ -10785,10 +10834,17 @@ export default function Emprise() {
               )}
             </button>
             </span>
+            )}
           </header>
 
           {/* ---------- Pages du hub ---------- */}
-          <main className="hub-pages">
+          <main
+            className="hub-pages"
+            onPointerDown={glisseDebut}
+            onPointerUp={glisseFin}
+            onPointerCancel={() => { glisseRef.current = null; }}
+            onClickCapture={glisseAvaleLeClic}
+          >
             {hubPage === "boutique" && (
               <section key="boutique" className={`hub-page hub-glisse-${hubSens}`} aria-label="Boutique">
                 <div className="hub-boutique-vide" role="status">
