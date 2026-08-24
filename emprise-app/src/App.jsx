@@ -246,22 +246,34 @@ function OrdreDecompte({ order }) {
 // s'affiche en clair. Aucune image à remplacer.
 // Fait defiler les textes d'attente. Une seule animation, sur opacity et transform,
 // relancee a chaque changement par la cle React : rien ne tourne en boucle.
+// Melange de Fisher-Yates sur les INDICES. On melange une fois, au montage, puis on
+// parcourt : tirer au hasard a chaque changement ramenait la meme astuce deux fois de
+// suite une fois sur douze, et cela se remarque immediatement.
+function melangerIndices(n) {
+  const l = Array.from({ length: n }, (_, i) => i);
+  for (let i = l.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const g = l[i]; l[i] = l[j]; l[j] = g;
+  }
+  return l;
+}
+
 function RecitsAttente({ actif, surImage }) {
-  const [i, setI] = useState(() => Math.floor(Math.random() * RECITS_ATTENTE.length));
+  const [ordre] = useState(() => melangerIndices(ASTUCES.length));
+  const [pos, setPos] = useState(0);
   useEffect(() => {
     if (!actif) return;
-    // 13 secondes : le temps de lire une phrase de trois lignes sans se sentir presse,
-    // et de la relire si le regard etait ailleurs. A 7 secondes, le texte partait avant
-    // d'avoir ete lu.
-    const t = setInterval(() => setI((n) => (n + 1) % RECITS_ATTENTE.length), 13000);
+    const t = setInterval(() => setPos((p) => (p + 1) % ordre.length), ASTUCE_MS);
+    // Sans ce nettoyage, le minuteur survivait au lancement de la partie et continuait
+    // d'appeler setPos sur un composant demonte.
     return () => clearInterval(t);
-  }, [actif]);
+  }, [actif, ordre.length]);
   if (!actif) return null;
-  const recit = RECITS_ATTENTE[i];
   return (
     <div className={`recit-attente ${surImage ? "sur-image" : ""}`} role="status" aria-live="polite">
-      <div className="recit-genre">{recit.genre === "histoire" ? "L'Histoire" : "Astuce"}</div>
-      <p key={i} className="recit-texte">{recit.texte}</p>
+      <div className="recit-genre">Astuce</div>
+      {/* La cle force le remontage a chaque changement : c'est elle qui rejoue le fondu. */}
+      <p key={pos} className="recit-texte">{ASTUCES[ordre[pos]]}</p>
     </div>
   );
 }
@@ -1415,23 +1427,25 @@ const STORY_BRAISES_COTES = [
 // Deux registres qui alternent : l'Histoire du monde, et des conseils de jeu tires
 // des regles reelles. Ils occupent les secondes ou le joueur ne peut rien faire :
 // recherche d'un adversaire, ou attente de ses Ordres.
-// Ordre volontairement fixe (pas de tirage au sort) : deux joueurs qui attendent
-// cote a cote voient la meme chose, et la relecture reste coherente d'une partie
-// a l'autre. Le point de depart, lui, tourne a chaque attente.
-const RECITS_ATTENTE = [
-  { genre: "histoire", texte: "Le ciel se déchira sans avertissement. La Faille aspira la réalité et recracha des flots de magie brute, bouleversant les dix Ordres à jamais." },
-  { genre: "astuce", texte: "Un rang supérieur à celui qui lui fait face capture la carte adverse. Comparez toujours le côté qui touche, jamais la carte entière." },
-  { genre: "histoire", texte: "Le Pacte Azur veut contenir la Faille. La Horde Écarlate veut y puiser. Aucun des deux camps ne cédera avant le prochain Rite." },
-  { genre: "astuce", texte: "Deux rangs identiques parmi vos voisines déclenchent la Résonance : toutes les ennemies concernées tombent d'un coup, même les plus fortes." },
-  { genre: "histoire", texte: "Les Ordres ne jurent fidélité à aucune bannière fixe, seulement au vainqueur du Rite. C'est pourquoi un Commandant invoque les deux Ordres de son choix." },
-  { genre: "astuce", texte: "Une carte capturée sert aussitôt son nouveau camp : sa capacité se déclenche pour vous. C'est l'Onde, et elle peut renverser un plateau entier." },
-  { genre: "histoire", texte: "Les Maudits portent une malédiction antique : chaque capture subie les rend plus redoutables. Les retourner deux fois est rarement une bonne idée." },
-  { genre: "astuce", texte: "Les coins ne présentent que deux côtés attaquables. Vos cartes aux rangs faibles y survivent bien plus longtemps qu'au centre." },
-  { genre: "histoire", texte: "Les Scribes gardaient leurs secrets jusqu'au dernier instant. Leurs rangs restent cachés en main, puis un tour encore après la pose." },
-  { genre: "astuce", texte: "Azur part avec un point d'avance pour compenser le fait de jouer en premier. Une égalité de cartes sur le plateau lui donne donc la victoire." },
-  { genre: "histoire", texte: "Les Abysses sont remontées des tréfonds océaniques. Chaque Abysse en jeu renforce toutes les autres : elles ne chassent jamais seules." },
-  { genre: "astuce", texte: "Gardez une carte forte pour le dernier tour. La dernière pose ne peut plus être punie, c'est souvent elle qui décide de la partie." },
+// Les astuces de l'ecran d'attente. Toutes verifiees sur le moteur : chacune dit une
+// regle qu'on ne devine pas en jouant, et aucune ne promet ce que le code ne fait pas.
+const ASTUCES = [
+  "Une carte capturée sert aussitôt son nouveau camp : sa capacité se déclenche pour vous. C'est l'Onde, et elle peut renverser un plateau entier.",
+  "La Résonance exige deux rangs exactement identiques. Vos propres cartes comptent pour la déclencher, mais seules les ennemies changent de camp.",
+  "L'Éveil des Dorés échange ses rangs avec l'ennemie : il capture donc ce qui est plus fort que lui. Un Doré faible est un Doré dangereux.",
+  "Les Maudits gagnent un rang à chaque capture, définitivement. Laisser l'adversaire vous en voler un, c'est le nourrir avant de le reprendre.",
+  "Le bonus des Abysses compte celles que vous possédez, pas celles que vous posez. Voler une Abysse ennemie renforce toutes les vôtres.",
+  "Les Archers sont le seul Ordre à porter un 9 et un 1. Toute leur force tient à savoir de quel côté vous tournez ce 1.",
+  "Les Gardiens ne capturent pas : ils tiennent. Leur bouclier ajoute un rang en défense, et leur signature en double paire ne laisse aucun angle faible.",
+  "Le poison affaiblit toute carte posée sur sa case, y compris les vôtres. Sauf pour un Doré, qu'un rang perdu rend meilleur à l'échange.",
+  "Le voile des Scribes cache vos rangs quelques tours. L'adversaire doit deviner où frapper, et il devine mal.",
+  "Les Cendres tirent une ennemie hors de sa position. Une carte bien placée ne l'est plus une fois traînée ailleurs.",
+  "La Piques transperce jusqu'à deux cartes alignées. Cherchez les files, pas les cases isolées.",
+  "La mue des Chimères retourne l'axe d'une ennemie : son rang le plus fort peut se retrouver face au vide.",
 ];
+// Sept secondes par astuce. C'est court pour les plus longues : si le texte part avant
+// d'avoir ete lu, c'est ce nombre qu'il faut remonter, rien d'autre.
+const ASTUCE_MS = 7000;
 
 // ---------- Historique des parties ----------
 // Les 3 dernières parties terminées, la plus récente en premier. Volontairement
@@ -5747,6 +5761,41 @@ const APP_STYLES = `
           from { opacity: 0; transform: scale(1.04); }
           to { opacity: 1; transform: scale(1); }
         }
+        /* Les deux calques qui font respirer l'illustration. Debordement volontaire
+           (inset negatif pour la brume) : elle derive, et un calque au ras du cadre
+           laisserait apparaitre son bord en fin de course. Les deux degrades sont
+           transparents bien avant les coins, aucun rectangle ne se dessine donc. */
+        .attente-brume, .attente-lueur {
+          position: absolute; pointer-events: none; border-radius: 14px;
+        }
+        .attente-brume {
+          inset: -10%;
+          background: radial-gradient(60% 42% at 32% 38%, rgba(255,255,255,0.05), rgba(255,255,255,0) 70%);
+          animation: attente-brume-derive 20s ease-in-out infinite;
+          will-change: transform;
+        }
+        @keyframes attente-brume-derive {
+          0%   { transform: translate3d(-6%, 4%, 0); }
+          50%  { transform: translate3d(7%, -5%, 0); }
+          100% { transform: translate3d(-6%, 4%, 0); }
+        }
+        .attente-lueur {
+          inset: 0;
+          background: radial-gradient(52% 38% at 50% 22%, rgba(203,164,86,0.3), rgba(203,164,86,0) 72%);
+          opacity: 0.25;
+          /* Le retard negatif decale la lueur de la brume : les deux cycles ne se
+             croisent pas au meme instant, le mouvement parait moins mecanique. */
+          animation: attente-lueur-respire 5.5s ease-in-out -2.1s infinite;
+          will-change: opacity;
+        }
+        @keyframes attente-lueur-respire {
+          0%, 100% { opacity: 0.25; }
+          50%      { opacity: 0.55; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .attente-brume, .attente-lueur { animation: none; }
+          .attente-lueur { opacity: 0.35; }
+        }
         /* Le voile du texte suit le meme effacement : sans cela il flottait en rectangle
            net sur une image aux bords fondus. */
         .attente-ordre-cadre .recit-attente.sur-image {
@@ -5761,7 +5810,11 @@ const APP_STYLES = `
           width: auto; max-width: none; margin: 0;
           padding: 26px 14px 12px;
           background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.72) 32%, rgba(8,6,12,0.93) 100%);
-          border: none; border-radius: 0; min-height: 0; gap: 5px;
+          border: none; border-radius: 0; gap: 5px;
+          /* Hauteur reservee, et texte cale en BAS : sans les deux, le voile grandissait
+             et retrecissait a chaque astuce, et la derniere ligne dansait. Le tiers bas
+             de l'illustration a ete concu sombre pour recevoir ce bloc. */
+          min-height: 128px; justify-content: flex-end;
         }
         .recit-attente.sur-image .recit-genre { font-size: 9px; letter-spacing: 0.24em; }
         .recit-attente.sur-image .recit-texte {
@@ -5773,7 +5826,7 @@ const APP_STYLES = `
           margin-top: 12px;
           padding: 13px 16px 14px;
           background: rgba(8,6,12,0.5); border: 1px solid rgba(203,164,86,0.18);
-          border-radius: 12px; text-align: center; min-height: 96px;
+          border-radius: 12px; text-align: center; min-height: 118px;
           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
         }
         .recit-genre {
@@ -5782,11 +5835,11 @@ const APP_STYLES = `
         }
         .recit-texte {
           margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--bone);
-          animation: recit-parait 0.7s ease-out both;
+          animation: astuce-parait 0.4s ease-out both;
         }
-        @keyframes recit-parait {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
+        @keyframes astuce-parait {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         /* Rappel du code pendant le choix des Ordres : plus discret que l'écran d'attente,
            mais toujours lisible sans plisser les yeux (l'ancienne version était en 11px). */
@@ -12465,6 +12518,12 @@ export default function Emprise() {
             <div className="attente-ordre">
               <div className="attente-ordre-cadre">
                 <img src={ordreAttente.portrait} alt={ordreAttente.name} />
+                {/* Une image fixe qu'on regarde trente secondes parait morte. Deux
+                    mouvements lents suffisent, et ils n'animent que transform et
+                    opacity : ce projet est deja tombe a 14 images par seconde a cause
+                    d'une ombre animee en boucle. */}
+                <div className="attente-brume" aria-hidden="true" />
+                <div className="attente-lueur" aria-hidden="true" />
                 <RecitsAttente actif surImage />
               </div>
             </div>
