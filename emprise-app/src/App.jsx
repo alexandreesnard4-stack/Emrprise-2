@@ -5270,7 +5270,7 @@ const APP_STYLES = `
 
         .card { position: relative; width: clamp(50px, 16vw, 66px); height: clamp(68px, 21vw, 88px); border-radius: 9px; display: flex; flex-direction: column;
           align-items: center; justify-content: center; font-family: 'Cinzel', serif; user-select: none;
-          transform-style: preserve-3d; transition: transform .5s cubic-bezier(.4,.2,.2,1); overflow: visible; will-change: transform; }
+          -webkit-transform-style: preserve-3d; transform-style: preserve-3d; transition: transform .5s cubic-bezier(.4,.2,.2,1); overflow: visible; will-change: transform; }
 /* HALO DE CAMP — le plus gros gain de performance du fichier.
            Il animait box-shadow sur CHAQUE carte du plateau. Une ombre ne peut pas etre
            confiee au processeur graphique : le navigateur redessinait donc les 14 cartes
@@ -5989,6 +5989,13 @@ const APP_STYLES = `
           display: flex; align-items: center; justify-content: center; gap: 10px;
           width: fit-content; max-width: 100%; margin-left: auto; margin-right: auto;
         }
+        /* EN PARTIE, la Reserve se cale au bord DROIT de l'ecran, a hauteur de la main.
+           Elle sort du flux pour cela : dans le flux, elle deportait la rangee de cartes
+           vers la gauche, et le plateau ne se lisait plus centre. */
+        .main-et-reserve.en-partie { position: relative; width: 100%; }
+        .main-et-reserve.en-partie .reserve-pile {
+          position: absolute; right: 10px; top: 50%; transform: translateY(-50%); margin: 0;
+        }
         .reserve-pile {
           position: relative; z-index: 71; flex: none; align-self: center;
           width: 46px; height: 62px;
@@ -6016,6 +6023,18 @@ const APP_STYLES = `
         .reserve-dos.d1 { transform: translate(8px, 0) rotate(4deg); }
         /* Le compte ne fait pas doublon avec la pile : il devient utile des qu'une carte
            est posee en Mort Subite et qu'il n'en reste qu'une. */
+        /* Dans l'apercu d'avant-partie, les dos prennent la taille EXACTE d'une carte de
+           main : ils s'alignent avec les cartes d'Ordre posees a cote, au lieu de faire
+           deux vignettes plus petites qui cassaient la rangee. */
+        .reserve-pile.grande { width: clamp(70px, 21vw, 86px); height: clamp(78px, 23vw, 96px); }
+        .reserve-pile.grande .reserve-dos {
+          width: clamp(58px, 17vw, 72px); height: clamp(78px, 23vw, 96px); border-radius: 9px;
+          /* content-box, comme .card.hand : en border-box la bordure se prend a
+             l interieur et le dos faisait 2 px de moins que la carte d a cote. */
+          box-sizing: content-box;
+        }
+        .reserve-pile.grande .reserve-dos::after { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+        .reserve-pile.grande .reserve-dos.d1 { transform: translate(12px, 0) rotate(4deg); }
         .reserve-compte {
           position: absolute; right: -3px; bottom: -3px;
           min-width: 15px; height: 15px; line-height: 15px; padding: 0 3px;
@@ -6048,7 +6067,7 @@ const APP_STYLES = `
            face tournee vers nous se voit (backface-visibility). */
         .reserve-flip {
           position: relative; width: 58px; height: 78px;
-          transform-style: preserve-3d;
+          -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
           /* 0,9 s : un retournement de carte doit se REGARDER. A 0,45 s l'oeil ne
              voyait qu'un clignotement, pas une carte qui tourne. La courbe part
              lentement et finit doucement, comme une carte qu'on retourne a la main. */
@@ -8940,10 +8959,10 @@ export default function Emprise() {
   // un cosmetique a venir, et le dos suffit a dire qu'elles sont la. Empilees avec un
   // decalage, pour qu'on voie qu'il y en a deux. Ecrite une seule fois : l'apercu
   // d'avant-partie et les deux rangees de jeu s'en servent toutes les trois.
-  function pileDeReserve(cartes) {
+  function pileDeReserve(cartes, grande) {
     if (!cartes || cartes.length === 0) return null;
     return (
-      <span className="reserve-pile" aria-label={`Réserve : ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`} title="Réserve pour la Mort Subite">
+      <span className={`reserve-pile ${grande ? "grande" : ""}`} aria-label={`Réserve : ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`} title="Réserve pour la Mort Subite">
         {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />))}
         <span className="reserve-compte" aria-hidden="true">{cartes.length}</span>
       </span>
@@ -8956,7 +8975,7 @@ export default function Emprise() {
     // dernier coup, juste avant la Mort Subite, au moment ou l'on veut justement la voir.
     if (main.length === 0 && reserveDe(camp).length === 0) return null;
     return (
-      <div className="main-et-reserve">
+      <div className="main-et-reserve en-partie">
         <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
@@ -13823,7 +13842,7 @@ export default function Emprise() {
                             <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
                           ))}
                         </div>
-                        {pileDeReserve(reserveDe(campAdverse))}
+                        {pileDeReserve(reserveDe(campAdverse), true)}
                       </div>
                       <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
                       <div className="main-et-reserve">
@@ -13832,7 +13851,7 @@ export default function Emprise() {
                             <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
                           ))}
                         </div>
-                        {pileDeReserve(reserveDe(monCamp))}
+                        {pileDeReserve(reserveDe(monCamp), true)}
                       </div>
                     </>
                   );
