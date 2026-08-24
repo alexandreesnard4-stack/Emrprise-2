@@ -3240,14 +3240,18 @@ const APP_STYLES = `
         .hub-boutique-sous { font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
         .hub-jouer-classe {
           width: 100%; max-width: 240px; box-sizing: border-box;
-          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
           margin-top: 4px; padding: 10px 14px 9px;
           background: linear-gradient(180deg, #e8c877, #b98d3e 82%);
           border: 1px solid #f2dfae; border-radius: 14px; cursor: pointer;
           box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
           transition: filter .2s, transform .15s;
         }
-        .hub-jouer-classe:hover { filter: brightness(1.06); }
+        /* Survol : le bouton s enfonce legerement — relief creuse, pas d eclat. */
+        .hub-jouer-classe:hover {
+          transform: translateY(1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.45), inset 0 2px 6px rgba(60,40,10,0.35);
+        }
         /* Appui : le bouton s'enfonce, l'ombre exterieure rentre, une ombre interne
            apparait. La sensation d'entrer DANS le bouton. */
         .hub-jouer-classe:active {
@@ -3595,6 +3599,12 @@ const APP_STYLES = `
         .hub-jouer-classe-img {
           width: 36px; height: 36px; object-fit: contain; display: block; flex: none;
           filter: drop-shadow(0 3px 7px rgba(0,0,0,0.75));
+        }
+        /* Les haches du CLASSE, et elles seules : massives (60px), assombries pour
+           trancher sur l or, remontees contre le titre. */
+        .hub-jouer-classe .hub-jouer-classe-img {
+          width: auto; height: 60px; margin-top: -5px;
+          filter: brightness(0.5) contrast(1.2) drop-shadow(0 2px 3px rgba(0,0,0,0.7));
         }
         .hub-jouer-modes-btn {
           flex: 1; box-sizing: border-box;
