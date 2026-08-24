@@ -3257,7 +3257,6 @@ const APP_STYLES = `
         .hub-icone-miroir {
           width: 29px; height: 36px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
-          transition: transform .35s ease;
         }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
@@ -3274,9 +3273,12 @@ const APP_STYLES = `
            Ces gestes se jouent au SURVOL. A la pression ils n'ont pas le temps : le
            voile de la modale se pose 10 ms apres le clic et recouvre le bouton. La
            duree tombe donc a 0,1 s pendant l'appui, pour qu'il en reste quelque chose
-           sur les ecrans tactiles, ou le survol n'existe pas. */
-        .hub-horloge:hover { transform: perspective(420px) rotateY(34deg); }
-        .hub-horloge:active { transform: perspective(420px) rotateY(46deg) scale(0.94); }
+           sur les ecrans tactiles, ou le survol n'existe pas.
+
+           LE MIROIR N'A PLUS DE REGLE PROPRE : il porte deja la classe .hub-rouage, et
+           herite donc de la rotation de la roue. Son pivot sur l'axe vertical ne plaisait
+           pas ; plutot que de le recopier ici, on le laisse tomber et les deux boutons
+           partagent la meme et unique description du geste. */
         .hub-rouage:active, .hub-horloge:active, .hub-amis:active { transition-duration: .1s; }
         .hub-pages {
           flex: 1; width: 100%; min-height: 0; overflow: hidden;
@@ -3803,31 +3805,11 @@ const APP_STYLES = `
           border-radius: 50px; cursor: pointer;
           background: radial-gradient(circle, #251c2e 0%, #0f0a14 100%);
           border: 2px solid #e8c877;
-          /* Lueur FIXE, posee une fois : c'est le pseudo-element qui respire, jamais elle. */
-          box-shadow: 0 0 20px rgba(232,200,119,0.3);
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
           letter-spacing: 0.14em; text-transform: uppercase; color: #e8c877;
           transition: transform .12s ease-out;
         }
         .hub-classe-ovale:active { transform: scale(0.96); }
-        /* La pulsation. Le degrade est FIGE ; seule l'opacite est animee, et elle seule.
-           Ce projet est tombe de 52 a 14 images par seconde pour avoir anime une ombre
-           en boucle : on n'anime jamais ce qui repeint. */
-        .hub-classe-ovale::after {
-          content: ""; position: absolute; z-index: -1; pointer-events: none;
-          inset: -14px; border-radius: 60px;
-          background: radial-gradient(circle, rgba(232,200,119,0.42) 0%, rgba(232,200,119,0.16) 52%, rgba(232,200,119,0) 76%);
-          opacity: 0.3;
-          animation: ovale-respire 3.4s ease-in-out infinite;
-          will-change: opacity;
-        }
-        @keyframes ovale-respire {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.7; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .hub-classe-ovale::after { animation: none; opacity: 0.45; }
-        }
 
         /* ---------- La pastille des modes ---------- */
         /* Grise et non doree, volontairement : l'or est deja pris par l'action phare, et
@@ -3843,7 +3825,10 @@ const APP_STYLES = `
         }
         .hub-modes-pastille:hover { border-color: #8d82a0; }
         .hub-modes-pastille:active { transform: scale(0.96); }
-        .hub-modes-pastille svg { display: block; }
+        .hub-modes-icone {
+          width: 28px; height: 28px; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* En absolu : dans le flux, elle aurait pousse la pastille vers le haut et rompu
            l'alignement des deux centres. */
         .hub-modes-etiquette {
@@ -4192,6 +4177,13 @@ const APP_STYLES = `
         .ordre-detail-desc {
           margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--bone);
           padding-top: 8px; border-top: 1px solid rgba(203,164,86,0.18);
+          /* Justifie, et pose explicitement : sans cette ligne le descriptif heritait de
+             l'alignement de son parent, et certains Ordres se retrouvaient centres.
+             La cesure evite les rivieres blanches qu'une justification produit dans une
+             colonne etroite ; le document est en lang="fr", elle coupe donc en francais.
+             La derniere ligne n'est jamais etiree, c'est la regle du justify. */
+          text-align: justify;
+          -webkit-hyphens: auto; hyphens: auto;
         }
         @media (prefers-reduced-motion: reduce) { .ordre-detail { animation: none; } }
         /* ---------- Barre de navigation : socle de pierre et metal ----------
@@ -6055,7 +6047,7 @@ const APP_STYLES = `
           50%      { opacity: 0.55; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .hub-icone-miroir, .hub-icone-amis, .hub-pastille { transition: none; }
+          .hub-icone-amis, .hub-pastille { transition: none; }
           .hub-rouage:hover, .hub-horloge:hover, .hub-amis:hover,
           .hub-rouage:active, .hub-horloge:active, .hub-amis:active { transform: none; }
           .attente-brume, .attente-lueur { animation: none; }
@@ -11368,13 +11360,7 @@ export default function Emprise() {
                       aria-haspopup="dialog"
                       aria-label="Modes de jeu"
                     >
-                      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
-                        fill="none" stroke="#8d82a0" strokeWidth="1.8" strokeLinejoin="round">
-                        <rect x="3.6" y="3.6" width="7" height="7" rx="2" />
-                        <rect x="13.4" y="3.6" width="7" height="7" rx="2" />
-                        <rect x="3.6" y="13.4" width="7" height="7" rx="2" />
-                        <rect x="13.4" y="13.4" width="7" height="7" rx="2" />
-                      </svg>
+                      <img className="hub-modes-icone" src="/nav/modes.webp" alt="" width="28" height="28" />
                     </button>
                     <span className="hub-modes-etiquette" aria-hidden="true">Modes</span>
                   </span>
