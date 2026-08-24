@@ -1091,8 +1091,18 @@ function avanceDuPremier(mode) { return mode === "online" ? 1 : 2; }
 // La force brute d'une carte, pour que l'Echo compose sa Reserve sans reflechir
 // longtemps : il garde ses deux cartes aux rangs les plus hauts.
 function forceDeCarte(c) { return (c.top || 0) + (c.right || 0) + (c.bottom || 0) + (c.left || 0); }
+// UNE carte par Ordre, comme le joueur : on garde la plus forte de chaque Ordre present.
+// Sans cette regle l'Echo emportait deux fois sa meilleure carte, ce qui lui donnait une
+// Reserve que le joueur n'a pas le droit de composer.
 function reserveAutomatique(main) {
-  return main.slice().sort((a, b) => forceDeCarte(b) - forceDeCarte(a)).slice(0, RESERVE_TAILLE)
+  const parOrdre = new Map();
+  for (const c of main) {
+    const tenante = parOrdre.get(c.ability);
+    if (!tenante || forceDeCarte(c) > forceDeCarte(tenante)) parOrdre.set(c.ability, c);
+  }
+  return [...parOrdre.values()]
+    .sort((a, b) => forceDeCarte(b) - forceDeCarte(a))
+    .slice(0, RESERVE_TAILLE)
     .map((c, i) => ({ ...c, id: c.id + "-reserve-" + i }));
 }
 
@@ -6013,13 +6023,46 @@ const APP_STYLES = `
           position: relative; cursor: pointer; border-radius: 10px;
           padding: 3px; border: 2px solid transparent;
           transition: transform .12s ease-out, border-color .2s, opacity .2s;
+          /* La profondeur du retournement se pose ICI, sur le parent : mise sur
+             l'element qui tourne, la perspective tourne avec lui et l'effet s'aplatit. */
+          perspective: 700px;
         }
         .reserve-case:active { transform: scale(0.96); }
         .reserve-case.prise { border-color: var(--gold-bright); background: rgba(203,164,86,0.12); }
         /* Grisees plutot que retirees : le joueur doit continuer a voir ce qu'il ecarte,
            sinon il ne peut plus comparer avant de changer d'avis. */
-        .reserve-case.grisee { opacity: 0.4; }
+        .reserve-case.grisee { opacity: 0.4; cursor: default; }
         .reserve-case .card.hand { width: 58px; height: 78px; }
+        /* Le retournement. Les deux faces sont dos a dos dans le meme volume ; seule la
+           face tournee vers nous se voit (backface-visibility). */
+        .reserve-flip {
+          position: relative; width: 58px; height: 78px;
+          transform-style: preserve-3d;
+          transition: transform .45s cubic-bezier(.4, 0, .2, 1);
+        }
+        .reserve-case.prise .reserve-flip { transform: rotateY(180deg); }
+        .reserve-face {
+          position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+          -webkit-backface-visibility: hidden; backface-visibility: hidden;
+          border-radius: 8px; display: block;
+        }
+        .reserve-face.arriere {
+          transform: rotateY(180deg);
+          background:
+            radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%),
+            linear-gradient(160deg, #2a2138 0%, #14101d 100%);
+          border: 1px solid rgba(203,164,86,0.5); box-sizing: border-box;
+        }
+        /* Le meme losange que sur la pile en partie : c'est le meme dos. */
+        .reserve-face.arriere::after {
+          content: ""; position: absolute; left: 50%; top: 50%;
+          width: 18px; height: 18px; margin: -9px 0 0 -9px;
+          background: linear-gradient(160deg, #e8c877, #8a6f34);
+          transform: rotate(45deg); border-radius: 3px; opacity: 0.85;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .reserve-flip { transition: none; }
+        }
 
         .fan-backdrop { position: fixed; inset: 0; z-index: 65; background: transparent; }
         .card-fan { position: absolute; left: 50%; width: 0; z-index: 70; pointer-events: none; }
@@ -10470,7 +10513,8 @@ export default function Emprise() {
     if (phase === "select-reserve-blue") {
       setReserveBleue(choisies);
       if (mode === "local") { setPhase("select-red"); return; }
-      // Contre l'Echo, il compose la sienne tout seul : ses deux cartes les plus fortes.
+      // Contre l'Echo, il compose la sienne tout seul, sous la meme regle que le joueur :
+      // la carte la plus forte de chacun de ses deux Ordres.
       setReserveRouge(reserveAutomatique(cartesPourReserve(redOrders)));
       setPhase("preview");
     } else {
@@ -13648,36 +13692,51 @@ export default function Emprise() {
             {/* On dit a quoi elle sert AVANT de la faire choisir : sans cela le joueur
                 choisit au hasard une chose dont il ignore l'usage. */}
             <div className="sub reserve-explication">
-              Deux cartes gardées de côté. Si le duel s&apos;achève à égalité parfaite, vous les
-              poserez sur les cases restées vides pour départager.
+              Deux cartes gardées de côté, UNE PAR ORDRE. Si le duel s&apos;achève à égalité
+              parfaite, vous les poserez sur les cases restées vides pour départager.
             </div>
             <div className="sub">{reserveChoix.length}/{RESERVE_TAILLE} choisies</div>
             <div className="reserve-grille">
-              {source.map((c, i) => {
-                const prise = reserveChoix.includes(i);
-                const pleine = reserveChoix.length >= RESERVE_TAILLE;
-                return (
-                  <div
-                    key={c.id}
-                    className={`reserve-case ${prise ? "prise" : ""} ${!prise && pleine ? "grisee" : ""}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={prise}
-                    aria-label={`Carte ${i + 1}${prise ? ", gardée en Réserve" : ""}`}
-                    onClick={() => setReserveChoix((r) => r.includes(i) ? r.filter((x) => x !== i) : (r.length < RESERVE_TAILLE ? [...r, i] : r))}
-                    onKeyDown={KEY_ACTIVATE(() => setReserveChoix((r) => r.includes(i) ? r.filter((x) => x !== i) : (r.length < RESERVE_TAILLE ? [...r, i] : r)))}
-                  >
-                    <Card card={c} owner={camp} extraClass="hand" />
-                  </div>
-                );
-              })}
+              {/* Une carte par Ordre : des qu'un Ordre est pris, ses trois autres
+                  orientations s'eteignent. Sans cette regle, on gardait deux fois la
+                  meme carte et la Reserve n'etait qu'un doublon de sa meilleure carte. */}
+              {(() => {
+                const ordresPris = reserveChoix.map((i) => source[i] && source[i].ability);
+                return source.map((c, i) => {
+                  const prise = reserveChoix.includes(i);
+                  const pleine = reserveChoix.length >= RESERVE_TAILLE;
+                  const ordreDejaPris = !prise && ordresPris.includes(c.ability);
+                  const eteinte = !prise && (pleine || ordreDejaPris);
+                  const basculer = () => setReserveChoix((r) => {
+                    if (r.includes(i)) return r.filter((x) => x !== i);
+                    if (r.length >= RESERVE_TAILLE) return r;
+                    if (r.some((x) => source[x] && source[x].ability === c.ability)) return r;
+                    return [...r, i];
+                  });
+                  return (
+                    <div
+                      key={c.id}
+                      className={`reserve-case ${prise ? "prise" : ""} ${eteinte ? "grisee" : ""}`}
+                      role="button"
+                      tabIndex={eteinte ? -1 : 0}
+                      aria-pressed={prise}
+                      aria-disabled={eteinte}
+                      aria-label={`${c.name}, rangs ${c.top} ${c.right} ${c.bottom} ${c.left}${prise ? ", gardée en Réserve" : ordreDejaPris ? ", cet Ordre est déjà pris" : ""}`}
+                      onClick={eteinte ? undefined : basculer}
+                      onKeyDown={eteinte ? undefined : KEY_ACTIVATE(basculer)}
+                    >
+                      {/* La carte se RETOURNE quand on la garde : on ne voit plus que son
+                          dos, comme on la verra en partie. Deux faces dos a dos, une seule
+                          visible a la fois. */}
+                      <div className="reserve-flip">
+                        <span className="reserve-face avant"><Card card={c} owner={camp} extraClass="hand" /></span>
+                        <span className="reserve-face arriere" aria-hidden="true" />
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
-            <button
-              className="landing-link"
-              onClick={() => setReserveChoix(source.map((c, i) => ({ i, f: forceDeCarte(c) })).sort((a, b) => b.f - a.f).slice(0, RESERVE_TAILLE).map((x) => x.i))}
-            >
-              Les deux plus fortes
-            </button>
             <button className="reset-btn" disabled={reserveChoix.length !== RESERVE_TAILLE} onClick={validerReserve}>
               Confirmer
             </button>
