@@ -1067,6 +1067,35 @@ function ordreLePlusJoue(stats) {
   return cle;
 }
 
+// ---------- La Reserve et la Mort Subite ----------
+// Le camp qui COMMENCE part avec un handicap : c'est le second qui pose la derniere
+// carte, en sachant tout. Mesure faite sur 14 500 parties simulees avec ce moteur meme
+// (voir outils-equilibrage/) : il ne gagne que 40 % des parties des qu'on sait jouer.
+//
+// Un point d'avance ne peut rien y faire. Seize cartes sont posees, donc l'ecart de
+// cartes est toujours PAIR : +1 et +2 donnent exactement le meme resultat (40 %), +3
+// saute a 58 %. Aucun nombre entier ne tombe pres de 50.
+//
+// D'ou cette regle : DEUX points d'avance, ce qui transforme la defaite la plus
+// frequente du premier joueur -- deux cartes de retard, environ 17 % des parties -- en
+// egalite parfaite ; et cette egalite se joue au lieu d'etre donnee. Chaque Commandant a
+// choisi AVANT la partie deux cartes de Reserve : il les pose sur les cases restees
+// vides, et l'on recompte. Rien n'est tire au sort au moment le plus tendu du duel.
+const RESERVE_TAILLE = 2;
+const MORT_SUBITE_RONDES_MAX = 2;
+// L'avance du premier joueur. En ligne elle reste a 1 : la Mort Subite demande que les
+// deux appareils s'accordent sur des rondes supplementaires, ce qui n'est pas encore
+// ecrit. Donner +2 sans savoir departager y creerait des egalites sans vainqueur.
+function avanceDuPremier(mode) { return mode === "online" ? 1 : 2; }
+
+// La force brute d'une carte, pour que l'Echo compose sa Reserve sans reflechir
+// longtemps : il garde ses deux cartes aux rangs les plus hauts.
+function forceDeCarte(c) { return (c.top || 0) + (c.right || 0) + (c.bottom || 0) + (c.left || 0); }
+function reserveAutomatique(main) {
+  return main.slice().sort((a, b) => forceDeCarte(b) - forceDeCarte(a)).slice(0, RESERVE_TAILLE)
+    .map((c, i) => ({ ...c, id: c.id + "-reserve-" + i }));
+}
+
 const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Ligues & Héros ----------
@@ -5935,6 +5964,63 @@ const APP_STYLES = `
            le repousser. Le fond .fan-backdrop capte un tap "à côté" pour refermer, mais
            reste totalement transparent : rien ne doit jamais visuellement masquer le
            plateau, y compris le temps que l'éventail est ouvert. */
+        /* ---------- La Reserve, posee a droite des Ordres ---------- */
+        /* z-index 71, soit AU-DESSUS de l'eventail (70) et de son fond (65). Deploye,
+           l'eventail passe par-dessus la rangee de main ; la Reserve doit rester visible
+           malgre lui, c'est la seule chose qui rappelle au joueur ce qu'il a garde. */
+        .reserve-pile {
+          position: relative; z-index: 71; flex: none; align-self: center;
+          width: 46px; height: 62px; margin-left: 8px;
+        }
+        /* Les deux dos sont DECALES, pas superposes : empiles a l'exact, on n'aurait pas
+           vu qu'il y en a deux. */
+        .reserve-dos {
+          position: absolute; left: 0; top: 0; width: 38px; height: 54px;
+          border-radius: 7px; box-sizing: border-box;
+          background:
+            radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%),
+            linear-gradient(160deg, #2a2138 0%, #14101d 100%);
+          border: 1px solid rgba(203,164,86,0.5);
+          box-shadow: 0 3px 9px rgba(0,0,0,0.55);
+        }
+        /* Le motif du dos : un losange dore, simple, qui tiendra lieu de place au vrai
+           cosmetique le jour ou les dos de carte s'achetteront. */
+        .reserve-dos::after {
+          content: ""; position: absolute; left: 50%; top: 50%;
+          width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+          background: linear-gradient(160deg, #e8c877, #8a6f34);
+          transform: rotate(45deg); border-radius: 2px; opacity: 0.85;
+        }
+        .reserve-dos.d0 { transform: translate(0, 4px) rotate(-5deg); }
+        .reserve-dos.d1 { transform: translate(8px, 0) rotate(4deg); }
+        /* Le compte ne fait pas doublon avec la pile : il devient utile des qu'une carte
+           est posee en Mort Subite et qu'il n'en reste qu'une. */
+        .reserve-compte {
+          position: absolute; right: -3px; bottom: -3px;
+          min-width: 15px; height: 15px; line-height: 15px; padding: 0 3px;
+          border-radius: 999px; text-align: center;
+          font-family: 'Cinzel', serif; font-size: 9.5px; font-weight: 700;
+          color: #14111c; background: var(--gold-bright);
+        }
+
+        /* ---------- L'ecran de choix de la Reserve ---------- */
+        .reserve-explication { max-width: 320px; line-height: 1.5; margin-top: -4px; }
+        .reserve-grille {
+          display: grid; grid-template-columns: repeat(4, auto); gap: 8px;
+          justify-content: center; margin: 4px 0 2px;
+        }
+        .reserve-case {
+          position: relative; cursor: pointer; border-radius: 10px;
+          padding: 3px; border: 2px solid transparent;
+          transition: transform .12s ease-out, border-color .2s, opacity .2s;
+        }
+        .reserve-case:active { transform: scale(0.96); }
+        .reserve-case.prise { border-color: var(--gold-bright); background: rgba(203,164,86,0.12); }
+        /* Grisees plutot que retirees : le joueur doit continuer a voir ce qu'il ecarte,
+           sinon il ne peut plus comparer avant de changer d'avis. */
+        .reserve-case.grisee { opacity: 0.4; }
+        .reserve-case .card.hand { width: 58px; height: 78px; }
+
         .fan-backdrop { position: fixed; inset: 0; z-index: 65; background: transparent; }
         .card-fan { position: absolute; left: 50%; width: 0; z-index: 70; pointer-events: none; }
         .card-fan.fan-haut { bottom: 100%; margin-bottom: 10px; }
@@ -7545,7 +7631,14 @@ export default function Emprise() {
   // DEUX joueurs en auront une carte — que ce soit vous ou l'adversaire qui l'ayez choisi.
   const [draft, setDraft] = useState({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
   const [pickerChoice, setPickerChoice] = useState([]);
-  const [heroChoice, setHeroChoice] = useState(null); // clé d'Ordre du héros activé pour cette main (ou null)
+  const [heroChoice, setHeroChoice] = useState(null);
+  // La Reserve de chaque camp : les deux cartes gardees pour une eventuelle Mort Subite.
+  // reserveChoix porte la selection en cours sur l'ecran de choix.
+  const [reserveBleue, setReserveBleue] = useState([]);
+  const [reserveRouge, setReserveRouge] = useState([]);
+  const [reserveChoix, setReserveChoix] = useState([]);
+  // Numero de la ronde de Mort Subite en cours ; 0 tant que la partie suit son cours.
+  const [mortSubiteRonde, setMortSubiteRonde] = useState(0); // clé d'Ordre du héros activé pour cette main (ou null)
   // Capacités supérieures cochées à l'écran de choix des Ordres : liste de clés d'Ordre.
   // L'encoche n'apparaît que si le Héraut a été GAGNÉ en mode Histoire (chapitre terminé),
   // et seulement hors classement — activer une capacité supérieure ne doit jamais
@@ -8660,17 +8753,26 @@ export default function Emprise() {
     const rc = board.filter((b) => b && b.owner === "red").length;
     return {
       blueCount: bc, redCount: rc,
-      blueScore: bc + (firstPlayer === "blue" ? 1 : 0),
-      redScore: rc + (firstPlayer === "red" ? 1 : 0),
+      blueScore: bc + (firstPlayer === "blue" ? avanceDuPremier(mode) : 0),
+      redScore: rc + (firstPlayer === "red" ? avanceDuPremier(mode) : 0),
     };
-  }, [board, firstPlayer]);
-  // blueScore + redScore = blueCount + redCount + 1 = 16 + 1 = 17 (toujours impair) :
-  // une égalité est donc mathématiquement impossible, on ne teste plus ce cas.
-  // Le +1 va toujours à celui qui a commencé, quel que soit son camp.
+  }, [board, firstPlayer, mode]);
+  // L'avance va toujours a celui qui a commence, quel que soit son camp.
+  // EN LIGNE elle vaut 1 : la somme est alors impaire (16 + 1 = 17) et l'egalite reste
+  // impossible, comme avant. HORS LIGNE elle vaut 2, et l'egalite parfaite devient
+  // possible — c'est le but : elle declenche la Mort Subite, ou chaque camp pose une
+  // carte de sa Reserve sur les cases restees vides. Voir avanceDuPremier.
   // Un abandon ou un forfait désigne le vainqueur quel que soit l'état du plateau.
   // vainqueurForce n'a de sens qu'en ligne : ce verrou garantit qu'un état résiduel ne
   // peut jamais décider du vainqueur d'une partie solo ou locale.
-  const winner = gameOver ? ((mode === "online" ? vainqueurForce : null) || (blueScore > redScore ? "blue" : "red")) : null;
+  // A egalite persistante — les deux Reserves epuisees sans se departager, cas rare — la
+  // victoire revient a celui qui n'a PAS commence : c'est lui qui a subi les deux points
+  // d'avance, ce serait les lui reprendre que de trancher autrement.
+  const secondJoueur = firstPlayer === "blue" ? "red" : "blue";
+  const winner = gameOver
+    ? ((mode === "online" ? vainqueurForce : null)
+       || (blueScore === redScore ? secondJoueur : (blueScore > redScore ? "blue" : "red")))
+    : null;
 
   // ---------- Perspective : chacun joue EN BAS de son écran ----------
   // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
@@ -8775,12 +8877,27 @@ export default function Emprise() {
     );
   }
 
+  function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
+
   function mainCamp(camp) {
     const main = camp === "red" ? redHand : blueHand;
-    if (main.length === 0) return null;
+    // La rangee reste montee tant qu'il reste une Reserve : sinon elle disparaissait au
+    // dernier coup, juste avant la Mort Subite, au moment ou l'on veut justement la voir.
+    if (main.length === 0 && reserveDe(camp).length === 0) return null;
     return (
       <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
         {renderHandGroups(camp)}
+        {reserveDe(camp).length > 0 && (
+          /* La Reserve, a DROITE des Ordres. Les cartes sont de dos : leur face est un
+             cosmetique a venir, et le dos suffit a dire qu'elles sont la sans encombrer.
+             Empilees avec un decalage, pour qu'on voie qu'il y en a deux. */
+          <span className="reserve-pile" aria-label={`Réserve : ${reserveDe(camp).length} cartes`} title="Réserve pour la Mort Subite">
+            {reserveDe(camp).map((c, i) => (
+              <span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />
+            ))}
+            <span className="reserve-compte" aria-hidden="true">{reserveDe(camp).length}</span>
+          </span>
+        )}
       </div>
     );
   }
@@ -8939,6 +9056,7 @@ export default function Emprise() {
     setBlueOrders([]); setRedOrders([]);
     setPickerChoice([]);
     setHeroChoice(null);
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setMode(null);
     setConfluenceActive(false);
     setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
@@ -10320,13 +10438,43 @@ export default function Emprise() {
       setPickerChoice([]);
       setHeroChoice(null);
       setHerautsCoches([]);
-      setPhase(mode === "local" ? "select-red" : "preview");
+      // La Reserve se choisit AVANT de savoir comment la partie tournera : c'est un pari
+      // sur l'endgame, pas une reaction. En duel local chacun choisit la sienne a son tour.
+      setReserveChoix([]);
+      setPhase("select-reserve-blue");
     } else if (phase === "select-red") {
       setRedOrders(picked);
       setRedHand(avecHerauts(applyHeroToHand(makeHand(picked[0], picked[1]), heroChoice)));
       setPickerChoice([]);
       setHeroChoice(null);
       setHerautsCoches([]);
+      setReserveChoix([]);
+      setPhase("select-reserve-red");
+    }
+  }
+
+  // Les huit cartes ou puiser sa Reserve : celles des deux Ordres qu'on vient de choisir.
+  // On les rebatit plutot que de prendre la main elle-meme, pour que la Reserve n'enleve
+  // rien au jeu -- un Ordre n'a que quatre cartes, les quatre orientations de ses rangs,
+  // et prelever sur la main la reduirait a six.
+  function cartesPourReserve(ordres) {
+    if (!ordres || ordres.length !== 2) return [];
+    return makeHand(ordres[0], ordres[1]);
+  }
+
+  function validerReserve() {
+    if (reserveChoix.length !== RESERVE_TAILLE) return;
+    const source = cartesPourReserve(phase === "select-reserve-blue" ? blueOrders : redOrders);
+    const choisies = reserveChoix.map((i, n) => ({ ...source[i], id: source[i].id + "-reserve-" + n }));
+    setReserveChoix([]);
+    if (phase === "select-reserve-blue") {
+      setReserveBleue(choisies);
+      if (mode === "local") { setPhase("select-red"); return; }
+      // Contre l'Echo, il compose la sienne tout seul : ses deux cartes les plus fortes.
+      setReserveRouge(reserveAutomatique(cartesPourReserve(redOrders)));
+      setPhase("preview");
+    } else {
+      setReserveRouge(choisies);
       const premier = tirerPremierJoueur();
       setTurn(premier); setFirstPlayer(premier);
       setPhase("play");
@@ -10437,6 +10585,14 @@ export default function Emprise() {
         abandonnerAvantDebut();
       } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("landing"); }
       else setPhase(mode === "bot" ? "select-assist" : "landing");
+    } else if (phase === "select-reserve-blue") {
+      setReserveChoix([]);
+      setPickerChoice([]);
+      setPhase("select-blue");
+    } else if (phase === "select-reserve-red") {
+      setReserveChoix([]);
+      setPickerChoice([]);
+      setPhase("select-red");
     } else if (phase === "select-red") {
       // Bleu rechoisit ses 2 Ordres : on repart de sa sélection.
       setPickerChoice([]);
@@ -10677,10 +10833,36 @@ export default function Emprise() {
       if (owner === "blue") { nextBlueHand = blueHand.filter((_, i) => i !== cardIdx); setBlueHand(nextBlueHand); }
       else { nextRedHand = redHand.filter((_, i) => i !== cardIdx); setRedHand(nextRedHand); }
 
-      const nowGameOver = nextBlueHand.length === 0 && nextRedHand.length === 0;
+      const mainsVides = nextBlueHand.length === 0 && nextRedHand.length === 0;
+      // MORT SUBITE. Les mains sont vides, mais le compte tombe exactement egal : la
+      // partie ne se clot pas. Chaque camp prend une carte de sa Reserve, la pose sur une
+      // case restee vide, et l'on recompte. On lit le plateau QUI VIENT D'ETRE POSE, pas
+      // l'etat React, qui ne sera a jour qu'au rendu suivant.
+      let mortSubite = false;
+      if (mainsVides && mode !== "online" && mortSubiteRonde < MORT_SUBITE_RONDES_MAX) {
+        let bc = 0, rc = 0;
+        newBoard.forEach((c) => { if (c) (c.owner === "blue" ? bc++ : rc++); });
+        const avance = avanceDuPremier(mode);
+        const sb = bc + (firstPlayer === "blue" ? avance : 0);
+        const sr = rc + (firstPlayer === "red" ? avance : 0);
+        const carteBleue = reserveBleue[mortSubiteRonde];
+        const carteRouge = reserveRouge[mortSubiteRonde];
+        const placeLibre = newBoard.filter((c) => !c).length >= 2;
+        if (sb === sr && carteBleue && carteRouge && placeLibre) {
+          mortSubite = true;
+          nextBlueHand = [carteBleue];
+          nextRedHand = [carteRouge];
+          setBlueHand(nextBlueHand);
+          setRedHand(nextRedHand);
+          setMortSubiteRonde(mortSubiteRonde + 1);
+          // C'est celui qui a COMMENCE la partie qui ouvre la Mort Subite.
+          setTurn(firstPlayer);
+        }
+      }
+      const nowGameOver = mainsVides && !mortSubite;
       const nextTurn = owner === "blue" ? "red" : "blue";
       if (nowGameOver) setGameOver(true);
-      else setTurn(nextTurn);
+      else if (!mortSubite) setTurn(nextTurn);
 
       // Partie en ligne : on pousse notre coup vers Firestore juste après l'avoir joué
       // localement — l'adversaire le reçoit via l'écouteur onSnapshot ci-dessus. On joint
@@ -13453,6 +13635,55 @@ export default function Emprise() {
           <button className="reset-btn" onClick={confirmAssistOptions}>Continuer</button>
         </div>
       )}
+
+      {(phase === "select-reserve-blue" || phase === "select-reserve-red") && (() => {
+        const camp = phase === "select-reserve-blue" ? "blue" : "red";
+        const source = cartesPourReserve(camp === "blue" ? blueOrders : redOrders);
+        return (
+          <div className="order-picker">
+            <button className="back-btn" onClick={goBack}>← Retour</button>
+            <h2 className={camp === "red" ? "red-t" : ""}>
+              {mode === "local" ? (camp === "blue" ? "Azur : votre Réserve" : "Écarlate : votre Réserve") : "Votre Réserve"}
+            </h2>
+            {/* On dit a quoi elle sert AVANT de la faire choisir : sans cela le joueur
+                choisit au hasard une chose dont il ignore l'usage. */}
+            <div className="sub reserve-explication">
+              Deux cartes gardées de côté. Si le duel s&apos;achève à égalité parfaite, vous les
+              poserez sur les cases restées vides pour départager.
+            </div>
+            <div className="sub">{reserveChoix.length}/{RESERVE_TAILLE} choisies</div>
+            <div className="reserve-grille">
+              {source.map((c, i) => {
+                const prise = reserveChoix.includes(i);
+                const pleine = reserveChoix.length >= RESERVE_TAILLE;
+                return (
+                  <div
+                    key={c.id}
+                    className={`reserve-case ${prise ? "prise" : ""} ${!prise && pleine ? "grisee" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={prise}
+                    aria-label={`Carte ${i + 1}${prise ? ", gardée en Réserve" : ""}`}
+                    onClick={() => setReserveChoix((r) => r.includes(i) ? r.filter((x) => x !== i) : (r.length < RESERVE_TAILLE ? [...r, i] : r))}
+                    onKeyDown={KEY_ACTIVATE(() => setReserveChoix((r) => r.includes(i) ? r.filter((x) => x !== i) : (r.length < RESERVE_TAILLE ? [...r, i] : r)))}
+                  >
+                    <Card card={c} owner={camp} extraClass="hand" />
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              className="landing-link"
+              onClick={() => setReserveChoix(source.map((c, i) => ({ i, f: forceDeCarte(c) })).sort((a, b) => b.f - a.f).slice(0, RESERVE_TAILLE).map((x) => x.i))}
+            >
+              Les deux plus fortes
+            </button>
+            <button className="reset-btn" disabled={reserveChoix.length !== RESERVE_TAILLE} onClick={validerReserve}>
+              Confirmer
+            </button>
+          </div>
+        );
+      })()}
 
       {phase === "preview" && (() => {
         const isConfluence = redOrders.length > 2;
