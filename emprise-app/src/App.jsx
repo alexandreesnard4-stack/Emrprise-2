@@ -6300,18 +6300,18 @@ const APP_STYLES = `
         }
         .chat-bulle-directe {
           position: fixed; right: 10px; bottom: 132px; z-index: 76;
-          width: min(250px, calc(100vw - 20px)); box-sizing: border-box;
-          padding: 9px 12px; border-radius: 12px; cursor: pointer;
+          width: min(212px, calc(100vw - 20px)); box-sizing: border-box;
+          padding: 7px 10px; border-radius: 10px; cursor: pointer;
           background: var(--panel); border: 1px solid rgba(203,164,86,0.4);
           box-shadow: 0 6px 18px rgba(0,0,0,0.5);
-          font-size: 12.5px; line-height: 1.45; color: var(--bone);
+          font-size: 11px; line-height: 1.4; color: var(--bone);
           animation: chat-bulle-parait 0.32s ease-out both;
         }
         .chat-bulle-directe.de-moi { border-color: rgba(111,164,230,0.5); }
         .chat-bulle-directe.de-lui { border-color: rgba(224,101,90,0.5); }
         .chat-bulle-auteur {
-          display: block; font-family: 'Cinzel', serif; font-size: 9.5px;
-          letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+          display: block; font-family: 'Cinzel', serif; font-size: 8.5px;
+          letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
         }
         @keyframes chat-bulle-parait {
           from { opacity: 0; transform: translateY(8px); }
@@ -6331,7 +6331,7 @@ const APP_STYLES = `
         }
         .chat-panneau {
           position: fixed; right: 10px; bottom: 132px; z-index: 75;
-          width: min(290px, calc(100vw - 20px)); max-height: 42vh;
+          width: min(255px, calc(100vw - 20px)); max-height: 38vh;
           display: flex; flex-direction: column;
           background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
           border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.55); overflow: hidden;
@@ -6361,10 +6361,10 @@ const APP_STYLES = `
           font-family: inherit; font-size: 12px; color: var(--gold-bright);
           background: rgba(203,164,86,0.15); border: 1px solid rgba(203,164,86,0.45);
         }
-        .chat-liste { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 70px; }
+        .chat-liste { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 5px; min-height: 60px; }
         .chat-vide { font-size: 11px; color: var(--muted); text-align: center; margin: auto; font-style: italic; }
         .chat-msg {
-          max-width: 82%; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.35;
+          max-width: 82%; padding: 5px 9px; border-radius: 9px; font-size: 11px; line-height: 1.35;
           word-break: break-word; white-space: pre-wrap;
         }
         .chat-moi { align-self: flex-end; background: rgba(203,164,86,0.18); border: 1px solid rgba(203,164,86,0.35); color: var(--bone); border-bottom-right-radius: 3px; }
