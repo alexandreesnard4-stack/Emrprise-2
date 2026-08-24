@@ -1458,6 +1458,21 @@ const ASTUCES = [
 // d'avoir ete lu, c'est ce nombre qu'il faut remonter, rien d'autre.
 const ASTUCE_MS = 7000;
 
+// ---------- Arenes deja vues ouvertes ----------
+// Au tout premier lancement la cle est absente : on considere alors comme "deja vues"
+// toutes les arenes ouvertes du moment. Sans cela, un joueur qui installe le jeu verrait
+// le Bronze se deverrouiller ceremonieusement alors qu'il ne l'a jamais eu verrouille.
+const CLE_ARENES_VUES = "emprise-arenes-vues";
+function lireArenesVues() {
+  try {
+    const v = localStorage.getItem(CLE_ARENES_VUES);
+    return v ? JSON.parse(v) : null; // null : jamais ecrit
+  } catch (e) { return null; }
+}
+function ecrireArenesVues(noms) {
+  try { localStorage.setItem(CLE_ARENES_VUES, JSON.stringify(noms)); } catch (e) { /* tant pis */ }
+}
+
 // ---------- Historique des parties ----------
 // Les 3 dernières parties terminées, la plus récente en premier. Volontairement
 // minuscule (3 entrées, quelques champs) : un vrai journal viendra avec les profils.
@@ -3186,9 +3201,15 @@ const APP_STYLES = `
            droite pour tomber sous le rouage. L ecart de 10 px entre les rangs laisse a la
            pastille la place de deborder par le haut sans toucher le bouton du dessus. */
         .hub-haut-boutons { animation: hub-boutons-reviennent 0.26s ease-out both; }
+        /* Fondu SEUL, sans glissement. Le translateY(-6px) laissait les trois boutons
+           flottant 6 px au-dessus de leur place chaque fois que l animation ne se posait
+           pas : onglet en arriere-plan, animations bridees par le systeme, remontage par
+           la cle. Le pseudo, lui, ne bougeait pas -- les deux rangs paraissaient decales
+           alors que la mise en page etait juste. Une entree en fondu ne peut pas mentir
+           sur une position. */
         @keyframes hub-boutons-reviennent {
-          from { opacity: 0; transform: translateY(-6px); }
-          to { opacity: 1; transform: none; }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         @media (prefers-reduced-motion: reduce) {
           .hub-haut-boutons { animation: none; }
@@ -3578,6 +3599,97 @@ const APP_STYLES = `
         .arene-cadenas-rond img {
           width: auto; height: 54px; object-fit: contain; display: block;
           filter: drop-shadow(0 3px 6px rgba(0,0,0,0.7));
+        }
+        /* Les deux lueurs vivent dans des pseudo-elements et n'animent que leur OPACITE.
+           La valeur de box-shadow demandee est posee une fois pour toutes ; l'animer
+           image par image aurait fait recalculer l'ombre a chaque trame, ce qui a deja
+           coute 14 images par seconde a ce projet. Meme rendu, sans le prix. */
+        .arene-cadenas-rond::after {
+          content: ""; position: absolute; inset: -2px; border-radius: 50%;
+          box-shadow: 0 0 20px rgba(255, 50, 50, 0.6);
+          opacity: 0; pointer-events: none;
+        }
+        .arene-cadenas-rond::before {
+          content: ""; position: absolute; inset: -4px; border-radius: 50%;
+          box-shadow: 0 0 30px 6px rgba(232, 200, 119, 0.8);
+          opacity: 0; pointer-events: none;
+        }
+
+        /* ---- Refus : le cadenas tremble, rougeoie, et dit pourquoi ---- */
+        /* Le translate(-50%, -50%) qui centre le cadenas doit etre REPETE dans chaque
+           etape : une transform ne s'ajoute pas a celle de la regle, elle la remplace. */
+        .arene-cadenas-rond.refuse { animation: lockShake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes lockShake {
+          0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
+          12% { transform: translate(-50%, -50%) translateX(-5px) rotate(-7deg); }
+          28% { transform: translate(-50%, -50%) translateX(5px) rotate(6deg); }
+          44% { transform: translate(-50%, -50%) translateX(-4px) rotate(-5deg); }
+          60% { transform: translate(-50%, -50%) translateX(3px) rotate(4deg); }
+          78% { transform: translate(-50%, -50%) translateX(-2px) rotate(-2deg); }
+        }
+        .arene-cadenas-rond.refuse::after { animation: lockFlashRouge 0.6s ease-out both; }
+        @keyframes lockFlashRouge {
+          0% { opacity: 0; } 22% { opacity: 1; } 100% { opacity: 0; }
+        }
+        .arene-cadenas-avis {
+          position: absolute; left: 50%; top: calc(50% + 54px);
+          transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+          padding: 6px 13px; border-radius: 999px;
+          background: rgba(8,6,12,0.94); border: 1px solid rgba(224,101,90,0.5);
+          font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.08em;
+          color: var(--red-bright);
+          animation: arene-avis-parait 1s ease-out both;
+        }
+        @keyframes arene-avis-parait {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-5px); }
+          18% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          72% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* ---- Ouverture : secousse, halo dore, et le cadenas se souleve et se dissout ---- */
+        /* Le cadenas est UNE image : son anse ne peut pas se separer du corps sans un
+           second fichier. C'est donc le cadenas ENTIER qui se souleve et s'efface --
+           il quitte l'arene au lieu de se briser. */
+        .arene-cadenas-rond.souvre { animation: lockOuvre 1.6s ease-out both; }
+        @keyframes lockOuvre {
+          0%   { transform: translate(-50%, -50%) rotate(0deg); opacity: 1; }
+          7%   { transform: translate(-50%, -50%) rotate(-4deg); }
+          15%  { transform: translate(-50%, -50%) rotate(4deg); }
+          23%  { transform: translate(-50%, -50%) rotate(-3deg); }
+          31%  { transform: translate(-50%, -50%) rotate(2deg); }
+          40%  { transform: translate(-50%, -50%) rotate(0deg); opacity: 1; }
+          62%  { transform: translate(-50%, -50%) translateY(-8px) scale(1.1); opacity: 1; }
+          100% { transform: translate(-50%, -50%) translateY(-30px) scale(1.22); opacity: 0; }
+        }
+        .arene-cadenas-rond.souvre::before { animation: lockHaloDore 1.6s ease-out both; }
+        @keyframes lockHaloDore {
+          0%, 28% { opacity: 0; }
+          48% { opacity: 1; }
+          72% { opacity: 0.75; }
+          100% { opacity: 0; }
+        }
+        /* L'ile passe de l'ombre a la couleur. L'arene n'est deja PLUS verrouillee a cet
+           instant : la regle .verrouillee ne s'applique donc plus, et c'est l'animation
+           qui la repart du gris pour l'amener au dore. */
+        .arene-page-corps.se-revele .arene-page-img,
+        .arene-page-corps.se-revele .arene-page-chantier {
+          animation: areneRevele 1.6s ease-out both;
+        }
+        @keyframes areneRevele {
+          0%, 40% { filter: grayscale(1) brightness(0.5); }
+          100% { filter: grayscale(0) brightness(1.05) drop-shadow(0 18px 34px rgba(232,200,119,0.3)); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .arene-cadenas-rond.refuse, .arene-cadenas-rond.souvre,
+          .arene-cadenas-rond.refuse::after, .arene-cadenas-rond.souvre::before,
+          .arene-cadenas-avis,
+          .arene-page-corps.se-revele .arene-page-img,
+          .arene-page-corps.se-revele .arene-page-chantier { animation: none; }
+          /* L'avis doit rester lisible meme sans son fondu. */
+          .arene-cadenas-avis { opacity: 1; }
+          /* Et le cadenas doit quand meme finir par partir. */
+          .arene-cadenas-rond.souvre { opacity: 0; }
         }
         @keyframes arene-cadenas-pose {
           from { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
@@ -8006,6 +8118,22 @@ export default function Emprise() {
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
   const [historique, setHistorique] = useState(() => lireHistorique());
+  // Le cadenas de l'arene : refus au toucher, et ceremonie d'ouverture.
+  const [cadenasRefuse, setCadenasRefuse] = useState(null);   // { nom, n } de la ligue qui tremble
+  const [areneOuverte, setAreneOuverte] = useState(null);     // nom de la ligue qui s'ouvre
+  const cadenasTimerRef = useRef(null);
+  const ouvertureTimerRef = useRef(null);
+  // Le refus se rejoue a chaque toucher, meme sur la meme arene. Le compteur qui monte
+  // sert de cle React : l'element est remonte, et une animation CSS repart toujours sur
+  // un element neuf. On avait d'abord vide l'etat puis attendu une trame
+  // (requestAnimationFrame) — mais celui-ci est suspendu en arriere-plan et bride par
+  // certains navigateurs mobiles : le tremblement pouvait ne jamais partir.
+  function refuserCadenas(nom) {
+    clearTimeout(cadenasTimerRef.current);
+    setCadenasRefuse((r) => ({ nom, n: (r && r.nom === nom ? r.n : 0) + 1 }));
+    cadenasTimerRef.current = setTimeout(() => setCadenasRefuse(null), 1000);
+  }
+  useEffect(() => () => { clearTimeout(cadenasTimerRef.current); clearTimeout(ouvertureTimerRef.current); }, []);
   const [hubSens, setHubSens] = useState("droite");
   const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
   function allerPageHub(page) {
@@ -8070,6 +8198,24 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [stats, setStats] = useState(DEFAULT_STATS);
+  // Pose APRES stats : cet effet lit stats.trophies. Place plus haut, il levait
+  // "Cannot access 'stats' before initialization" et blanchissait la page.
+  // A l'ouverture de la galerie : une arene franchie depuis la derniere visite se
+  // deverrouille sous les yeux du joueur, une seule fois. Les autres sont simplement
+  // enregistrees comme vues.
+  useEffect(() => {
+    if (activeModal !== "arenes") return;
+    const ouvertes = LEAGUES.filter((l) => (stats.trophies || 0) >= l.min).map((l) => l.name);
+    const vues = lireArenesVues();
+    if (vues === null) { ecrireArenesVues(ouvertes); return; }  // premier lancement : rien a celebrer
+    const neuves = ouvertes.filter((n) => !vues.includes(n));
+    ecrireArenesVues(ouvertes);
+    if (!neuves.length) return;
+    // La plus haute des nouvelles : c'est celle qu'on vient de conquerir.
+    setAreneOuverte(neuves[neuves.length - 1]);
+    ouvertureTimerRef.current = setTimeout(() => setAreneOuverte(null), 1800);
+  }, [activeModal, stats.trophies]);
+
 
   // Le profil public : cree des la connexion — avant meme que le joueur ait un nom, pour
   // que son identifiant soit deja la quand il le choisit — avec ce numero tire dans une
@@ -11303,6 +11449,11 @@ export default function Emprise() {
                     // montre quand meme, assombrie : savoir ce qu'on vise vaut mieux qu'une
                     // case vide, et le cadenas dit clairement que ce n'est pas encore a soi.
                     const verrouillee = (stats.trophies || 0) < l.min;
+                    // Pendant sa ceremonie, l'arene n'est PLUS verrouillee : sans cette
+                    // ligne le cadenas disparaissait d'un coup au lieu de s'ouvrir.
+                    const sOuvre = areneOuverte === l.name;
+                    const montrerCadenas = verrouillee || sOuvre;
+                    const refuse = !!cadenasRefuse && cadenasRefuse.nom === l.name;
                     return (
                       <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
                         {/* Le nom coiffe la page : on doit savoir ou l'on est des que
@@ -11324,7 +11475,14 @@ export default function Emprise() {
                           </div>
                           {ici && <span className="arene-page-ici">Vous êtes ici</span>}
                         </div>
-                        <div className={`arene-page-corps ${verrouillee ? "verrouillee" : ""}`}>
+                        <div
+                          className={`arene-page-corps ${verrouillee ? "verrouillee" : ""} ${sOuvre ? "se-revele" : ""}`}
+                          role={verrouillee ? "button" : undefined}
+                          tabIndex={verrouillee ? 0 : undefined}
+                          aria-label={verrouillee ? `Arène ${l.name}, verrouillée. Nécessite ${l.min} trophées.` : undefined}
+                          onClick={verrouillee ? () => refuserCadenas(l.name) : undefined}
+                          onKeyDown={verrouillee ? KEY_ACTIVATE(() => refuserCadenas(l.name)) : undefined}
+                        >
                           {l.hub ? (
                             <img className="arene-page-img" src={l.hub} alt="" />
                           ) : (
@@ -11333,9 +11491,21 @@ export default function Emprise() {
                               <span>En construction</span>
                             </div>
                           )}
-                          {verrouillee && (
-                            <span className="arene-cadenas-rond" aria-label="Arène verrouillée">
+                          {montrerCadenas && (
+                            <span
+                              key={refuse ? `refus-${cadenasRefuse.n}` : "cadenas"}
+                              className={`arene-cadenas-rond ${refuse ? "refuse" : ""} ${sOuvre ? "souvre" : ""}`}
+                              aria-hidden="true"
+                            >
                               <img src="/arenes/cadenas.webp" alt="" />
+                            </span>
+                          )}
+                          {/* Le refus se dit, il ne se devine pas : sans ce mot, le
+                              tremblement laissait le joueur chercher ce qu'il avait fait
+                              de mal. role=status pour que le lecteur d'ecran l'annonce. */}
+                          {refuse && (
+                            <span key={`avis-${cadenasRefuse.n}`} className="arene-cadenas-avis" role="status">
+                              Nécessite {l.min} Trophées
                             </span>
                           )}
                         </div>
