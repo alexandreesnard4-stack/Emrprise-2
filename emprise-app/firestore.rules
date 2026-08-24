@@ -378,6 +378,17 @@ service cloud.firestore {
     // dans la transaction qui écrit aussi le profil (getAfter vérifie la cohérence), et
     // ne se modifie jamais : écrire sur un code déjà pris est un « update », refusé —
     // impossible d'écraser le code d'un autre.
+    // ---------- Le Pantheon ----------
+    // Le classement des 100 premiers Commandants tient dans UN document, reecrit par
+    // le serveur (SDK admin, qui ignore ces regles). Le client ne peut que le LIRE :
+    // une ecriture client permettrait de falsifier le classement entier, et une liste
+    // n a aucun sens sur une collection qui ne contient qu un document.
+    match /classement/{document} {
+      allow get: if connecte();
+      allow list: if false;
+      allow write: if false;
+    }
+
     match /codesAmi/{code} {
       allow get: if connecte();
       allow list: if false;

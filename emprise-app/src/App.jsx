@@ -1055,6 +1055,18 @@ function maitriseOrdre(stats, cle) {
 // part de l'adversaire. On l'oublie donc une fois pour toutes, plutot que d'afficher
 // "Initie" sur un Ordre jamais tenu en main. A incrementer si son sens change encore.
 const MAITRISE_VERSION = 1;
+// L'Ordre le plus joue, pour le medaillon de la ligne epinglee du Pantheon. Rend null
+// tant qu'aucune partie n'est jouee : mieux vaut un disque vide qu'un Ordre au hasard.
+function ordreLePlusJoue(stats) {
+  const parties = (stats && stats.orderPlays) || {};
+  let cle = null, max = 0;
+  for (const o of ORDERS) {
+    const n = Math.max(0, Number(parties[o.key] || 0) || 0);
+    if (n > max) { max = n; cle = o.key; }
+  }
+  return cle;
+}
+
 const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Ligues & Héros ----------
@@ -3183,11 +3195,16 @@ const APP_STYLES = `
           text-shadow: 0 1px 3px rgba(0,0,0,0.8);
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        /* Le compteur est desormais un bouton : il ouvre le Pantheon. */
         .hub-trophees {
           display: inline-flex; align-items: center; gap: 5px;
           padding: 3px 9px 3px 6px; border-radius: 999px;
           background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+          font: inherit; cursor: pointer;
+          transition: transform .12s ease-out, border-color .2s;
         }
+        .hub-trophees:hover { border-color: var(--gold); }
+        .hub-trophees:active { transform: scale(0.96); }
         /* La coupe est une illustration detouree : plus haute que large, on ne la rogne
            pas, et une ombre portee la detache du bandeau. */
         .hub-icone-coupe {
@@ -3218,6 +3235,69 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none;
         }
         .hub-haut-rang { display: flex; gap: 12px; }
+        /* ---------- Le Pantheon ---------- */
+        /* Cent lignes PLATES : ni ombre ni animation par ligne — cent lignes decorees
+           ruinent le defilement sur mobile. Le podium se distingue par une pastille en
+           degrade et une teinte de fond, rien de plus. */
+        .pantheon-panel {
+          max-width: 400px; width: 100%;
+          display: flex; flex-direction: column;
+          max-height: min(78vh, 640px);
+        }
+        .pantheon-sous { font-size: 11px; color: var(--muted); text-align: center; margin-top: -2px; }
+        .pantheon-maj { font-size: 9.5px; color: var(--muted); text-align: center; opacity: 0.85; margin-top: 3px; }
+        .pantheon-liste {
+          flex: 1; min-height: 120px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+          margin-top: 8px; border-top: 1px solid rgba(203,164,86,0.16);
+        }
+        .pantheon-ligne {
+          display: flex; align-items: center; gap: 9px;
+          padding: 7px 8px; border-bottom: 1px solid rgba(203,164,86,0.08);
+        }
+        .pantheon-rang {
+          flex: none; width: 26px; height: 20px; line-height: 20px; text-align: center;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          color: var(--muted); font-variant-numeric: tabular-nums;
+        }
+        /* Le podium : or, argent, bronze en degrades CSS. Sobre — on distingue, on ne
+           fait pas un feu d'artifice. */
+        .pantheon-ligne.p1 .pantheon-rang,
+        .pantheon-ligne.p2 .pantheon-rang,
+        .pantheon-ligne.p3 .pantheon-rang { border-radius: 999px; color: #14111c; }
+        .pantheon-ligne.p1 .pantheon-rang { background: linear-gradient(160deg, #f6e6b4, #c89a3f); }
+        .pantheon-ligne.p2 .pantheon-rang { background: linear-gradient(160deg, #e8e8ee, #9aa0b4); }
+        .pantheon-ligne.p3 .pantheon-rang { background: linear-gradient(160deg, #e0a97a, #9c6633); }
+        .pantheon-ligne.p1 { background: rgba(232,200,119,0.07); }
+        .pantheon-ligne.p2 { background: rgba(200,208,230,0.05); }
+        .pantheon-ligne.p3 { background: rgba(224,169,122,0.05); }
+        .pantheon-medaillon {
+          flex: none; width: 24px; height: 24px; border-radius: 50%; object-fit: cover;
+          border: 1px solid rgba(203,164,86,0.35); display: block;
+        }
+        .pantheon-medaillon.vide { background: rgba(203,164,86,0.12); }
+        .pantheon-noms { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: left; }
+        .pantheon-nom {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: var(--bone);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .pantheon-titre { font-size: 9px; color: var(--gold); letter-spacing: 0.06em; }
+        .pantheon-titre.nc { color: var(--muted); }
+        .pantheon-trophees {
+          flex: none; display: inline-flex; align-items: center; gap: 4px;
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          color: var(--gold-bright); font-variant-numeric: tabular-nums;
+        }
+        .pantheon-trophees img { width: 11px; height: 14px; object-fit: contain; display: block; }
+        /* La ligne du Commandant, epinglee SOUS la liste : toujours visible, hors du
+           defilement, cerclee d'or pour se distinguer des cent autres. */
+        .pantheon-moi {
+          flex: none; margin-top: 8px; border: 1px solid rgba(232,200,119,0.55);
+          border-radius: 10px; background: rgba(203,164,86,0.08);
+        }
+        .pantheon-vide { text-align: center; color: var(--muted); font-size: 12.5px; padding: 26px 10px; }
+        .pantheon-vide p { margin: 0 0 5px; }
+        .pantheon-vide-sous { font-size: 10.5px; }
+
         .histo-vide { text-align: center; padding: 14px 6px 6px; color: var(--muted); font-size: 12.5px; }
         .histo-vide p { margin: 0 0 4px; }
         .histo-vide-sous { font-size: 11px; }
@@ -8105,6 +8185,31 @@ export default function Emprise() {
     });
   }
   const [activeModal, setActiveModal] = useState(null);
+  // ---------- Le Pantheon ----------
+  // Le classement tient dans UN document, classement/top100, reecrit par le serveur.
+  // Le client le lit d'un getDoc a l'ouverture de l'ecran : JAMAIS de onSnapshot, jamais
+  // de requete sur la collection des joueurs — cent lectures par consultation auraient
+  // vide le quota gratuit (50 000 par jour) en cinq cents ouvertures.
+  const [pantheon, setPantheon] = useState({ etat: "attente", maj: 0, lignes: [] });
+  useEffect(() => {
+    if (activeModal !== "pantheon") return;
+    let vivant = true;
+    setPantheon({ etat: "charge", maj: 0, lignes: [] });
+    getDoc(doc(db, "classement", "top100"))
+      .then((snap) => {
+        if (!vivant) return;
+        const d = snap.exists() ? snap.data() : null;
+        setPantheon({
+          etat: "pret",
+          maj: d ? horodatageMs(d.maj) || 0 : 0,
+          // Au plus 100, quoi que le document pretende : c'est l'ecran qui tient sa
+          // promesse, pas la base.
+          lignes: d && Array.isArray(d.lignes) ? d.lignes.slice(0, 100) : [],
+        });
+      })
+      .catch(() => { if (vivant) setPantheon({ etat: "echec", maj: 0, lignes: [] }); });
+    return () => { vivant = false; };
+  }, [activeModal]);
   // Sous un panneau, la page ne glisse plus au doigt : on ouvrait le « i » en partie et
   // le plateau bougeait derriere le voile.
   useEffect(() => {
@@ -11230,10 +11335,16 @@ export default function Emprise() {
                 {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
               </button>
-              <span className="hub-trophees" title="Trophées">
+              <button
+                className="hub-trophees"
+                onClick={() => setActiveModal("pantheon")}
+                aria-haspopup="dialog"
+                aria-label="Voir le classement"
+                title="Voir le classement"
+              >
                 <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
-              </span>
+              </button>
             </div>
             {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
@@ -11866,6 +11977,76 @@ export default function Emprise() {
               </div>
             </div>
           )}
+
+          {activeModal === "pantheon" && (() => {
+            const seuil = LEAGUES[LEAGUES.length - 1].min;
+            const rangMoi = myUid ? pantheon.lignes.findIndex((l) => l && l.uid === myUid) : -1;
+            const monOrdre = ORDERS.find((o) => o.key === ordreLePlusJoue(stats)) || null;
+            const monTitre = titrePrincipal(stats);
+            // Une ligne du classement. Les pseudos viennent du serveur mais ont ete ecrits
+            // par des joueurs : ils passent par le filtre, comme partout ailleurs.
+            const ligne = (l, rang) => {
+              const ordre = ORDERS.find((o) => o.key === (l && l.ordre)) || null;
+              return (
+                <div key={(l && l.uid) || rang} className={`pantheon-ligne ${rang <= 3 ? `p${rang}` : ""}`}>
+                  <span className="pantheon-rang">{rang}</span>
+                  {ordre ? <img className="pantheon-medaillon" src={ordre.portrait} alt="" /> : <span className="pantheon-medaillon vide" />}
+                  <span className="pantheon-noms">
+                    <span className="pantheon-nom">{pseudoAffichable(l && l.pseudo) || "Commandant"}</span>
+                    {l && l.titre ? <span className="pantheon-titre">{String(l.titre).slice(0, 40)}</span> : null}
+                  </span>
+                  <span className="pantheon-trophees">
+                    <img src="/nav/trophee.webp" alt="" />{Math.max(0, Number(l && l.trophees) || 0)}
+                  </span>
+                </div>
+              );
+            };
+            return (
+              <div className="info-overlay" onClick={() => setActiveModal(null)}>
+                <div className="info-panel pantheon-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="info-panel-title">Le Panthéon</div>
+                  <div className="pantheon-sous">Les 100 premiers Commandants de la Légende</div>
+                  {pantheon.etat === "pret" && pantheon.maj > 0 && pantheon.lignes.length > 0 && (
+                    <div className="pantheon-maj">Mis à jour {ilYa(pantheon.maj)}</div>
+                  )}
+                  <div className="pantheon-liste">
+                    {pantheon.etat === "charge" && (
+                      <div className="pantheon-vide" role="status"><p>Consultation des archives...</p></div>
+                    )}
+                    {pantheon.etat === "echec" && (
+                      <div className="pantheon-vide" role="status">
+                        <p>Le Panthéon est momentanément hors d'atteinte.</p>
+                        <p className="pantheon-vide-sous">Réessayez dans un instant.</p>
+                      </div>
+                    )}
+                    {pantheon.etat === "pret" && pantheon.lignes.length === 0 && (
+                      <div className="pantheon-vide" role="status">
+                        <p>La Légende attend ses premiers noms.</p>
+                        <p className="pantheon-vide-sous">Atteignez {seuil} trophées pour y inscrire le vôtre.</p>
+                      </div>
+                    )}
+                    {pantheon.etat === "pret" && pantheon.lignes.map((l, i) => ligne(l, i + 1))}
+                  </div>
+                  {/* La ligne du Commandant, epinglee sous la liste, hors du defilement.
+                      Ses donnees viennent de l'etat local, deja charge : aucune lecture. */}
+                  <div className="pantheon-ligne pantheon-moi">
+                    <span className="pantheon-rang">{rangMoi >= 0 ? rangMoi + 1 : ""}</span>
+                    {monOrdre ? <img className="pantheon-medaillon" src={monOrdre.portrait} alt="" /> : <span className="pantheon-medaillon vide" />}
+                    <span className="pantheon-noms">
+                      <span className="pantheon-nom">{pseudo}</span>
+                      {rangMoi >= 0
+                        ? (monTitre ? <span className="pantheon-titre">{monTitre}</span> : null)
+                        : <span className="pantheon-titre nc">Non classé</span>}
+                    </span>
+                    <span className="pantheon-trophees">
+                      <img src="/nav/trophee.webp" alt="" />{stats.trophies || 0}
+                    </span>
+                  </div>
+                  <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+                </div>
+              </div>
+            );
+          })()}
 
           {activeModal === "historique" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
