@@ -3263,14 +3263,21 @@ const APP_STYLES = `
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
         /* Chacun bouge selon ce qu'il EST. Le rouage est une roue dentee : il tourne.
            Le miroir est une plaque : il pivote sur son axe vertical pour accrocher la
-           lumiere. Les deux casques se penchent l'un vers l'autre, comme un salut.
-           C'est l'ICONE qui bouge et le bouton qui s'enfonce : sans cela la pastille
-           des demandes en attente partait de travers avec le bouton.
-           Transform uniquement, jamais d'ombre ni de filtre anime. */
-        .hub-horloge:hover { transform: scale(1.06); }
-        .hub-horloge:active { transform: scale(0.94); }
-        .hub-horloge:hover .hub-icone-miroir { transform: perspective(320px) rotateY(16deg); }
-        .hub-horloge:active .hub-icone-miroir { transform: perspective(320px) rotateY(32deg); }
+           lumiere. Les deux casques se penchent, comme un salut.
+           Transform uniquement, jamais d'ombre ni de filtre anime.
+
+           AMPLEUR : le rouage tourne de 30 degres. Les deux autres se contentaient de
+           16 et 6 degres sur leur seule icone -- a cote de la roue, on ne les voyait
+           tout simplement pas. Ils bougent desormais AUTANT, et c'est le bouton entier
+           qui bouge, comme pour la roue.
+
+           Ces gestes se jouent au SURVOL. A la pression ils n'ont pas le temps : le
+           voile de la modale se pose 10 ms apres le clic et recouvre le bouton. La
+           duree tombe donc a 0,1 s pendant l'appui, pour qu'il en reste quelque chose
+           sur les ecrans tactiles, ou le survol n'existe pas. */
+        .hub-horloge:hover { transform: perspective(420px) rotateY(34deg); }
+        .hub-horloge:active { transform: perspective(420px) rotateY(46deg) scale(0.94); }
+        .hub-rouage:active, .hub-horloge:active, .hub-amis:active { transition-duration: .1s; }
         .hub-pages {
           flex: 1; width: 100%; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; align-items: center;
@@ -3388,10 +3395,14 @@ const APP_STYLES = `
           position: relative; overflow: visible;
           transition: border-color .2s, transform .12s ease-in;
         }
-        .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: none; }
-        .hub-rouage.hub-amis:active { transform: scale(0.92); }
-        .hub-amis:hover .hub-icone-amis { transform: rotate(-6deg) scale(1.05); }
-        .hub-amis:active .hub-icone-amis { transform: rotate(-13deg) scale(1.08); }
+        .hub-rouage.hub-amis { transition: border-color .2s, transform .3s ease; }
+        .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: rotate(-14deg) scale(1.06); }
+        .hub-rouage.hub-amis:active { transform: rotate(-22deg) scale(0.94); }
+        /* La pastille des demandes en attente tourne EN SENS INVERSE : penchee avec le
+           bouton, un chiffre de travers se lit mal et donne l'impression d'un defaut. */
+        .hub-amis:hover .hub-pastille { transform: rotate(14deg); }
+        .hub-amis:active .hub-pastille { transform: rotate(22deg); }
+        .hub-pastille { transition: transform .3s ease; }
         .hub-icone-amis {
           width: 38px; height: 38px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
@@ -5985,7 +5996,9 @@ const APP_STYLES = `
           50%      { opacity: 0.55; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .hub-icone-miroir, .hub-icone-amis { transition: none; }
+          .hub-icone-miroir, .hub-icone-amis, .hub-pastille { transition: none; }
+          .hub-rouage:hover, .hub-horloge:hover, .hub-amis:hover,
+          .hub-rouage:active, .hub-horloge:active, .hub-amis:active { transform: none; }
           .attente-brume, .attente-lueur { animation: none; }
           .attente-lueur { opacity: 0.35; }
         }
