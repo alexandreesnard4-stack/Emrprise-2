@@ -5892,24 +5892,6 @@ const APP_STYLES = `
         /* Textes d'attente : un encart discret, hauteur reservee pour que le bloc ne
            saute pas d'une phrase a l'autre. */
         /* L'Ordre en vedette pendant la recherche d'adversaire. */
-        .attente-ordre {
-          display: flex; flex-direction: column; align-items: center; gap: 4px;
-          margin-top: 12px; width: 100%; max-width: 250px;
-        }
-        /* Cadre du portrait : reference de position pour le texte incruste. Plus de trait
-           dore ni d'ombre portee : l'illustration ne doit plus se lire comme une carte
-           posee sur la page, elle doit s'y fondre. */
-        .attente-ordre-cadre {
-          position: relative; display: block; border-radius: 14px;
-        }
-        /* Fondu a l'apparition, puis bords qui s'effacent : l'image sort du noir et s'y
-           replonge sur ses quatre cotes, au lieu de s'arreter net sur un bord franc. */
-        .attente-ordre-cadre img {
-          display: block; width: min(72vw, 300px); aspect-ratio: 3 / 4; object-fit: cover;
-          -webkit-mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
-          mask-image: radial-gradient(118% 92% at 50% 40%, #000 50%, rgba(0,0,0,0.5) 76%, transparent 100%);
-          animation: attente-image-fondu 1.4s ease-out both;
-        }
         @keyframes attente-image-fondu {
           from { opacity: 0; transform: scale(1.04); }
           to { opacity: 1; transform: scale(1); }
@@ -5934,10 +5916,14 @@ const APP_STYLES = `
           position: absolute; inset: 0;
           background: linear-gradient(180deg, rgba(8,6,12,0.85) 0%, rgba(8,6,12,0.32) 20%, rgba(8,6,12,0) 44%);
         }
-        /* Le titre et le bouton Retour passent DEVANT l'illustration. Sans cette pile
-           explicite, un calque positionne a z-index 0 se peint apres le texte dans le
-           flux et le recouvrait. */
+        /* Le titre, le bouton Retour et les lignes d'etat passent DEVANT l'illustration.
+           Sans cette pile explicite, un calque positionne a z-index 0 se peint apres le
+           texte dans le flux et le recouvrait. */
         .order-picker h2 { position: relative; z-index: 1; }
+        .attente-sur-image {
+          position: relative; z-index: 1;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+        }
         /* L'astuce, en bas de l'ecran entier. Meme hauteur reservee que sur le portrait,
            pour que le bloc ne saute pas entre une astuce courte et une longue. */
         .recit-attente.plein-ecran {
@@ -7834,12 +7820,13 @@ export default function Emprise() {
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
   // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
   // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
-  const [ordreAttente, setOrdreAttente] = useState(null);
   const [imageAttente, setImageAttente] = useState(() => IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
   // Toute entree dans l ecran d attente se voit attribuer un portrait, pas seulement la
   // recherche : l attente des Ordres de l adversaire en a un aussi.
   useEffect(() => {
-    if (phase === "online-waiting") setOrdreAttente((o) => o || AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
+    // Une illustration neuve a chaque entree dans l'attente, quelle qu'elle soit :
+    // recherche d'adversaire comme attente des Ordres d'un ami.
+    if (phase === "online-waiting") setImageAttente(IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
   }, [phase]);
   // Appariements déjà consommés par cet appareil : garde synchrone contre une seconde
   // lecture du même champ (l'écouteur se déclenche à chaque écriture du document).
@@ -9397,9 +9384,6 @@ export default function Emprise() {
     setFileAttente(true);
     statsRecordedRef.current = false;
     venuDesAmisRef.current = false;
-    setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
-    // Une illustration neuve a chaque recherche : deux attentes de suite ne se ressemblent pas.
-    setImageAttente(IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
     try {
@@ -12863,20 +12847,24 @@ export default function Emprise() {
               <div className="code-copie">{!defiEnvoye && codeCopie ? "Code copié" : ""}</div>
             </>
           )}
-          {!fileAttente && ordreAttente && (
-            <div className="attente-ordre">
-              <div className="attente-ordre-cadre">
-                <img src={ordreAttente.portrait} alt={ordreAttente.name} />
-              </div>
+          {/* Meme illustration plein ecran que la recherche d'adversaire : attendre qu'un
+              ami choisisse ses Ordres, c'est attendre aussi. Elle est decorative, le titre
+              de l'ecran dit deja ce qu'on fait la. */}
+          {!fileAttente && (
+            <div className="attente-plein" aria-hidden="true">
+              <img className="attente-plein-img" src={imageAttente} alt="" width="1440" height="2105" />
+              <div className="attente-brume" />
+              <div className="attente-lueur" />
+              <div className="attente-voile" />
             </div>
           )}
-          {!fileAttente && <div className="sub" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
+          {!fileAttente && <div className="sub attente-sur-image" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
               detourner l'attention d'une information qui, elle, demande une decision. */}
-          {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} />}
+          {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} pleinEcran />}
           {attentePreMatch > TURN_SECONDS && (
-            <div className="sub">{
+            <div className="sub attente-sur-image">{
               // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
               // simplement annulee et l'on rentre au menu, sans trophee d'aucun cote. En
               // tournoi c'est different : l'arbre doit avancer, il lui faut un vainqueur,
