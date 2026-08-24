@@ -3559,58 +3559,13 @@ const APP_STYLES = `
         .reduced-motion .amis-defi { animation: none; }
         /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
            reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
-        /* La zone porte l'espace disponible ; l'arene et le sceau s'y empilent, centres.
-           C'est la zone qui s'etire, plus l'arene : sans cela le sceau ne pouvait pas
-           s'accrocher au bas de l'image. */
-        .hub-arene-zone {
-          flex: 1 1 auto; min-height: 0; width: 100%;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
         .hub-arene {
-          flex: 0 0 auto; width: 100%;
+          flex: 1 1 auto; min-height: 0; width: 100%;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           gap: 5px; margin-top: 2px;
           background: none; border: none; padding: 0; font: inherit; cursor: pointer;
           transition: transform .16s ease-out;
         }
-
-        /* ---------- Le sceau de combat ---------- */
-        /* Marge negative : un tiers du sceau mord sur l'image, deux tiers pendent en
-           dessous. Ancre dans le FLUX et non en absolu, le chevauchement suit l'image
-           quelle que soit sa taille. z-index pour passer PAR-DESSUS l'illustration. */
-        .hub-sceau {
-          position: relative; z-index: 3; flex: none;
-          margin-top: -44px; padding: 0;
-          width: 152px; height: 128px;
-          background: none; border: none; cursor: pointer; display: block;
-          transition: transform .12s ease-out;
-        }
-        .hub-sceau svg { display: block; width: 100%; height: 100%; overflow: visible; }
-        /* Le mot du sceau porte la police des titres du jeu, pas celle du SVG. */
-        .hub-sceau text { font-family: 'Cinzel', serif; }
-        .hub-sceau:active { transform: scale(0.96); }
-        /* La lueur qui respire. Le degrade est FIGE ; seule l'opacite est animee, et
-           elle seule. Ce projet est deja tombe de 52 a 14 images par seconde pour avoir
-           anime une ombre en boucle : on n'anime jamais ce qui repeint. */
-        .hub-sceau::after {
-          content: ""; position: absolute; z-index: -1; pointer-events: none;
-          left: 50%; top: 50px; width: 132px; height: 132px; margin: -66px 0 0 -66px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(232,200,119,0.5) 0%, rgba(232,200,119,0.2) 46%, rgba(232,200,119,0) 72%);
-          opacity: 0.35;
-          animation: sceau-respire 3.4s ease-in-out infinite;
-          will-change: opacity;
-        }
-        @keyframes sceau-respire {
-          0%, 100% { opacity: 0.35; }
-          50% { opacity: 0.75; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .hub-sceau::after { animation: none; opacity: 0.5; }
-        }
-        /* On entre dans l'arene : elle avance vers le doigt avant de s'ouvrir. */
-        .hub-arene:active { transform: scale(1.05); }
-        .hub-arene:active .hub-arene-img { filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6)) brightness(1.15); }
 
         /* ---------- Galerie des arenes ---------- */
         .info-overlay.arenes-voile {
@@ -3814,9 +3769,7 @@ const APP_STYLES = `
           .arenes-voile, .arene-page-img { animation: none; }
         }
         .hub-arene-img {
-          /* Bornee en unites d'ecran et non en pourcentage : l'arene se dimensionne
-             desormais sur son contenu, un pourcentage n'aurait plus rien a mesurer. */
-          max-width: min(72vw, 300px); max-height: min(40dvh, 300px); width: auto; height: auto;
+          max-width: min(72vw, 300px); max-height: 100%; width: auto; height: auto;
           object-fit: contain; display: block;
           filter: drop-shadow(0 16px 26px rgba(0,0,0,0.6));
           animation: hub-arene-parait 0.7s ease-out both;
@@ -3825,20 +3778,6 @@ const APP_STYLES = `
           from { opacity: 0; transform: translateY(10px) scale(0.97); }
           to { opacity: 1; transform: none; }
         }
-        /* iPhone SE et compagnie : la hauteur est comptee. On retrecit le SCEAU et on
-           borne l'image, plutot que de laisser le rang du bas sortir de l'ecran. Pose
-           ICI, apres .hub-arene-img et .hub-sceau : une media query n'ajoute aucune
-           specificite, c'est l'ordre d'ecriture qui tranche. */
-        @media (max-height: 720px) {
-          .hub-sceau { width: 124px; height: 104px; margin-top: -34px; }
-          .hub-sceau::after { top: 41px; width: 108px; height: 108px; margin: -54px 0 0 -54px; }
-          .hub-arene-img { max-height: min(28dvh, 200px); }
-        }
-        @media (max-height: 620px) {
-          .hub-sceau { width: 108px; height: 91px; margin-top: -28px; }
-          .hub-sceau::after { top: 36px; width: 94px; height: 94px; margin: -47px 0 0 -47px; }
-          .hub-arene-img { max-height: min(26dvh, 165px); }
-        }
         .hub-arene-nom {
           font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
           letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
@@ -3846,21 +3785,73 @@ const APP_STYLES = `
         }
         /* Rangee Classe + Modes : le Classe domine, le second bouton ouvre le panneau.
            margin-top: auto les colle au bas de la page, sous l'arene. */
+        /* align-items: center aligne le CENTRE de la pastille sur celui de l'ovale.
+           Le rembourrage du haut est genereux : la zone doit respirer sous l'arene. */
         .hub-jouer-rang {
-          display: flex; align-items: stretch; justify-content: center; gap: 9px; flex: none;
-          width: 100%; max-width: 340px; margin-top: auto; padding-top: 6px;
+          display: flex; align-items: center; justify-content: center; gap: 16px; flex: none;
+          width: 100%; max-width: 340px; margin-top: auto; padding-top: 26px;
+          /* Le rembourrage du bas RESERVE la place de l etiquette, qui est en absolu et
+             ne pousse donc rien. Sans lui elle finissait a 2 px de la barre basse sur un
+             ecran court, et la zone sure d un vrai telephone l aurait fait toucher. */
+          padding-bottom: 16px;
         }
-        /* MODES suit le sceau, il ne le concurrence pas : une ligne compacte, sombre,
-           a bordure fine. La hierarchie doit se lire sans reflechir. */
-        .hub-jouer-rang .hub-jouer-modes-btn {
-          flex: none; flex-direction: row; align-items: center; gap: 9px;
-          padding: 8px 20px 7px; border-radius: 12px;
-          box-shadow: 0 5px 14px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,240,205,0.1);
+
+        /* ---------- L'ovale du Classe ---------- */
+        .hub-classe-ovale {
+          position: relative; flex: none;
+          width: 190px; padding: 13px 0;
+          border-radius: 50px; cursor: pointer;
+          background: radial-gradient(circle, #251c2e 0%, #0f0a14 100%);
+          border: 2px solid #e8c877;
+          /* Lueur FIXE, posee une fois : c'est le pseudo-element qui respire, jamais elle. */
+          box-shadow: 0 0 20px rgba(232,200,119,0.3);
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          letter-spacing: 0.14em; text-transform: uppercase; color: #e8c877;
+          transition: transform .12s ease-out;
         }
-        .hub-jouer-rang .hub-jouer-modes-btn .hub-jouer-classe-img { width: 26px; height: 26px; }
-        .hub-jouer-rang .hub-jouer-modes-btn .hub-jouer-classe-titre { font-size: 12px; }
-        .hub-jouer-rang .hub-jouer-modes-btn .hub-jouer-classe-sous { font-size: 9.5px; }
-        .hub-modes-texte { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+        .hub-classe-ovale:active { transform: scale(0.96); }
+        /* La pulsation. Le degrade est FIGE ; seule l'opacite est animee, et elle seule.
+           Ce projet est tombe de 52 a 14 images par seconde pour avoir anime une ombre
+           en boucle : on n'anime jamais ce qui repeint. */
+        .hub-classe-ovale::after {
+          content: ""; position: absolute; z-index: -1; pointer-events: none;
+          inset: -14px; border-radius: 60px;
+          background: radial-gradient(circle, rgba(232,200,119,0.42) 0%, rgba(232,200,119,0.16) 52%, rgba(232,200,119,0) 76%);
+          opacity: 0.3;
+          animation: ovale-respire 3.4s ease-in-out infinite;
+          will-change: opacity;
+        }
+        @keyframes ovale-respire {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.7; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hub-classe-ovale::after { animation: none; opacity: 0.45; }
+        }
+
+        /* ---------- La pastille des modes ---------- */
+        /* Grise et non doree, volontairement : l'or est deja pris par l'action phare, et
+           deux ors cote a cote n'auraient plus dit lequel choisir. */
+        .hub-modes-zone { position: relative; flex: none; display: flex; }
+        .hub-modes-pastille {
+          width: 46px; height: 46px; padding: 0; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          border-radius: 50%; cursor: pointer;
+          background: radial-gradient(circle, #251c2e, #0f0a14);
+          border: 1.5px solid #6d6480;
+          transition: transform .12s ease-out, border-color .2s;
+        }
+        .hub-modes-pastille:hover { border-color: #8d82a0; }
+        .hub-modes-pastille:active { transform: scale(0.96); }
+        .hub-modes-pastille svg { display: block; }
+        /* En absolu : dans le flux, elle aurait pousse la pastille vers le haut et rompu
+           l'alignement des deux centres. */
+        .hub-modes-etiquette {
+          position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+          font-family: 'Cinzel', serif; font-size: 7.5px; font-weight: 700;
+          letter-spacing: 0.22em; text-transform: uppercase; color: #6d6480;
+          white-space: nowrap; pointer-events: none;
+        }
         /* Les haches croisees remplacent le pictogramme : illustration detouree, posee
            sans cadre, elle porte le bouton a elle seule. */
         .hub-jouer-classe-img {
@@ -11337,50 +11328,15 @@ export default function Emprise() {
                     a son illustration pour l'instant ; les ligues suivantes reprendront la
                     même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
                     Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
-                <div className="hub-arene-zone">
-                  <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
-                    <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
-                    <img
-                      className="hub-arene-img"
-                      src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
-                      alt=""
-                      onError={(e) => { e.currentTarget.style.display = "none"; }}
-                    />
-                  </button>
-                  {/* Le sceau de combat. Il fait exactement ce que faisait le pave jaune :
-                      chercherAdversaire, rien d'autre. Le SVG est decoratif, c'est le
-                      bouton qui porte le nom pour le lecteur d'ecran. */}
-                  <button className="hub-sceau" onClick={chercherAdversaire} aria-label="Combattre, trouver un adversaire">
-                    <svg viewBox="0 0 152 128" width="152" height="128" aria-hidden="true">
-                      <defs>
-                        <linearGradient id="sceau-or" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f6e6b4" />
-                          <stop offset="50%" stopColor="#e0b95f" />
-                          <stop offset="100%" stopColor="#a37c33" />
-                        </linearGradient>
-                        <radialGradient id="sceau-pierre" cx="50%" cy="35%">
-                          <stop offset="0%" stopColor="#453a5c" />
-                          <stop offset="70%" stopColor="#2a2138" />
-                          <stop offset="100%" stopColor="#191322" />
-                        </radialGradient>
-                      </defs>
-                      <polygon points="76,8 106,20 118,50 106,80 76,92 46,80 34,50 46,20"
-                        fill="url(#sceau-pierre)" stroke="url(#sceau-or)" strokeWidth="4" strokeLinejoin="round" />
-                      <polygon points="76,16 100,26 110,50 100,74 76,84 52,74 42,50 52,26"
-                        fill="none" stroke="rgba(232,200,119,0.26)" strokeWidth="1" />
-                      <g stroke="url(#sceau-or)" strokeWidth="4.5" strokeLinecap="round">
-                        <path d="M60 34 L92 66" />
-                        <path d="M92 34 L60 66" />
-                      </g>
-                      <circle cx="76" cy="50" r="5" fill="url(#sceau-or)" />
-                      <path d="M22 82 H130 L124 102 H28 Z" fill="url(#sceau-or)" stroke="#7a5c22" strokeWidth="1" />
-                      <path d="M22 82 L14 88 L22 92 Z" fill="#a37c33" />
-                      <path d="M130 82 L138 88 L130 92 Z" fill="#a37c33" />
-                      <text x="76" y="96.5" fontSize="12" fontWeight="700" fill="#2a1f10"
-                        letterSpacing="2" textAnchor="middle">COMBATTRE</text>
-                    </svg>
-                  </button>
-                </div>
+                <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
+                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
+                  <img
+                    className="hub-arene-img"
+                    src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                </button>
 
                 {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
                     ici : sans cet avis, le joueur se retrouvait au hub sans savoir
@@ -11396,17 +11352,32 @@ export default function Emprise() {
                     chaque defi recu. */}
                 {defiRecu && <div className="hub-defi-calque">{banniereDefi()}</div>}
 
-                {/* Le Classe est passe dans le sceau, a cheval sur l'arene : c'est lui
-                    l'action phare, il n'a plus besoin d'un pave. MODES reste une porte,
-                    et le dit — une icone seule ne se comprendrait pas. */}
+                {/* Un ovale de pierre cercle d'or pour l'action phare, une pastille grise
+                    pour la porte des autres modes. La hierarchie tient a la couleur :
+                    l'or appelle, le gris attend. Les deux appellent exactement ce qu'ils
+                    appelaient avant. */}
                 <div className="hub-jouer-rang">
-                  <button className="hub-jouer-modes-btn" onClick={() => setActiveModal("modes")} aria-haspopup="dialog">
-                    <img className="hub-jouer-classe-img" src="/nav/modes.webp" alt="" />
-                    <span className="hub-modes-texte">
-                      <span className="hub-jouer-classe-titre">Modes</span>
-                      <span className="hub-jouer-classe-sous">Tous les autres</span>
-                    </span>
-                  </button>
+                  <button className="hub-classe-ovale" onClick={chercherAdversaire}>Classé</button>
+                  {/* L'etiquette est posee EN ABSOLU sous la pastille : dans le flux, elle
+                      aurait rallonge la colonne et decale le centre du cercle par rapport
+                      a celui de l'ovale. */}
+                  <span className="hub-modes-zone">
+                    <button
+                      className="hub-modes-pastille"
+                      onClick={() => setActiveModal("modes")}
+                      aria-haspopup="dialog"
+                      aria-label="Modes de jeu"
+                    >
+                      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
+                        fill="none" stroke="#8d82a0" strokeWidth="1.8" strokeLinejoin="round">
+                        <rect x="3.6" y="3.6" width="7" height="7" rx="2" />
+                        <rect x="13.4" y="3.6" width="7" height="7" rx="2" />
+                        <rect x="3.6" y="13.4" width="7" height="7" rx="2" />
+                        <rect x="13.4" y="13.4" width="7" height="7" rx="2" />
+                      </svg>
+                    </button>
+                    <span className="hub-modes-etiquette" aria-hidden="true">Modes</span>
+                  </span>
                 </div>
               </section>
             )}
