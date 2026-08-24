@@ -3293,7 +3293,12 @@ const APP_STYLES = `
         }
         /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
         .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
-        .landing.hub .landing-emblem { margin: 0; }
+        /* Le bloc de titre monte CONTRE le bandeau. Les 14 px qui l en separaient se
+           decomposaient ainsi : 4 px de rembourrage de la page, le filet de l embleme,
+           et les 9 px d ecart que la colonne pose entre chacun de ses enfants. La marge
+           negative du bas annule ce dernier ; celle du haut mange le rembourrage. Tout
+           l espace ainsi rendu se reporte plus bas, avant l arene. */
+        .landing.hub .landing-emblem { margin: -3px 0 -9px; }
         .landing.hub .landing-subtitle { margin: 0; }
         .landing.hub .league-badge { margin: 0 0 2px; }
         /* Glissement d'entree : transform et opacity uniquement, en une seule passe. */
@@ -3404,6 +3409,11 @@ const APP_STYLES = `
           background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
         }
         .amis-ligne-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+        .amis-point-vert {
+          display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+          background: #5fd07a; margin-right: 5px; flex: none;
+          box-shadow: 0 0 6px rgba(95,208,122,0.75);
+        }
         /* Le nom se coupe, la puce de trophees non : elle vivait DANS l element tronque
            et disparaissait avec la fin du nom — sur une ligne de demande, plus etroite,
            meme un nom court perdait ses trophees. */
@@ -7700,10 +7710,15 @@ export default function Emprise() {
     setDefisIgnores((d) => ({ ...d, [inv.uid]: inv.t }));
     deleteDoc(doc(db, "users", myUid, "invitations", inv.uid)).catch(() => {});
   }
+  // Une seule definition de "en ligne" pour tout le jeu : le point vert, le mot qui
+  // l'accompagne et l'avertissement du defi doivent dire la meme chose au meme instant.
+  function estEnLigne(fiche) {
+    return !!(fiche && fiche.vuLe && maintenantServeur() - fiche.vuLe < EN_LIGNE_MS);
+  }
   function presenceDe(fiche) {
     if (!fiche || !fiche.vuLe) return "";
-    const age = maintenantServeur() - fiche.vuLe;
-    return age < EN_LIGNE_MS ? "En ligne" : `Vu ${ilYa(Date.now() - age)}`;
+    if (estEnLigne(fiche)) return "En ligne";
+    return `Vu ${ilYa(Date.now() - (maintenantServeur() - fiche.vuLe))}`;
   }
   // En fin de partie en ligne : ajouter celui d'en face, d'un geste. Trois etats, comme
   // la revanche. Si l'autre m'a deja demande, mon geste vaut acceptation.
@@ -7740,6 +7755,7 @@ export default function Emprise() {
     const f = fiches[a.uid];
     const nom = nomAffiche(f && f.pseudo);
     const presence = presenceDe(f);
+    const enLigne = estEnLigne(f);
     return (
       <div key={a.uid} className="amis-ligne">
         <div className="amis-ligne-texte">
@@ -7750,7 +7766,16 @@ export default function Emprise() {
             )}
           </span>
           <span className="amis-code">
-            {codeAmiLisible(f && f.codeAmi)}{f && f.titre ? ` · ${f.titre}` : ""}{presence ? ` · ${presence}` : ""}
+            {codeAmiLisible(f && f.codeAmi)}{f && f.titre ? ` · ${f.titre}` : ""}
+            {presence && (
+              <>
+                {" · "}
+                {/* Le point ne remplace pas le mot, il l'accompagne : seul, il ne dirait
+                    rien a qui ne voit pas les couleurs, ni au lecteur d'ecran. */}
+                {enLigne && <span className="amis-point-vert" aria-hidden="true" />}
+                {presence}
+              </>
+            )}
           </span>
         </div>
         <button className="amis-btn principal" onClick={() => defierAmi(a.uid)}>Défier</button>
