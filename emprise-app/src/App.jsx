@@ -3232,12 +3232,20 @@ const APP_STYLES = `
         .hub-icone-miroir {
           width: 29px; height: 36px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+          transition: transform .35s ease;
         }
         .hub-rouage:hover { border-color: var(--gold); transform: rotate(30deg); }
         .hub-rouage:active { transform: rotate(30deg) scale(0.94); }
-        /* Le rouage tourne, pas le miroir : il se contente de s'approcher. */
+        /* Chacun bouge selon ce qu'il EST. Le rouage est une roue dentee : il tourne.
+           Le miroir est une plaque : il pivote sur son axe vertical pour accrocher la
+           lumiere. Les deux casques se penchent l'un vers l'autre, comme un salut.
+           C'est l'ICONE qui bouge et le bouton qui s'enfonce : sans cela la pastille
+           des demandes en attente partait de travers avec le bouton.
+           Transform uniquement, jamais d'ombre ni de filtre anime. */
         .hub-horloge:hover { transform: scale(1.06); }
         .hub-horloge:active { transform: scale(0.94); }
+        .hub-horloge:hover .hub-icone-miroir { transform: perspective(320px) rotateY(16deg); }
+        .hub-horloge:active .hub-icone-miroir { transform: perspective(320px) rotateY(32deg); }
         .hub-pages {
           flex: 1; width: 100%; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; align-items: center;
@@ -3352,9 +3360,12 @@ const APP_STYLES = `
         }
         .hub-rouage.hub-amis:hover { border-color: var(--gold); transform: none; }
         .hub-rouage.hub-amis:active { transform: scale(0.92); }
+        .hub-amis:hover .hub-icone-amis { transform: rotate(-6deg) scale(1.05); }
+        .hub-amis:active .hub-icone-amis { transform: rotate(-13deg) scale(1.08); }
         .hub-icone-amis {
           width: 38px; height: 38px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+          transition: transform .35s ease;
         }
         .chat-badge.hub-pastille {
           position: absolute; top: -6px; right: -6px;
@@ -5816,10 +5827,13 @@ const APP_STYLES = `
         .recit-attente.plein-ecran {
           position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
           width: auto; max-width: none; margin: 0;
-          padding: 34px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+          /* Le bloc est remonte : colle au bord bas, il tombait dans le pouce et sous
+             la barre de geste des telephones recents. Le voile, lui, descend toujours
+             jusquau bord de l ecran — c est le TEXTE qui monte, par le rembourrage du bas. */
+          padding: 34px 20px calc(58px + env(safe-area-inset-bottom, 0px));
           background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.7) 30%, rgba(8,6,12,0.96) 100%);
           border: none; border-radius: 0; gap: 6px;
-          min-height: 136px; justify-content: flex-end;
+          min-height: 190px; justify-content: flex-end;
         }
         .recit-attente.plein-ecran .recit-genre { font-size: 9.5px; letter-spacing: 0.24em; }
         .recit-attente.plein-ecran .recit-texte {
@@ -5859,6 +5873,7 @@ const APP_STYLES = `
           50%      { opacity: 0.55; }
         }
         @media (prefers-reduced-motion: reduce) {
+          .hub-icone-miroir, .hub-icone-amis { transition: none; }
           .attente-brume, .attente-lueur { animation: none; }
           .attente-lueur { opacity: 0.35; }
         }
