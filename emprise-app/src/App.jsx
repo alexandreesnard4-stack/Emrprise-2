@@ -258,7 +258,7 @@ function melangerIndices(n) {
   return l;
 }
 
-function RecitsAttente({ actif, surImage }) {
+function RecitsAttente({ actif, pleinEcran }) {
   const [ordre] = useState(() => melangerIndices(ASTUCES.length));
   const [pos, setPos] = useState(0);
   useEffect(() => {
@@ -270,7 +270,7 @@ function RecitsAttente({ actif, surImage }) {
   }, [actif, ordre.length]);
   if (!actif) return null;
   return (
-    <div className={`recit-attente ${surImage ? "sur-image" : ""}`} role="status" aria-live="polite">
+    <div className={`recit-attente ${pleinEcran ? "plein-ecran" : ""}`} role="status" aria-live="polite">
       <div className="recit-genre">Astuce</div>
       {/* La cle force le remontage a chaque changement : c'est elle qui rejoue le fondu. */}
       <p key={pos} className="recit-texte">{ASTUCES[ordre[pos]]}</p>
@@ -1427,6 +1427,13 @@ const STORY_BRAISES_COTES = [
 // Deux registres qui alternent : l'Histoire du monde, et des conseils de jeu tires
 // des regles reelles. Ils occupent les secondes ou le joueur ne peut rien faire :
 // recherche d'un adversaire, ou attente de ses Ordres.
+// Les quatre illustrations de la recherche d'adversaire : une salle de jeu deserte, une
+// arene vide, les deux bannieres face a face, un miroir ou passe une ombre. Chacune dit
+// la meme chose sans un mot — quelqu'un manque. Tirees au sort a chaque recherche.
+// Reduites a 1440 px de large et enregistrees en JPEG : les originaux pesaient 8 Mo,
+// impensable a charger sur un telephone au moment ou le joueur attend deja.
+const IMAGES_ATTENTE = ["/attente/1.jpg", "/attente/2.jpg", "/attente/3.jpg", "/attente/4.jpg"];
+
 // Les astuces de l'ecran d'attente. Toutes verifiees sur le moteur : chacune dit une
 // regle qu'on ne devine pas en jouant, et aucune ne promet ce que le code ne fait pas.
 const ASTUCES = [
@@ -5761,6 +5768,46 @@ const APP_STYLES = `
           from { opacity: 0; transform: scale(1.04); }
           to { opacity: 1; transform: scale(1); }
         }
+        /* Illustration de la recherche d'adversaire : tout l'ecran, derriere le reste.
+           position: fixed et non absolute — elle ne doit pas defiler avec la page, et
+           elle couvre les zones sures du telephone jusqu'au bord. */
+        .attente-plein {
+          position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+        }
+        .attente-plein-img {
+          width: 100%; height: 100%; display: block;
+          /* cover et centre : l'image est plus large qu'un ecran de telephone, on rogne
+             donc les cotes. Les quatre illustrations sont composees au centre, rien
+             d'essentiel ne tombe hors champ. */
+          object-fit: cover; object-position: center;
+          animation: attente-image-fondu 1.4s ease-out both;
+        }
+        /* Voile du haut : sans lui, le bouton Retour et le titre se perdaient sur les
+           illustrations claires. Il s'arrete a mi-hauteur pour ne rien cacher du sujet. */
+        .attente-voile {
+          position: absolute; inset: 0;
+          background: linear-gradient(180deg, rgba(8,6,12,0.85) 0%, rgba(8,6,12,0.32) 20%, rgba(8,6,12,0) 44%);
+        }
+        /* Le titre et le bouton Retour passent DEVANT l'illustration. Sans cette pile
+           explicite, un calque positionne a z-index 0 se peint apres le texte dans le
+           flux et le recouvrait. */
+        .order-picker h2 { position: relative; z-index: 1; }
+        /* L'astuce, en bas de l'ecran entier. Meme hauteur reservee que sur le portrait,
+           pour que le bloc ne saute pas entre une astuce courte et une longue. */
+        .recit-attente.plein-ecran {
+          position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
+          width: auto; max-width: none; margin: 0;
+          padding: 34px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+          background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.7) 30%, rgba(8,6,12,0.96) 100%);
+          border: none; border-radius: 0; gap: 6px;
+          min-height: 136px; justify-content: flex-end;
+        }
+        .recit-attente.plein-ecran .recit-genre { font-size: 9.5px; letter-spacing: 0.24em; }
+        .recit-attente.plein-ecran .recit-texte {
+          font-size: 12.5px; line-height: 1.5; max-width: 420px;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+        }
+
         /* Les deux calques qui font respirer l'illustration. Debordement volontaire
            (inset negatif pour la brume) : elle derive, et un calque au ras du cadre
            laisserait apparaitre son bord en fin de course. Les deux degrades sont
@@ -5795,31 +5842,6 @@ const APP_STYLES = `
         @media (prefers-reduced-motion: reduce) {
           .attente-brume, .attente-lueur { animation: none; }
           .attente-lueur { opacity: 0.35; }
-        }
-        /* Le voile du texte suit le meme effacement : sans cela il flottait en rectangle
-           net sur une image aux bords fondus. */
-        .attente-ordre-cadre .recit-attente.sur-image {
-          -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
-          mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
-        }
-        /* Textes poses SUR l'illustration : un voile monte du bas, opaque sous le texte
-           pour le rendre lisible quel que soit le portrait, transparent en haut pour ne
-           pas masquer le personnage. */
-        .recit-attente.sur-image {
-          position: absolute; left: 0; right: 0; bottom: 0;
-          width: auto; max-width: none; margin: 0;
-          padding: 26px 14px 12px;
-          background: linear-gradient(180deg, rgba(8,6,12,0) 0%, rgba(8,6,12,0.72) 32%, rgba(8,6,12,0.93) 100%);
-          border: none; border-radius: 0; gap: 5px;
-          /* Hauteur reservee, et texte cale en BAS : sans les deux, le voile grandissait
-             et retrecissait a chaque astuce, et la derniere ligne dansait. Le tiers bas
-             de l'illustration a ete concu sombre pour recevoir ce bloc. */
-          min-height: 128px; justify-content: flex-end;
-        }
-        .recit-attente.sur-image .recit-genre { font-size: 9px; letter-spacing: 0.24em; }
-        .recit-attente.sur-image .recit-texte {
-          font-size: 11.5px; line-height: 1.45;
-          text-shadow: 0 1px 3px rgba(0,0,0,0.95);
         }
         .recit-attente {
           width: 100%; max-width: 340px; box-sizing: border-box;
@@ -7653,6 +7675,7 @@ export default function Emprise() {
   // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
   // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
   const [ordreAttente, setOrdreAttente] = useState(null);
+  const [imageAttente, setImageAttente] = useState(() => IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
   // Toute entree dans l ecran d attente se voit attribuer un portrait, pas seulement la
   // recherche : l attente des Ordres de l adversaire en a un aussi.
   useEffect(() => {
@@ -9155,6 +9178,8 @@ export default function Emprise() {
     setFileAttente(true);
     statsRecordedRef.current = false;
     setOrdreAttente(AVAILABLE_ORDERS[Math.floor(Math.random() * AVAILABLE_ORDERS.length)]);
+    // Une illustration neuve a chaque recherche : deux attentes de suite ne se ressemblent pas.
+    setImageAttente(IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
     try {
@@ -12514,19 +12539,23 @@ export default function Emprise() {
           {/* Pendant la recherche, l'illustration porte tout : les textes d'Histoire et
               d'astuces s'incrustent en bas du portrait, sur un voile sombre. La consigne
               et la ligne d'etat ont ete retirees, le titre de l'ecran les disait deja. */}
-          {fileAttente && ordreAttente && (
-            <div className="attente-ordre">
-              <div className="attente-ordre-cadre">
-                <img src={ordreAttente.portrait} alt={ordreAttente.name} />
-                {/* Une image fixe qu'on regarde trente secondes parait morte. Deux
-                    mouvements lents suffisent, et ils n'animent que transform et
-                    opacity : ce projet est deja tombe a 14 images par seconde a cause
-                    d'une ombre animee en boucle. */}
-                <div className="attente-brume" aria-hidden="true" />
-                <div className="attente-lueur" aria-hidden="true" />
-                <RecitsAttente actif surImage />
+          {fileAttente && (
+            <>
+              {/* L'illustration prend tout l'ecran, derriere le titre et l'astuce. Elle
+                  est decorative : le titre "Recherche d'un adversaire" dit deja ce qu'elle
+                  montre, un alt le repeterait a voix haute au lecteur d'ecran.
+                  Une image fixe qu'on regarde trente secondes parait morte. Deux
+                  mouvements lents suffisent, et ils n'animent que transform et opacity :
+                  ce projet est deja tombe a 14 images par seconde a cause d'une ombre
+                  animee en boucle. */}
+              <div className="attente-plein" aria-hidden="true">
+                <img className="attente-plein-img" src={imageAttente} alt="" width="1440" height="2105" />
+                <div className="attente-brume" />
+                <div className="attente-lueur" />
+                <div className="attente-voile" />
               </div>
-            </div>
+              <RecitsAttente actif pleinEcran />
+            </>
           )}
           {!fileAttente && onlineRole === "blue" && onlineGameId && (
             <>
