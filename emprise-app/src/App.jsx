@@ -12433,10 +12433,11 @@ export default function Emprise() {
               ) : "L'adversaire choisit ses Ordres..."}
             </div>
           )}
-          {/* Le code n'a de sens qu'entre amis : en Classé l'appariement est automatique,
-              en tournoi c'est l'arbre qui decide. L'afficher ailleurs laissait croire
-              qu'il fallait le transmettre a quelqu'un. */}
-          {mode === "online" && onlineGameId && !partieClassee && !tournoiOnlineId && (
+          {/* Le code ne sert qu'a faire VENIR l'adversaire. Des qu'il est la — ou que le
+              defi est parti chez un ami, qui n'aura rien a taper — il ne dit plus rien a
+              personne. En Classé l'appariement est automatique, en tournoi c'est l'arbre
+              qui decide : jamais de code non plus. */}
+          {mode === "online" && onlineGameId && !partieClassee && !tournoiOnlineId && !defiEnvoye && !advPresent && (
             <div className="code-rappel">Code de partie :<b>{onlineGameId}</b></div>
           )}
           <div className="sub">
