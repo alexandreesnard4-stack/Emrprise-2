@@ -5978,9 +5978,20 @@ const APP_STYLES = `
         /* z-index 71, soit AU-DESSUS de l'eventail (70) et de son fond (65). Deploye,
            l'eventail passe par-dessus la rangee de main ; la Reserve doit rester visible
            malgre lui, c'est la seule chose qui rappelle au joueur ce qu'il a garde. */
+        /* La main et sa Reserve, cote a cote. La Reserve est DEHORS : le cadre de la
+           rangee n'entoure que les cartes jouables, et la separation se lit d'un coup
+           d'oeil -- a gauche ce qu'on peut jouer, a droite ce qu'on garde. */
+        /* Largeur au CONTENU, centree par ses marges : .zone-bas est un bloc ordinaire
+           et laissait le bloc s etirer sur toute la largeur, ce qui rejetait la Reserve
+           au bord droit de l ecran, loin de la main. .zone-main, elle, retrecit ses
+           enfants -- d ou deux comportements pour un meme bloc. */
+        .main-et-reserve {
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          width: fit-content; max-width: 100%; margin-left: auto; margin-right: auto;
+        }
         .reserve-pile {
           position: relative; z-index: 71; flex: none; align-self: center;
-          width: 46px; height: 62px; margin-left: 8px;
+          width: 46px; height: 62px;
         }
         /* Les deux dos sont DECALES, pas superposes : empiles a l'exact, on n'aurait pas
            vu qu'il y en a deux. */
@@ -8925,25 +8936,31 @@ export default function Emprise() {
 
   function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
 
+  // La pile de Reserve, posee a cote de la main. Les cartes sont de DOS : leur face est
+  // un cosmetique a venir, et le dos suffit a dire qu'elles sont la. Empilees avec un
+  // decalage, pour qu'on voie qu'il y en a deux. Ecrite une seule fois : l'apercu
+  // d'avant-partie et les deux rangees de jeu s'en servent toutes les trois.
+  function pileDeReserve(cartes) {
+    if (!cartes || cartes.length === 0) return null;
+    return (
+      <span className="reserve-pile" aria-label={`Réserve : ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`} title="Réserve pour la Mort Subite">
+        {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />))}
+        <span className="reserve-compte" aria-hidden="true">{cartes.length}</span>
+      </span>
+    );
+  }
+
   function mainCamp(camp) {
     const main = camp === "red" ? redHand : blueHand;
     // La rangee reste montee tant qu'il reste une Reserve : sinon elle disparaissait au
     // dernier coup, juste avant la Mort Subite, au moment ou l'on veut justement la voir.
     if (main.length === 0 && reserveDe(camp).length === 0) return null;
     return (
-      <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
-        {renderHandGroups(camp)}
-        {reserveDe(camp).length > 0 && (
-          /* La Reserve, a DROITE des Ordres. Les cartes sont de dos : leur face est un
-             cosmetique a venir, et le dos suffit a dire qu'elles sont la sans encombrer.
-             Empilees avec un decalage, pour qu'on voie qu'il y en a deux. */
-          <span className="reserve-pile" aria-label={`Réserve : ${reserveDe(camp).length} cartes`} title="Réserve pour la Mort Subite">
-            {reserveDe(camp).map((c, i) => (
-              <span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />
-            ))}
-            <span className="reserve-compte" aria-hidden="true">{reserveDe(camp).length}</span>
-          </span>
-        )}
+      <div className="main-et-reserve">
+        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
+          {renderHandGroups(camp)}
+        </div>
+        {pileDeReserve(reserveDe(camp))}
       </div>
     );
   }
@@ -13796,16 +13813,26 @@ export default function Emprise() {
                           ? (nomAdverse || "Votre adversaire")
                           : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}
                       </div>
-                      <div className="hand-row" style={{ maxWidth: 320 }}>
-                        {apercuParOrdre(mainAdverse).map((card) => (
-                          <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
-                        ))}
+                      {/* La Reserve figure des l'apercu, a cote de la main : le joueur
+                          vient de la composer, il doit la retrouver la ou il la verra
+                          pendant toute la partie. Celle d'en face est de dos elle aussi,
+                          elle ne revele donc rien. */}
+                      <div className="main-et-reserve">
+                        <div className="hand-row" style={{ maxWidth: 320 }}>
+                          {apercuParOrdre(mainAdverse).map((card) => (
+                            <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
+                          ))}
+                        </div>
+                        {pileDeReserve(reserveDe(campAdverse))}
                       </div>
                       <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
-                      <div className="hand-row" style={{ maxWidth: 320 }}>
-                        {apercuParOrdre(maMain).map((card) => (
-                          <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
-                        ))}
+                      <div className="main-et-reserve">
+                        <div className="hand-row" style={{ maxWidth: 320 }}>
+                          {apercuParOrdre(maMain).map((card) => (
+                            <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                          ))}
+                        </div>
+                        {pileDeReserve(reserveDe(monCamp))}
                       </div>
                     </>
                   );
