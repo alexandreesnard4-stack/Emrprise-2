@@ -6051,6 +6051,31 @@ const APP_STYLES = `
           background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
           border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.55); overflow: hidden;
         }
+        .chat-entete {
+          display: flex; align-items: center; justify-content: space-between; gap: 8px;
+          padding: 7px 10px; border-bottom: 1px solid rgba(203,164,86,0.2);
+        }
+        .chat-entete-titre {
+          font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.18em;
+          text-transform: uppercase; color: var(--muted);
+        }
+        .chat-couper {
+          background: none; border: none; padding: 2px 4px; cursor: pointer;
+          font-family: inherit; font-size: 11px; letter-spacing: 0.04em;
+          color: var(--muted); text-decoration: underline; text-underline-offset: 2px;
+        }
+        .chat-couper:hover { color: var(--red-bright); }
+        .chat-coupe { padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+        .chat-coupe-titre {
+          font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.12em;
+          text-transform: uppercase; color: var(--red-bright);
+        }
+        .chat-coupe-texte { font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+        .chat-reprendre {
+          margin-top: 2px; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+          font-family: inherit; font-size: 12px; color: var(--gold-bright);
+          background: rgba(203,164,86,0.15); border: 1px solid rgba(203,164,86,0.45);
+        }
         .chat-liste { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 70px; }
         .chat-vide { font-size: 11px; color: var(--muted); text-align: center; margin: auto; font-style: italic; }
         .chat-msg {
@@ -7634,6 +7659,15 @@ export default function Emprise() {
   const [messagesDirects, setMessagesDirects] = useState(() => {
     try { return localStorage.getItem("emprise-messages-directs") !== "0"; } catch (e) { return true; }
   });
+  // Couper les messages, c'est ne PAS LIRE — pas seulement ne pas etre interrompu.
+  // Deux registres tiennent cette promesse :
+  //  - chatCachesRef : les messages arrives pendant la coupure. Ils ne s'affichent
+  //    jamais, meme si le joueur remet les messages plus tard. Sinon « couper » ne
+  //    serait qu'un differe, et il suffirait d'attendre pour tout lire d'un coup.
+  //  - chatAvantCoupureRef : ce qui etait deja a l'ecran quand il a coupe. Cela lui
+  //    appartient, il l'a deja lu : on le lui rend s'il remet les messages.
+  const chatCachesRef = useRef(new Set());
+  const chatAvantCoupureRef = useRef(new Set());
   const [bulleAvis, setBulleAvis] = useState("");
   const bulleTimerRef = useRef(null);
   const avisTimerRef = useRef(null);
@@ -7641,8 +7675,15 @@ export default function Emprise() {
     setMessagesDirects((actif) => {
       const suivant = !actif;
       try { localStorage.setItem("emprise-messages-directs", suivant ? "1" : "0"); } catch (e) { /* non persiste */ }
-      if (!suivant) { clearTimeout(bulleTimerRef.current); setMessageBulle(null); }
-      setBulleAvis(suivant ? "Messages affichés en direct" : "Affichage direct coupé");
+      if (!suivant) {
+        // On coupe : la bulle disparait, le compteur retombe, et l'on note ce qui
+        // etait deja lu — tout ce qui viendra ensuite sera cache pour de bon.
+        clearTimeout(bulleTimerRef.current);
+        setMessageBulle(null);
+        setChatNonLus(0);
+        chatAvantCoupureRef.current = new Set(chatMessages.map((m) => m && m.id).filter(Boolean));
+      }
+      setBulleAvis(suivant ? "Messages remis" : "Messages coupés");
       clearTimeout(avisTimerRef.current);
       avisTimerRef.current = setTimeout(() => setBulleAvis(""), 2200);
       return suivant;
@@ -8461,6 +8502,7 @@ export default function Emprise() {
     setAdvPresent(false); setAdvPret(false); setAttentePreMatch(0); preForfaitEcritRef.current = false;
     setChatMessages([]); setChatOuvert(false); setChatSaisie(""); setChatNonLus(0);
     chatVusRef.current = 0; chatOuvertRef.current = false;
+    chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
     setMessageBulle(null); setBulleAvis("");
     clearTimeout(bulleTimerRef.current); clearTimeout(avisTimerRef.current);
     setRevancheVotes(null); revancheCreationRef.current = false;
@@ -8685,6 +8727,7 @@ export default function Emprise() {
     dernierCoupDistantRef.current = null;
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
     setVainqueurForce(null); setFinMotif(null);
     setBoard(Array(CELLS).fill(null)); setPoisonedCells(Array(CELLS).fill(false));
     setBlueHand([]); setRedHand([]);
@@ -8865,7 +8908,16 @@ export default function Emprise() {
         chatGameIdRef.current = onlineGameId;
         chatVusRef.current = messages.length;
       }
-      if (messages.length > chatVusRef.current) {
+      if (!messagesDirectsRef.current) {
+        // Messages coupes : aucune bulle, aucune pastille, et tout ce qui arrive est
+        // marque comme jamais montrable. Le panneau, lui, n'affiche plus la liste.
+        // Le document reste intact : c'est un silence pour ce joueur, pas un effacement.
+        messages.forEach((m) => {
+          if (m && m.id && !chatAvantCoupureRef.current.has(m.id)) chatCachesRef.current.add(m.id);
+        });
+        setChatNonLus(0);
+        setMessageBulle(null);
+      } else if (messages.length > chatVusRef.current) {
         const arrivants = messages.slice(chatVusRef.current);
         const nouveaux = arrivants.filter((m) => m.by !== onlineRole);
         setChatNonLus((n) => (chatOuvertRef.current ? 0 : n + nouveaux.length));
@@ -8873,7 +8925,7 @@ export default function Emprise() {
         // par-dessus le plateau, sans qu'on ait a ouvrir le panneau. Inutile si le
         // panneau est deja ouvert, il y figure deja.
         const dernier = arrivants[arrivants.length - 1];
-        if (dernier && !chatOuvertRef.current && messagesDirectsRef.current) {
+        if (dernier && !chatOuvertRef.current) {
           setMessageBulle(dernier);
           clearTimeout(bulleTimerRef.current);
           bulleTimerRef.current = setTimeout(() => setMessageBulle(null), 6000);
@@ -8956,30 +9008,23 @@ export default function Emprise() {
           // périmée de partieClassee. Le document, lui, dit la vérité de cette partie-là.
           const venaitDuClasse = !!data.appariement;
           const parForfait = data.finMotif === "forfait";
-          // La victoire du camp resté. Le verrou est indispensable : cet écouteur se
-          // déclenche à CHAQUE écriture du document, il compterait sinon plusieurs fois.
-          // Les Ordres viennent eux aussi du document, jamais de l'état React, pour la
-          // même raison de fermeture périmée.
-          if (venaitDuClasse && !statsRecordedRef.current) {
-            statsRecordedRef.current = true;
-            const mesOrdres = (onlineRole === "red" ? data.redOrderKeys : data.blueOrderKeys) || [];
-            recordGameStats(onlineRole, mesOrdres, TROPHEES_VICTOIRE, [], false, onlineRole).then(setStats);
-            setHistorique(ecrireHistorique({
-              t: Date.now(), classee: true, sb: 0, sr: 0,
-              vainqueur: onlineRole, camp: onlineRole,
-              trophees: TROPHEES_VICTOIRE, motif: parForfait ? "forfait" : "abandon",
-            }));
-          }
+          // ICI, le plateau n'existe pas : on est dans la branche d'AVANT-partie. Aucun
+          // trophée ne bouge, ni dans un sens ni dans l'autre, et rien n'entre dans
+          // l'historique. Une partie qui n'a jamais atteint le plateau n'a pas eu lieu.
+          // On a longtemps accordé la victoire ici pour décourager celui qui part dès
+          // qu'un adversaire lui déplaît ; le prix en était qu'un joueur déconnecté par
+          // son réseau offrait 30 trophées. Le classement se joue désormais sur le
+          // plateau seulement — voir aussi quitterPartieEnLigne, qui lui pénalise.
           setOnlineGameId(null); setOnlineRole(null); setOnlineStatus("");
           // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
           // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
           setVainqueurForce(null); setFinMotif(null);
           setPartieClassee(false);
           oublierPartieEnLigne();
-          setAvisBon(venaitDuClasse);
+          setAvisBon(false);
           setOnlineError(
             venaitDuClasse
-              ? `${parForfait ? "L'adversaire ne s'est pas présenté" : "L'adversaire a quitté"} : victoire, +${TROPHEES_VICTOIRE} trophées.`
+              ? `${parForfait ? "L'adversaire ne s'est pas présenté" : "L'adversaire a quitté"} avant le début : partie annulée, aucun trophée.`
               : "L'adversaire a quitté avant le début de la partie."
           );
           setPickerChoice([]);
@@ -9189,21 +9234,12 @@ export default function Emprise() {
     // partie morte (refusee, mais autant lui epargner le message).
     if (defiEnvoye && myUid) { deleteDoc(doc(db, "users", defiEnvoye.uid, "invitations", myUid)).catch(() => {}); setDefiEnvoye(null); }
     if (onlineGameId) {
+      // On previent quand meme l'adversaire, pour qu'il ne reste pas devant un ecran
+      // d'attente : il verra « partie annulee » et repartira. Mais rien ne se compte.
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
-      // Partir APRES avoir ete apparie est une defaite : un adversaire est en face et
-      // attend. Seule la recherche se quitte sans rien devoir — goBack la traite avant
-      // d'arriver ici, on ne peut donc pas etre penalise pour avoir renonce a chercher.
-      // Le verrou evite de compter deux fois si l'ecouteur repasse par la.
-      if (partieClassee && !statsRecordedRef.current) {
-        statsRecordedRef.current = true;
-        const mesOrdres = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
-        const vainqueur = onlineRole === "blue" ? "red" : "blue";
-        recordGameStats(vainqueur, mesOrdres, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
-        setHistorique(ecrireHistorique({
-          t: Date.now(), classee: true, sb: 0, sr: 0,
-          vainqueur, camp: onlineRole, trophees: TROPHEES_DEFAITE, motif: "abandon",
-        }));
-      }
+      // Cette fonction n'est appelee que depuis online-waiting et select-blue : le
+      // plateau n'existe pas encore. Aucun trophee ne se perd donc ici. Ce qui se paie,
+      // c'est de quitter une partie ENGAGEE — quitterPartieEnLigne s'en charge.
       if (tournoiOnlineId) {
         tournoiResultatRef.current = onlineGameId;
         ecrireResultatTournoi(onlineGameId, onlineRole === "blue" ? "red" : "blue");
@@ -9278,6 +9314,13 @@ export default function Emprise() {
 
   useEffect(() => { messagesDirectsRef.current = messagesDirects; }, [messagesDirects]);
 
+  // Ce que ce joueur a le droit de voir : la liste brute moins ce qui est tombe
+  // pendant une coupure. chatMessages, lui, ne bouge pas — voir envoyerMessage.
+  function messagesVisibles() {
+    if (!messagesDirects) return [];
+    return chatMessages.filter((m) => m && !chatCachesRef.current.has(m.id));
+  }
+
   function basculerChat() {
     setChatOuvert((o) => {
       const suivant = !o;
@@ -9299,6 +9342,7 @@ export default function Emprise() {
     dernierCoupDistantRef.current = null;
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
     setVainqueurForce(null); setFinMotif(null);
     setOnlineGameId(null); setOnlineRole(null);
     setBoard(Array(CELLS).fill(null)); setPoisonedCells(Array(CELLS).fill(false));
@@ -9383,6 +9427,7 @@ export default function Emprise() {
     combosRef.current = nouveauSuiviCombos();
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
+    chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
     setRevancheVotes(null);
     setVainqueurForce(null); setFinMotif(null);
     setCeremonieFin(null); setCerPose(false);
@@ -11473,6 +11518,21 @@ export default function Emprise() {
                   </div>
                   <div className={`settings-bascule ${reducedMotion ? "on" : ""}`} aria-hidden="true"><span /></div>
                 </div>
+                {/* La coupure des messages se decide en partie, mais elle DURE : elle est
+                    gardee d'une partie a l'autre. Sans cette ligne, un joueur ayant coupe
+                    contre un inconnu penible restait coupe contre ses amis, sans rien pour
+                    le lui apprendre ni pour revenir en arriere hors d'une partie en ligne. */}
+                <div className="settings-row" role="button" tabIndex={0} onClick={basculerMessagesDirects} onKeyDown={KEY_ACTIVATE(basculerMessagesDirects)}>
+                  <div className="settings-texte">
+                    <div className="settings-nom">Messages en partie</div>
+                    <div className="settings-desc">
+                      {messagesDirects
+                        ? "Vous recevez les messages de votre adversaire."
+                        : "Coupés. Rien ne vous parvient, et ce qui arrive pendant la coupure reste caché."}
+                    </div>
+                  </div>
+                  <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
+                </div>
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
               </div>
             </div>
@@ -12458,8 +12518,9 @@ export default function Emprise() {
           {attentePreMatch > TURN_SECONDS && (
             <div className="sub">{
               // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
-              // simplement annulee et l'on rentre au menu. Promettre une victoire qui ne
-              // vient jamais etait la seule chose que cet ecran disait de faux.
+              // simplement annulee et l'on rentre au menu, sans trophee d'aucun cote. En
+              // tournoi c'est different : l'arbre doit avancer, il lui faut un vainqueur,
+              // et aucun trophee n'y est en jeu de toute facon.
               tournoiOnlineId
                 ? `L'adversaire ne se présente pas : victoire dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
                 : `L'adversaire ne se présente pas : la partie sera annulée dans ${Math.max(1, FORFAIT_APRES_S - attentePreMatch)}s...`
@@ -13029,14 +13090,13 @@ export default function Emprise() {
                   main. Le badge compte les messages adverses arrivés panneau fermé. */}
               {/* Message affiche directement au-dessus du plateau. Double-clic dessus
                   (ou sur le bouton) pour couper ou remettre cet affichage. */}
-              {messageBulle && !chatOuvert && (
+              {messageBulle && !chatOuvert && messagesDirects && (
                 <div
                   className={`chat-bulle-directe ${messageBulle.by === onlineRole ? "de-moi" : "de-lui"}`}
                   role="button" tabIndex={0}
-                  onDoubleClick={basculerMessagesDirects}
                   onClick={basculerChat}
                   onKeyDown={KEY_ACTIVATE(basculerChat)}
-                  title="Toucher pour ouvrir les messages, double-toucher pour couper l'affichage direct"
+                  title="Toucher pour ouvrir les messages"
                 >
                   <span className="chat-bulle-auteur">{messageBulle.by === onlineRole ? "Vous" : "Adversaire"}</span>
                   {String(messageBulle.texte || "").slice(0, 200)}
@@ -13046,34 +13106,54 @@ export default function Emprise() {
               <button
                 className={`chat-bouton ${messagesDirects ? "" : "directs-coupes"}`}
                 onClick={basculerChat}
-                onDoubleClick={basculerMessagesDirects}
-                aria-label={`Messages. Affichage direct ${messagesDirects ? "activé" : "coupé"}. Double-toucher pour changer.`}
-                title={`Messages (double-toucher : affichage direct ${messagesDirects ? "activé" : "coupé"})`}
+                aria-label={messagesDirects ? "Messages" : "Messages coupés"}
+                title={messagesDirects ? "Messages" : "Messages coupés"}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3c5 0 9 3.3 9 7.4 0 4-4 7.3-9 7.3-.9 0-1.7-.1-2.5-.3L5 20l1-3.4C4.1 15.2 3 13 3 10.4 3 6.3 7 3 12 3zm0 2c-3.9 0-7 2.4-7 5.4 0 1.9 1.2 3.6 3.1 4.6l.8.4-.4 1.3 2-1 .5.1c.6.2 1.3.2 2 .2 3.9 0 7-2.4 7-5.4S15.9 5 12 5z" />
                 </svg>
-                {chatNonLus > 0 && <span className="chat-badge">{chatNonLus > 9 ? "9+" : chatNonLus}</span>}
+                {messagesDirects && chatNonLus > 0 && <span className="chat-badge">{chatNonLus > 9 ? "9+" : chatNonLus}</span>}
               </button>
               {chatOuvert && (
                 <div className="chat-panneau">
-                  <div className="chat-liste" ref={chatListeRef}>
-                    {chatMessages.length === 0 && <div className="chat-vide">Saluez votre adversaire !</div>}
-                    {chatMessages.map((m) => (
-                      <div key={m.id} className={`chat-msg ${m.by === onlineRole ? "chat-moi" : "chat-lui"}`}>{String(m.texte || "").slice(0, 200)}</div>
-                    ))}
-                  </div>
-                  <div className="chat-saisie-ligne">
-                    <input
-                      className="chat-saisie"
-                      maxLength={200}
-                      placeholder="Votre message..."
-                      value={chatSaisie}
-                      onChange={(e) => setChatSaisie(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") envoyerMessage(); }}
-                    />
-                    <button className="chat-envoyer" onClick={envoyerMessage} disabled={!chatSaisie.trim()} aria-label="Envoyer">➤</button>
-                  </div>
+                  {messagesDirects ? (
+                    <>
+                      <div className="chat-entete">
+                        <span className="chat-entete-titre">Messages</span>
+                        <button className="chat-couper" onClick={basculerMessagesDirects}>Couper</button>
+                      </div>
+                      <div className="chat-liste" ref={chatListeRef}>
+                        {messagesVisibles().length === 0 && <div className="chat-vide">Saluez votre adversaire !</div>}
+                        {messagesVisibles().map((m) => (
+                          <div key={m.id} className={`chat-msg ${m.by === onlineRole ? "chat-moi" : "chat-lui"}`}>{String(m.texte || "").slice(0, 200)}</div>
+                        ))}
+                      </div>
+                      <div className="chat-saisie-ligne">
+                        <input
+                          className="chat-saisie"
+                          maxLength={200}
+                          placeholder="Votre message..."
+                          value={chatSaisie}
+                          onChange={(e) => setChatSaisie(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") envoyerMessage(); }}
+                        />
+                        <button className="chat-envoyer" onClick={envoyerMessage} disabled={!chatSaisie.trim()} aria-label="Envoyer">➤</button>
+                      </div>
+                    </>
+                  ) : (
+                    /* Coupes : ni liste, ni champ de saisie. Ouvrir le panneau ne donne
+                       plus acces a rien — c'est tout l'objet de la coupure. Pas de champ
+                       non plus : ecrire a quelqu'un dont on ne lira pas la reponse est un
+                       piege. Une seule porte, celle qui remet les messages. */
+                    <div className="chat-coupe">
+                      <div className="chat-coupe-titre">Messages coupés</div>
+                      <div className="chat-coupe-texte">
+                        Rien ne vous parvient de votre adversaire. Ce qui s&apos;écrit pendant la
+                        coupure ne vous sera pas montré, même en les remettant.
+                      </div>
+                      <button className="chat-reprendre" onClick={basculerMessagesDirects}>Remettre les messages</button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
