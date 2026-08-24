@@ -3109,7 +3109,7 @@ const APP_STYLES = `
         }
         .hub-haut {
           width: 100%; box-sizing: border-box;
-          display: flex; align-items: flex-start; justify-content: space-between;
+          display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
           padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
           background: linear-gradient(180deg, rgba(10,8,15,0.92), rgba(10,8,15,0.55) 75%, transparent);
           flex: none;
