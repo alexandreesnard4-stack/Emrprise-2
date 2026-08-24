@@ -6038,7 +6038,10 @@ const APP_STYLES = `
         .reserve-flip {
           position: relative; width: 58px; height: 78px;
           transform-style: preserve-3d;
-          transition: transform .45s cubic-bezier(.4, 0, .2, 1);
+          /* 0,9 s : un retournement de carte doit se REGARDER. A 0,45 s l'oeil ne
+             voyait qu'un clignotement, pas une carte qui tourne. La courbe part
+             lentement et finit doucement, comme une carte qu'on retourne a la main. */
+          transition: transform .9s cubic-bezier(.45, .05, .25, 1);
         }
         .reserve-case.prise .reserve-flip { transform: rotateY(180deg); }
         .reserve-face {
