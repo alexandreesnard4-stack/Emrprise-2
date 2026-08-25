@@ -7788,6 +7788,9 @@ export default function Emprise() {
   const [reserveBleue, setReserveBleue] = useState([]);
   const [reserveRouge, setReserveRouge] = useState([]);
   const [reserveChoix, setReserveChoix] = useState([]);
+  // Les huit cartes proposees, tirees UNE FOIS a l'entree sur l'ecran. reserveChoix
+  // designe des positions dans cette liste : elle ne doit plus bouger d'ici la validation.
+  const [reserveSource, setReserveSource] = useState([]);
   // Numero de la ronde de Mort Subite en cours ; 0 tant que la partie suit son cours.
   const [mortSubiteRonde, setMortSubiteRonde] = useState(0);
   // Camp dont la Reserve est ouverte a l'ecran, ou null.
@@ -9215,6 +9218,11 @@ export default function Emprise() {
       setRedHand(data.redHand.map(hydrateFromSave));
       setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
       setTurn(data.turn || "blue"); setFirstPlayer(data.firstPlayer || "blue");
+      // Une sauvegarde d'avant ce correctif n'en porte pas : elle reprend sans Reserve,
+      // et la garde du declencheur empeche simplement la Mort Subite de s'ouvrir.
+      setReserveBleue((data.blueReserve || []).map(hydrateFromSave));
+      setReserveRouge((data.redReserve || []).map(hydrateFromSave));
+      setMortSubiteRonde(data.mortSubiteRonde || 0);
       setMode(data.mode || "bot");
       setGameOver(!!data.gameOver);
       setConfluenceActive(isConfluence);
@@ -10628,6 +10636,7 @@ export default function Emprise() {
       // La Reserve se choisit AVANT de savoir comment la partie tournera : c'est un pari
       // sur l'endgame, pas une reaction. En duel local chacun choisit la sienne a son tour.
       setReserveChoix([]);
+      setReserveSource(cartesPourReserve(picked));
       setPhase("select-reserve-blue");
     } else if (phase === "select-red") {
       setRedOrders(picked);
@@ -10636,6 +10645,7 @@ export default function Emprise() {
       setHeroChoice(null);
       setHerautsCoches([]);
       setReserveChoix([]);
+      setReserveSource(cartesPourReserve(picked));
       setPhase("select-reserve-red");
     }
   }
@@ -10651,22 +10661,21 @@ export default function Emprise() {
 
   function validerReserve() {
     if (reserveChoix.length !== RESERVE_TAILLE) return;
-    const source = cartesPourReserve(phase === "select-reserve-blue" ? blueOrders : redOrders);
-    poserReserve(reserveChoix.map((i, n) => ({ ...source[i], id: source[i].id + "-reserve-" + n })));
+    poserReserve(reserveChoix.map((i, n) => ({ ...reserveSource[i], id: reserveSource[i].id + "-reserve-" + n })));
   }
 
   // Le temps est ecoule : on part avec ce que le joueur a commence, complete d'office.
   // Mieux vaut une Reserve choisie a sa place qu'une partie qui ne demarre jamais --
   // c'est deja la regle pour les Ordres.
   function validerReserveAuto() {
-    const source = cartesPourReserve(phase === "select-reserve-blue" ? blueOrders : redOrders);
     if (reserveChoix.length === RESERVE_TAILLE) { validerReserve(); return; }
-    poserReserve(reserveAutomatique(source));
+    poserReserve(reserveAutomatique(reserveSource));
   }
 
   function poserReserve(choisies) {
     if (!choisies || choisies.length !== RESERVE_TAILLE) return;
     setReserveChoix([]);
+    setReserveSource([]);
     // En ligne, la suite ne se decide pas ici : elle depend de l'adversaire. On envoie,
     // et l'ecouteur fera basculer les deux camps quand les deux auront envoye.
     if (mode === "online") { envoyerOrdresEtReserve(choisies); return; }
@@ -10702,6 +10711,7 @@ export default function Emprise() {
     else { setRedOrders(chosen); setRedHand(hand); }
     setPickerChoice([]);
     setReserveChoix([]);
+    setReserveSource(cartesPourReserve(chosen));
     setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
   }
 
@@ -11543,6 +11553,9 @@ export default function Emprise() {
         blueHand: blueHand.map(stripForSave),
         redHand: redHand.map(stripForSave),
         poisonedCells, turn, firstPlayer, mode, gameOver, confluenceActive, botDifficulty,
+        blueReserve: reserveBleue.map(stripForSave),
+        redReserve: reserveRouge.map(stripForSave),
+        mortSubiteRonde,
         blueOrderKeys: blueOrders.map((l) => l.key),
         redOrderKeys: redOrders.map((l) => l.key),
         // Le chapitre et ses assistances font partie de la partie : sans eux, la reprise
@@ -13939,7 +13952,7 @@ export default function Emprise() {
 
       {(phase === "select-reserve-blue" || phase === "select-reserve-red") && (() => {
         const camp = phase === "select-reserve-blue" ? "blue" : "red";
-        const source = cartesPourReserve(camp === "blue" ? blueOrders : redOrders);
+        const source = reserveSource;
         return (
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
