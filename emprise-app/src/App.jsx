@@ -37,6 +37,14 @@ function makeCodeAmi() {
 function codeAmiLisible(code) {
   return code ? "#" + code : "";
 }
+// L'identifiant ne s'affiche pas d'un bloc : il se COMPOSE, caractere par caractere, de
+// gauche a droite, une fois le nom ecrit. Les deux nombres vivent ici ensemble pour que
+// le retard de la phrase qui suit se calcule sur eux, et tombe toujours juste apres le
+// dernier chiffre.
+const ID_ANIM_DEPART = 260;   // ms de silence avant le premier caractere
+const ID_ANIM_PAS = 90;       // ms entre deux caracteres
+const ID_ANIM_APRES = 160;    // ms entre le dernier chiffre et la phrase d'explication
+
 // A la saisie, le joueur n'a que des chiffres a taper : le dièse est deja a l'ecran. On
 // le tolere quand meme s'il colle un identifiant complet.
 function nettoyerCodeAmi(brut) {
@@ -3641,6 +3649,33 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums; color: var(--gold);
         }
         .pseudo-identifiant-note { font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+        /* Tant que le numero n'est pas revenu du serveur, le bloc occupe sa place sans
+           rien montrer. visibility plutot que display : la place est tenue, donc le champ
+           de saisie ne bougera pas quand le numero arrivera. */
+        .pseudo-identifiant:not(.pret) { visibility: hidden; }
+        /* Chaque caractere glisse depuis la gauche et se pose. Le decalage se fait par le
+           retard de chacun (pose en ligne dans le JSX) : de loin, l'oeil ne lit pas sept
+           apparitions mais un seul mouvement, de gauche a droite.
+           inline-block est indispensable -- transform ne mord pas sur du texte en ligne. */
+        .pseudo-chiffre {
+          display: inline-block;
+          animation: pseudo-chiffre-entre .34s cubic-bezier(.22, .61, .36, 1) backwards;
+        }
+        @keyframes pseudo-chiffre-entre {
+          from { opacity: 0; transform: translateX(-12px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        /* La phrase suit le dernier chiffre. Un fondu seul, sans glissement : une ligne
+           de texte qui se deplace se lit comme un tour de force, un chiffre non. */
+        .pseudo-identifiant.pret .pseudo-identifiant-note {
+          animation: pseudo-note-entre .5s ease-out backwards;
+        }
+        @keyframes pseudo-note-entre { from { opacity: 0; } to { opacity: 1; } }
+        /* Reserve au lecteur d'ecran : hors de vue, mais present dans l'arbre. */
+        .lecteur-seul {
+          position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+          overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+        }
         .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
         .amis-mon-code-valeur {
           font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
@@ -6438,9 +6473,6 @@ const APP_STYLES = `
           gap: 14px; padding: 32px 26px; box-sizing: border-box;
           background: #000000; text-align: center;
         }
-        .pseudo-invite {
-          margin: 0; font-size: 13.5px; color: var(--bone); letter-spacing: 0.02em;
-        }
         .pseudo-champ {
           width: 100%; max-width: 300px; box-sizing: border-box;
           padding: 12px 16px; border-radius: 12px;
@@ -6450,13 +6482,21 @@ const APP_STYLES = `
           outline: none;
         }
         .pseudo-champ:focus { border-color: var(--gold-bright); background: rgba(255,255,255,0.08); }
-        .pseudo-champ::placeholder { color: var(--muted); font-weight: 400; letter-spacing: 0.04em; }
+        .pseudo-champ::placeholder {
+          color: var(--muted); font-weight: 400; letter-spacing: 0.04em; font-style: italic;
+        }
         .pseudo-reste { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
+        /* Les deux regles qui suivent ne valent QUE sur l'ecran d'accueil : le meme
+           compteur et le meme bouton servent au changement de nom depuis le profil, ou
+           ils doivent rester visibles en permanence. */
+        .pseudo-ecran .pseudo-reste { opacity: 0; transition: opacity .25s ease-out; }
+        .pseudo-ecran .pseudo-reste.serre { opacity: 1; }
         .pseudo-refus {
           max-width: 300px; font-size: 11.5px; line-height: 1.45;
           color: var(--red-bright); letter-spacing: 0.02em;
         }
-        .pseudo-ecran .reset-btn:disabled { opacity: 0.4; cursor: default; }
+        .pseudo-ecran .reset-btn { transition: opacity .3s ease-out; }
+        .pseudo-ecran .reset-btn:disabled { opacity: 0; cursor: default; }
 
         /* Panneau de profil. Un joueur chevronne peut cumuler trois titres ET la liste
            des dix combos : le panneau defile plutot que de deborder de l'ecran, ce qui
@@ -8426,6 +8466,10 @@ export default function Emprise() {
   }, [infoAbility, activeModal]);
   const [pseudo, setPseudo] = useState(lirePseudo);
   const [pseudoSaisi, setPseudoSaisi] = useState("");
+  // Une fois le numero devoile, il reste. Sans ce verrou il disparaitrait des que le
+  // joueur efface son nom pour se raviser, et se rejouerait a la frappe suivante :
+  // un clignotement, la ou on voulait un evenement.
+  const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
 
@@ -11627,12 +11671,16 @@ export default function Emprise() {
       {!pseudo && (
         <div className="pseudo-ecran">
           <h1 className="landing-title">EMPRISE</h1>
-          <p className="pseudo-invite">Quel nom vous donnez-vous ?</p>
           <input
             className="pseudo-champ"
             type="text"
             value={pseudoSaisi}
-            onChange={(e) => { setPseudoSaisi(nettoyerPseudo(e.target.value)); setPseudoRefus(""); }}
+            onChange={(e) => {
+              const nom = nettoyerPseudo(e.target.value);
+              setPseudoSaisi(nom);
+              setPseudoRefus("");
+              if (nom) setIdentifiantDevoile(true);
+            }}
             onKeyDown={(e) => { if (e.key === "Enter") validerPseudo(); }}
             placeholder="Votre nom"
             maxLength={PSEUDO_MAX}
@@ -11642,17 +11690,47 @@ export default function Emprise() {
             autoFocus
             aria-label="Votre nom"
           />
-          <div className="pseudo-reste">{PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length} caractères restants</div>
+          {/* Le compteur ne parle que lorsqu'il a quelque chose à dire : sous cinq
+              caractères restants. Le reste du temps il garde sa place, invisible — il
+              n'a rien à apprendre à qui écrit un nom de six lettres. */}
+          <div className={`pseudo-reste ${PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length <= 4 ? "serre" : ""}`}>
+            {PSEUDO_MAX - nettoyerPseudo(pseudoSaisi).length} caractères restants
+          </div>
           {pseudoRefus && <div className="pseudo-refus">{pseudoRefus}</div>}
+          {/* Le bouton n'est pas grisé tant qu'il n'y a rien à valider : il est absent.
+              Sa place reste réservée pour que son arrivée ne déplace rien, et la touche
+              Entrée fonctionne de bout en bout. */}
           <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
           {/* Le nom n'est pas unique : deux joueurs peuvent porter le meme. On le dit ici,
-              au moment ou le choix se fait, en montrant le numero qui les distingue. */}
-          {monCodeAmi && (
-            <div className="pseudo-identifiant">
-              <span className="pseudo-identifiant-valeur">{codeAmiLisible(monCodeAmi)}</span>
-              <span className="pseudo-identifiant-note">Votre identifiant. Un autre joueur peut porter le même nom que vous&nbsp;; ce numéro, lui, n'appartient qu'à vous.</span>
-            </div>
-          )}
+              au moment ou le choix se fait, en montrant le numero qui les distingue.
+              Il n'apparaît qu'une fois le nom commencé : d'abord on se nomme, ensuite le
+              jeu répond. Le bloc est tout de même posé dès le départ, muet et à sa taille
+              définitive, pour que son arrivée ne fasse pas sauter le champ sous les doigts
+              du joueur. L'espace insécable tient la ligne des chiffres à sa hauteur en
+              attendant. */}
+          <div className={`pseudo-identifiant ${monCodeAmi && identifiantDevoile ? "pret" : ""}`}>
+            {monCodeAmi && identifiantDevoile && (
+              <span className="lecteur-seul">Votre identifiant : {codeAmiLisible(monCodeAmi)}</span>
+            )}
+            {/* Les caractères sont masqués au lecteur d'écran : une suite de balises se
+                lirait chiffre par chiffre, ce qui est le contraire d'un identifiant. Il
+                reçoit la chaîne entière d'un seul tenant, juste au-dessus. */}
+            <span className="pseudo-identifiant-valeur" aria-hidden="true">
+              {monCodeAmi && identifiantDevoile
+                ? codeAmiLisible(monCodeAmi).split("").map((ch, i) => (
+                    <span
+                      key={i}
+                      className="pseudo-chiffre"
+                      style={{ animationDelay: (ID_ANIM_DEPART + i * ID_ANIM_PAS) + "ms" }}
+                    >{ch}</span>
+                  ))
+                : "\u00A0"}
+            </span>
+            <span
+              className="pseudo-identifiant-note"
+              style={{ animationDelay: (ID_ANIM_DEPART + (IDENTIFIANT_CHIFFRES + 1) * ID_ANIM_PAS + ID_ANIM_APRES) + "ms" }}
+            >Votre identifiant. Un autre joueur peut porter le même nom que vous&nbsp;; ce numéro, lui, n'appartient qu'à vous.</span>
+          </div>
         </div>
       )}
 
