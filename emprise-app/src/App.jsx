@@ -5994,7 +5994,11 @@ const APP_STYLES = `
            vers la gauche, et le plateau ne se lisait plus centre. */
         .main-et-reserve.en-partie { position: relative; width: 100%; }
         .main-et-reserve.en-partie .reserve-pile {
-          position: absolute; right: 10px; top: 50%; transform: translateY(-50%); margin: 0;
+          /* 58 px et non 10 : le bouton "i" est fixe a 16 px du bord sur 34 px de large,
+             il occupe donc la bande 16-50. A 10 px la Reserve passait dessous, et sur un
+             ecran court -- ou la main de l adversaire remonte -- les deux se croisaient.
+             On se range au-dela de cette bande, avec 8 px de marge. */
+          position: absolute; right: 58px; top: 50%; transform: translateY(-50%); margin: 0;
         }
         .reserve-pile {
           position: relative; z-index: 71; flex: none; align-self: center;
@@ -6026,6 +6030,16 @@ const APP_STYLES = `
         /* Dans l'apercu d'avant-partie, les dos prennent la taille EXACTE d'une carte de
            main : ils s'alignent avec les cartes d'Ordre posees a cote, au lieu de faire
            deux vignettes plus petites qui cassaient la rangee. */
+        /* Sa propre Reserve se touche : elle doit le dire sans crier. */
+        .reserve-pile.revisible {
+          background: none; border: none; padding: 0; cursor: pointer;
+          transition: transform .12s ease-out;
+        }
+        .reserve-pile.revisible:active { transform: translateY(-50%) scale(0.94); }
+        .reserve-pile.revisible:hover .reserve-dos { border-color: var(--gold-bright); }
+        .reserve-panel { max-width: 300px; }
+        .reserve-panel-sous { text-align: center; line-height: 1.5; margin-top: -2px; }
+        .reserve-panel-cartes { display: flex; justify-content: center; gap: 10px; margin: 10px 0 4px; }
         .reserve-pile.grande { width: clamp(70px, 21vw, 86px); height: clamp(78px, 23vw, 96px); }
         .reserve-pile.grande .reserve-dos {
           width: clamp(58px, 17vw, 72px); height: clamp(78px, 23vw, 96px); border-radius: 9px;
@@ -7714,7 +7728,9 @@ export default function Emprise() {
   const [reserveRouge, setReserveRouge] = useState([]);
   const [reserveChoix, setReserveChoix] = useState([]);
   // Numero de la ronde de Mort Subite en cours ; 0 tant que la partie suit son cours.
-  const [mortSubiteRonde, setMortSubiteRonde] = useState(0); // clé d'Ordre du héros activé pour cette main (ou null)
+  const [mortSubiteRonde, setMortSubiteRonde] = useState(0);
+  // Camp dont la Reserve est ouverte a l'ecran, ou null.
+  const [reserveOuverte, setReserveOuverte] = useState(null); // clé d'Ordre du héros activé pour cette main (ou null)
   // Capacités supérieures cochées à l'écran de choix des Ordres : liste de clés d'Ordre.
   // L'encoche n'apparaît que si le Héraut a été GAGNÉ en mode Histoire (chapitre terminé),
   // et seulement hors classement — activer une capacité supérieure ne doit jamais
@@ -8959,12 +8975,32 @@ export default function Emprise() {
   // un cosmetique a venir, et le dos suffit a dire qu'elles sont la. Empilees avec un
   // decalage, pour qu'on voie qu'il y en a deux. Ecrite une seule fois : l'apercu
   // d'avant-partie et les deux rangees de jeu s'en servent toutes les trois.
-  function pileDeReserve(cartes, grande) {
+  function pileDeReserve(cartes, grande, campRevisible) {
     if (!cartes || cartes.length === 0) return null;
-    return (
-      <span className={`reserve-pile ${grande ? "grande" : ""}`} aria-label={`Réserve : ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`} title="Réserve pour la Mort Subite">
+    const contenu = (
+      <>
         {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />))}
         <span className="reserve-compte" aria-hidden="true">{cartes.length}</span>
+      </>
+    );
+    // Sa PROPRE Reserve se rouvre d'un toucher : on l'a composee huit coups plus tot,
+    // et elle decidera peut-etre de la partie. Celle d'en face reste un dos.
+    if (campRevisible) {
+      return (
+        <button
+          className={`reserve-pile revisible ${grande ? "grande" : ""}`}
+          onClick={() => setReserveOuverte(campRevisible)}
+          aria-haspopup="dialog"
+          aria-label={`Revoir votre Réserve, ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`}
+          title="Revoir votre Réserve"
+        >
+          {contenu}
+        </button>
+      );
+    }
+    return (
+      <span className={`reserve-pile ${grande ? "grande" : ""}`} aria-label={`Réserve : ${cartes.length} carte${cartes.length > 1 ? "s" : ""}`} title="Réserve pour la Mort Subite">
+        {contenu}
       </span>
     );
   }
@@ -8979,7 +9015,7 @@ export default function Emprise() {
         <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
-        {pileDeReserve(reserveDe(camp))}
+        {pileDeReserve(reserveDe(camp), false, camp === campBas ? camp : null)}
       </div>
     );
   }
@@ -9139,6 +9175,7 @@ export default function Emprise() {
     setPickerChoice([]);
     setHeroChoice(null);
     setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
+    setReserveOuverte(null);
     setMode(null);
     setConfluenceActive(false);
     setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
@@ -10709,6 +10746,7 @@ export default function Emprise() {
   const retourRef = useRef(null);
   retourRef.current = () => {
     // Du plus recent au plus ancien : on ferme la couche du dessus, une par pression.
+    if (reserveOuverte) { setReserveOuverte(null); return true; }
     if (signalement) { setSignalement(null); return true; }
     if (joueurMenu) { setJoueurMenu(null); return true; }
     if (amiARetirer) { setAmiARetirer(null); return true; }
@@ -10722,7 +10760,7 @@ export default function Emprise() {
     if (phase !== "landing") { goBack(); return true; }
     return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
   };
-  const retourACouvrir = !!(signalement || joueurMenu || amiARetirer || confirmQuit
+  const retourACouvrir = !!(reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
     || infoAbility || ordreDetail || activeModal || ceremonieFin || phase !== "landing");
   useEffect(() => {
     if (retourACouvrir && !(window.history.state && window.history.state.emprise)) {
@@ -14159,6 +14197,25 @@ export default function Emprise() {
                 </div>
               )}
             </>
+          )}
+
+          {reserveOuverte && (
+            <div className="info-overlay" onClick={() => setReserveOuverte(null)}>
+              <div className="info-panel reserve-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Votre Réserve</div>
+                <div className="sub reserve-panel-sous">
+                  {mortSubiteRonde > 0
+                    ? "Départage en cours."
+                    : "Posées sur les cases restées vides si le duel s'achève à égalité parfaite."}
+                </div>
+                <div className="reserve-panel-cartes">
+                  {reserveDe(reserveOuverte).map((c) => (
+                    <Card key={c.id} card={c} owner={reserveOuverte} extraClass="hand" />
+                  ))}
+                </div>
+                <button className="reset-btn" onClick={() => setReserveOuverte(null)}>Fermer</button>
+              </div>
+            </div>
           )}
 
           {drag && draggedCard && !liveDragPreviewBoard && (
