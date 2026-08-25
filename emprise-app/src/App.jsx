@@ -6037,9 +6037,25 @@ const APP_STYLES = `
         }
         .reserve-pile.revisible:active { transform: translateY(-50%) scale(0.94); }
         .reserve-pile.revisible:hover .reserve-dos { border-color: var(--gold-bright); }
-        .reserve-panel { max-width: 300px; }
+        .reserve-panel { max-width: 330px; }
         .reserve-panel-sous { text-align: center; line-height: 1.5; margin-top: -2px; }
-        .reserve-panel-cartes { display: flex; justify-content: center; gap: 10px; margin: 10px 0 4px; }
+        .reserve-panel-cartes { display: flex; justify-content: center; gap: 14px; margin: 14px 0 6px; }
+        /* Prefixe .emprise-root.ecran-jeu OBLIGATOIRE : ce panneau s'ouvre EN PARTIE, ou
+           une regle reduit les cartes et leurs rangs pour qu'ils tiennent sur le plateau
+           (.card.hand a min(4.2vw, 2.4dvh) de pastille). Sans un selecteur plus fort, les
+           cartes de la Reserve heritaient de cette reduction et paraissaient minuscules
+           dans un panneau qui, lui, a toute la place. Ici on les montre pour les LIRE. */
+        .emprise-root.ecran-jeu .reserve-panel-cartes .card.hand,
+        .reserve-panel-cartes .card.hand {
+          width: clamp(100px, 29vw, 124px); height: clamp(134px, 39vw, 166px);
+        }
+        /* Les pastilles suivent la carte, sinon on agrandit un portrait autour de
+           chiffres restes petits, et la carte parait vide. */
+        .emprise-root.ecran-jeu .reserve-panel-cartes .card.hand .rank,
+        .reserve-panel-cartes .card.hand .rank {
+          width: clamp(26px, 7.4vw, 32px); height: clamp(26px, 7.4vw, 32px);
+          font-size: clamp(14px, 4vw, 17px); border-width: 2px;
+        }
         .reserve-pile.grande { width: clamp(70px, 21vw, 86px); height: clamp(78px, 23vw, 96px); }
         .reserve-pile.grande .reserve-dos {
           width: clamp(58px, 17vw, 72px); height: clamp(78px, 23vw, 96px); border-radius: 9px;
