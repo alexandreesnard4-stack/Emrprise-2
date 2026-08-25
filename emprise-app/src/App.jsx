@@ -4828,6 +4828,28 @@ const APP_STYLES = `
            d'après la LARGEUR de l'écran. Sur un téléphone étroit et haut, cinq colonnes
            tenaient en largeur mais les quatre lignes dépassaient en hauteur. Elles se
            calent maintenant sur la plus contraignante des deux dimensions. */
+        /* La carte du chapitre est une illustration plein cadre : elle prend l'ecran
+           entier, sans le rembourrage prevu pour le bandeau du hub -- qui lui laissait une
+           bande vide en haut et la poussait de 42 px hors de l'ecran par le bas. Sans
+           rembourrage, ses 100dvh tombent juste, et la rangee de fleches du bas cesse de
+           deborder. Les coins arrondis partent avec : plus rien ne les entoure. */
+        .emprise-root.ecran-histoire { padding: 0; gap: 0; }
+        .emprise-root.ecran-histoire .story-map {
+          height: 100dvh; max-height: 100dvh;
+          /* .story-map est en content-box : ses 8 px et 4 px de rembourrage s'AJOUTAIENT
+             aux 100dvh et la faisaient deborder de douze pixels. */
+          box-sizing: border-box;
+          /* Le rembourrage de la racine servait aussi d'ecart a l'encoche. En le retirant,
+             il faut le rendre ici : l'application se declare apple-mobile-web-app-capable,
+             donc ajoutee a l'ecran d'accueil elle n'a plus la barre de Safari au-dessus, et
+             le bouton Retour passerait sous l'heure. Dans un onglet ordinaire les deux
+             valeurs valent zero et rien ne change. */
+          padding-top: calc(8px + env(safe-area-inset-top, 0px));
+          padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+        }
+        .emprise-root.ecran-histoire .story-map-cadre,
+        .emprise-root.ecran-histoire .sm-brasier { border-radius: 0; }
+
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
           height: 100dvh; max-height: 100dvh;
@@ -11759,7 +11781,7 @@ export default function Emprise() {
 
   return (
     <div
-      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""}`}
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${phase === "chapters" ? "ecran-histoire" : ""}`}
     >
       <style>{APP_STYLES}</style>
 
