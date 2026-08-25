@@ -6211,6 +6211,31 @@ const APP_STYLES = `
           -webkit-backface-visibility: hidden; backface-visibility: hidden;
           border-radius: 8px; display: block;
         }
+        /* La carte redevient PLATE sur cet ecran. .card porte transform-style: preserve-3d
+           pour le retournement des cartes du plateau ; ici, cela faisait de chaque carte
+           son propre volume, et ses pastilles de rang n'etaient donc plus aplaties dans la
+           face avant : elles gardaient leur orientation propre et survivaient au
+           retournement. On continuait de lire les rangs alors que la carte montrait deja
+           son dos. Aplatie, la carte se cache avec la face qui la porte. Le backface sur
+           la carte elle-meme est une ceinture de plus, pour les moteurs qui gardent
+           malgre tout un volume. */
+        .reserve-face.avant .card {
+          -webkit-transform-style: flat; transform-style: flat;
+          -webkit-backface-visibility: hidden; backface-visibility: hidden;
+        }
+        /* Et la face avant s'EFFACE, sans attendre le quart de tour. backface-visibility
+           suffit en theorie -- la face disparait a 90 degres -- mais elle ne suffisait pas
+           en pratique : les rangs restaient lisibles un instant de trop, et sur Safari iOS
+           ils traversaient carrement le retournement. Plutot que de courir apres les
+           differences de moteur, on retire la face par une opacite, que tous traitent
+           pareil. Elle est partie a 0,42 s, bien avant que le dos ne se presente.
+           Au retour, elle attend 0,45 s : la carte a repasse le quart de tour, on ne voit
+           donc jamais les rangs apparaitre a l'envers. Opacite seule, rien qui repeigne. */
+        .reserve-face.avant { transition: opacity .30s linear .45s; }
+        .reserve-case.prise .reserve-face.avant { opacity: 0; transition: opacity .30s linear .12s; }
+        @media (prefers-reduced-motion: reduce) {
+          .reserve-face.avant, .reserve-case.prise .reserve-face.avant { transition: none; }
+        }
         .reserve-face.arriere {
           transform: rotateY(180deg);
           background:
