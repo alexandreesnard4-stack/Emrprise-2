@@ -8068,16 +8068,30 @@ export default function Emprise() {
   // chez l'ami. Une seule invitation par inviteur (le document porte son uid) : une
   // nouvelle partie remplace la precedente.
   async function defierAmi(uidAmi) {
+    // Le defi s'annonce AVANT la creation. L'ecran d'attente choisit sur ce seul indice
+    // entre « voici le code a partager » et « defi envoye a X » — et depuis qu'il
+    // s'affiche des la creation de la partie, au lieu d'apres le choix des Ordres, le
+    // poser seulement une fois l'invitation ecrite laissait passer une image du code.
+    // Un code que l'ami defie n'aura jamais a taper : le montrer, meme un instant, c'est
+    // lui demander de faire un travail qui ne le concerne pas.
+    setDefiEnvoye({ uid: uidAmi, t: Date.now() });
     const code = await creerPartieEnLigne();
     // Sans ce message, un echec de creation laissait le bouton « Defier » sans le moindre
     // effet visible : le joueur appuyait dans le vide.
-    if (!code) { setAvisAmis({ texte: "Impossible de créer la partie. Réessayez.", bon: false }); return; }
+    if (!code) {
+      setDefiEnvoye(null);
+      setAvisAmis({ texte: "Impossible de créer la partie. Réessayez.", bon: false });
+      return;
+    }
     setActiveModal(null);
     try {
       await setDoc(doc(db, "users", uidAmi, "invitations", myUid), { code, envoyeeLe: serverTimestamp() });
-      setDefiEnvoye({ uid: uidAmi, t: Date.now() });
       venuDesAmisRef.current = true;
-    } catch (e) { /* le code reste affiche : il peut toujours etre envoye a la main */ }
+    } catch (e) {
+      // L'invitation n'est pas partie : on retire l'annonce pour que l'ecran revienne au
+      // code, qui peut toujours etre envoye a la main.
+      setDefiEnvoye(null);
+    }
   }
   async function releverDefi(inv) {
     if (!inv || !myUid) return;
