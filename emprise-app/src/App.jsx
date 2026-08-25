@@ -41,9 +41,9 @@ function codeAmiLisible(code) {
 // gauche a droite, une fois le nom ecrit. Les deux nombres vivent ici ensemble pour que
 // le retard de la phrase qui suit se calcule sur eux, et tombe toujours juste apres le
 // dernier chiffre.
-const ID_ANIM_DEPART = 260;   // ms de silence avant le premier caractere
-const ID_ANIM_PAS = 90;       // ms entre deux caracteres
-const ID_ANIM_APRES = 160;    // ms entre le dernier chiffre et la phrase d'explication
+const ID_ANIM_DEPART = 340;   // ms de silence avant le premier caractere
+const ID_ANIM_PAS = 190;      // ms entre deux caracteres
+const ID_ANIM_APRES = 260;    // ms entre le dernier chiffre et la phrase d'explication
 
 // A la saisie, le joueur n'a que des chiffres a taper : le dièse est deja a l'ecran. On
 // le tolere quand meme s'il colle un identifiant complet.
@@ -3659,16 +3659,19 @@ const APP_STYLES = `
            inline-block est indispensable -- transform ne mord pas sur du texte en ligne. */
         .pseudo-chiffre {
           display: inline-block;
-          animation: pseudo-chiffre-entre .34s cubic-bezier(.22, .61, .36, 1) backwards;
+          animation: pseudo-chiffre-entre .6s cubic-bezier(.22, .61, .36, 1) backwards;
         }
+        /* Le glissement s'allonge avec la duree. Garder 12 px sur .6s aurait donne une
+           derive molle plutot qu'un mouvement : c'est la vitesse qu'on lit, pas la
+           distance. */
         @keyframes pseudo-chiffre-entre {
-          from { opacity: 0; transform: translateX(-12px); }
+          from { opacity: 0; transform: translateX(-18px); }
           to { opacity: 1; transform: translateX(0); }
         }
         /* La phrase suit le dernier chiffre. Un fondu seul, sans glissement : une ligne
            de texte qui se deplace se lit comme un tour de force, un chiffre non. */
         .pseudo-identifiant.pret .pseudo-identifiant-note {
-          animation: pseudo-note-entre .5s ease-out backwards;
+          animation: pseudo-note-entre .8s ease-out backwards;
         }
         @keyframes pseudo-note-entre { from { opacity: 0; } to { opacity: 1; } }
         /* Reserve au lecteur d'ecran : hors de vue, mais present dans l'arbre. */
@@ -7777,7 +7780,7 @@ export default function Emprise() {
   // DEUX joueurs en auront une carte — que ce soit vous ou l'adversaire qui l'ayez choisi.
   const [draft, setDraft] = useState({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
   const [pickerChoice, setPickerChoice] = useState([]);
-  const [heroChoice, setHeroChoice] = useState(null);
+  const [heroChoice, setHeroChoice] = useState(null); // clé d'Ordre du héros activé pour cette main (ou null)
   // La Reserve de chaque camp : les deux cartes gardees pour une eventuelle Mort Subite.
   // reserveChoix porte la selection en cours sur l'ecran de choix.
   const [reserveBleue, setReserveBleue] = useState([]);
@@ -7786,7 +7789,7 @@ export default function Emprise() {
   // Numero de la ronde de Mort Subite en cours ; 0 tant que la partie suit son cours.
   const [mortSubiteRonde, setMortSubiteRonde] = useState(0);
   // Camp dont la Reserve est ouverte a l'ecran, ou null.
-  const [reserveOuverte, setReserveOuverte] = useState(null); // clé d'Ordre du héros activé pour cette main (ou null)
+  const [reserveOuverte, setReserveOuverte] = useState(null);
   // Capacités supérieures cochées à l'écran de choix des Ordres : liste de clés d'Ordre.
   // L'encoche n'apparaît que si le Héraut a été GAGNÉ en mode Histoire (chapitre terminé),
   // et seulement hors classement — activer une capacité supérieure ne doit jamais
