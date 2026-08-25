@@ -11112,17 +11112,26 @@ export default function Emprise() {
       const mainsVides = nextBlueHand.length === 0 && nextRedHand.length === 0;
       // MORT SUBITE. Les mains sont vides, mais le compte tombe exactement egal : la
       // partie ne se clot pas. Chaque camp prend une carte de sa Reserve, la pose sur une
-      // case restee vide, et l'on recompte. On lit le plateau QUI VIENT D'ETRE POSE, pas
-      // l'etat React, qui ne sera a jour qu'au rendu suivant.
+      // case restee vide, et l'on recompte.
+      //
+      // On compte sur resolvedBoard, et SURTOUT PAS sur newBoard. newBoard porte la carte
+      // qu'on vient de poser mais AUCUNE de ses captures : resolvePlacement travaille sur
+      // une copie (board.slice()) et n'a jamais mute le tableau qu'on lui passe. C'est
+      // resolvedBoard qui devient le plateau, qui nourrit blueScore/redScore et qui
+      // designe le vainqueur. Compter sur l'autre, c'etait ouvrir la Mort Subite sur des
+      // scores qui n'avaient rien d'egal, et laisser passer les vraies egalites -- que le
+      // jeu tranchait alors d'office au lieu de les faire jouer. Le dernier coup capturant
+      // presque toujours quelque chose, le defaut visait a cote a peu pres a chaque partie.
+      // (L'etat React, lui, ne serait de toute facon a jour qu'au rendu suivant.)
       let mortSubite = false;
       if (mainsVides && mortSubiteRonde < MORT_SUBITE_RONDES_MAX) {
         let bc = 0, rc = 0;
-        newBoard.forEach((c) => { if (c) (c.owner === "blue" ? bc++ : rc++); });
+        resolvedBoard.forEach((c) => { if (c) (c.owner === "blue" ? bc++ : rc++); });
         const sb = bc + (firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0);
         const sr = rc + (firstPlayer === "red" ? AVANCE_DU_PREMIER : 0);
         const carteBleue = reserveBleue[mortSubiteRonde];
         const carteRouge = reserveRouge[mortSubiteRonde];
-        const placeLibre = newBoard.filter((c) => !c).length >= 2;
+        const placeLibre = resolvedBoard.filter((c) => !c).length >= 2;
         if (sb === sr && carteBleue && carteRouge && placeLibre) {
           mortSubite = true;
           nextBlueHand = [carteBleue];
