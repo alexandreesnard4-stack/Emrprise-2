@@ -9075,6 +9075,8 @@ export default function Emprise() {
   }
 
   function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
+  // Ce qu'il reste a poser : les cartes des rondes deja jouees sont passees en main.
+  function reserveRestante(camp) { return reserveDe(camp).slice(mortSubiteRonde); }
 
   // La pile de Reserve, posee a cote de la main. Les cartes sont de DOS : leur face est
   // un cosmetique a venir, et le dos suffit a dire qu'elles sont la. Empilees avec un
@@ -9114,13 +9116,13 @@ export default function Emprise() {
     const main = camp === "red" ? redHand : blueHand;
     // La rangee reste montee tant qu'il reste une Reserve : sinon elle disparaissait au
     // dernier coup, juste avant la Mort Subite, au moment ou l'on veut justement la voir.
-    if (main.length === 0 && reserveDe(camp).length === 0) return null;
+    if (main.length === 0 && reserveRestante(camp).length === 0) return null;
     return (
       <div className="main-et-reserve en-partie">
         <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
-        {pileDeReserve(reserveDe(camp), false, camp === campBas ? camp : null)}
+        {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null)}
       </div>
     );
   }
@@ -10696,11 +10698,14 @@ export default function Emprise() {
 
   function poserReserve(choisies) {
     if (!choisies || choisies.length !== RESERVE_TAILLE) return;
+    // En ligne, la suite ne se decide pas ici : elle depend de l'adversaire. On envoie,
+    // et l'ecouteur fera basculer les deux camps quand les deux auront envoye. On ne vide
+    // RIEN avant de savoir si l'envoi a abouti : efface d'avance, un echec laissait le
+    // joueur devant un ecran de Reserve sans la moindre carte, un message d'erreur, et
+    // aucun moyen de reessayer.
+    if (mode === "online") { envoyerOrdresEtReserve(choisies); return; }
     setReserveChoix([]);
     setReserveSource([]);
-    // En ligne, la suite ne se decide pas ici : elle depend de l'adversaire. On envoie,
-    // et l'ecouteur fera basculer les deux camps quand les deux auront envoye.
-    if (mode === "online") { envoyerOrdresEtReserve(choisies); return; }
     if (phase === "select-reserve-blue") {
       setReserveBleue(choisies);
       if (mode === "local") { setPhase("select-red"); return; }
@@ -10743,13 +10748,20 @@ export default function Emprise() {
   async function envoyerOrdresEtReserve(choisies) {
     const ordres = onlineRole === "blue" ? blueOrders : redOrders;
     if (!ordres || ordres.length !== 2 || !onlineGameId) return;
-    const hand = makeHand(ordres[0], ordres[1]);
+    // La main DEJA posee, jamais une nouvelle : makeHand rebat les quatre orientations a
+    // chaque appel, et en refabriquer une ici envoyait a l'adversaire un ordre de cartes
+    // different de celui que le joueur avait sous les yeux.
+    const hand = onlineRole === "blue" ? blueHand : redHand;
+    if (hand.length !== 8) return;
     const field = onlineRole === "blue"
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave) }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave) };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
+      // Abouti : l'ecran de Reserve a fini son office, on lui reprend sa selection.
+      setReserveChoix([]);
+      setReserveSource([]);
       setOnlineStatus("En attente que l'adversaire choisisse ses Ordres...");
       // Si l'adversaire avait deja tout envoye, l'ecouteur a bascule en "play" PENDANT
       // l'await : Firestore declenche l'ecouteur des l'ecriture locale, avant que la
@@ -10757,7 +10769,11 @@ export default function Emprise() {
       // d'attente alors que la partie a demarre.
       setPhase((p) => (p === "play" || p === "preview" ? p : "online-waiting"));
     } catch (e) {
-      setOnlineError("Impossible d'enregistrer vos Ordres.");
+      // L'ecran garde ses huit cartes et la selection du joueur : il n'a qu'a reappuyer.
+      // L'echeance du minuteur, elle, a deja brule son verrou -- on le rouvre, sinon un
+      // reseau coupe une seconde condamnait le joueur a ne plus jamais partir.
+      reserveAutoRef.current = false;
+      setOnlineError("Impossible d'enregistrer vos Ordres. Réessayez.");
     }
   }
 
@@ -12734,12 +12750,17 @@ export default function Emprise() {
 
                 <div className="rules-section">
                   <div className="rules-h">Objectif</div>
-                  <div className="rules-p">Contrôlez plus de cases du plateau que votre adversaire quand les deux mains sont vides. Chaque carte sur le plateau vaut 1 point ; l'Azur part avec +1 point bonus pour compenser l'avantage du second Commandant.</div>
+                  <div className="rules-p">Contrôlez plus de cases du plateau que votre adversaire quand les deux mains sont vides. Chaque carte sur le plateau vaut 1 point ; le Commandant qui ouvre le duel part avec 2 points d&apos;avance, car c&apos;est à l&apos;autre que revient le dernier coup.</div>
+                </div>
+
+                <div className="rules-section">
+                  <div className="rules-h">La Réserve et la Mort Subite</div>
+                  <div className="rules-p">Avant le duel, vous gardez deux cartes de côté — une par Ordre. Si le compte final tombe exactement à égalité, chaque Commandant en pose une sur une case restée vide et l&apos;on recompte : c&apos;est la Mort Subite, deux rondes au plus. Si l&apos;égalité tient encore, la victoire revient à celui qui n&apos;a pas commencé.</div>
                 </div>
 
                 <div className="rules-section">
                   <div className="rules-h">Jouer une carte</div>
-                  <div className="rules-p">Choisissez une carte de votre main, puis une case vide du plateau (4×5 cases). L'Azur joue toujours en premier.</div>
+                  <div className="rules-p">Choisissez une carte de votre main, puis une case vide du plateau (4×5 cases). Celui qui ouvre le duel est tiré au sort.</div>
                 </div>
 
                 <div className="rules-section">
@@ -14429,7 +14450,9 @@ export default function Emprise() {
             </>
           )}
 
-          {reserveOuverte && (
+          {/* Une Reserve entierement posee n'a plus rien a montrer : le panneau se ferme
+              de lui-meme plutot que d'afficher un cadre vide. */}
+          {reserveOuverte && reserveRestante(reserveOuverte).length > 0 && (
             <div className="info-overlay" onClick={() => setReserveOuverte(null)}>
               <div className="info-panel reserve-panel" onClick={(e) => e.stopPropagation()}>
                 <div className="info-panel-title">Votre Réserve</div>
@@ -14439,7 +14462,7 @@ export default function Emprise() {
                     : "Posées sur les cases restées vides si le duel s'achève à égalité parfaite."}
                 </div>
                 <div className="reserve-panel-cartes">
-                  {reserveDe(reserveOuverte).map((c) => (
+                  {reserveRestante(reserveOuverte).map((c) => (
                     <Card key={c.id} card={c} owner={reserveOuverte} extraClass="hand" />
                   ))}
                 </div>
