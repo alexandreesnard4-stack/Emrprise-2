@@ -368,6 +368,7 @@ const APERCU_MS = 20000;
 // telephone bloque l'autre sur un ecran d'attente. A l'echeance, la selection en cours
 // est confirmee ; si elle est incomplete, deux Ordres sont tires au sort.
 const ORDRES_SECONDS = 60;
+const RESERVE_SECONDS = 30;                // le meme compte a rebours, pour la Reserve
 // Passé de 60 à 105 s avec la main en éventail : les cartes ne sont plus toutes visibles
 // d'un coup, il faut déployer chaque Ordre pour lire ses rangs avant de choisir. Une
 // minute ne suffisait plus pour comparer sereinement.
@@ -1091,10 +1092,11 @@ function ordreLePlusJoue(stats) {
 // vides, et l'on recompte. Rien n'est tire au sort au moment le plus tendu du duel.
 const RESERVE_TAILLE = 2;
 const MORT_SUBITE_RONDES_MAX = 2;
-// L'avance du premier joueur. En ligne elle reste a 1 : la Mort Subite demande que les
-// deux appareils s'accordent sur des rondes supplementaires, ce qui n'est pas encore
-// ecrit. Donner +2 sans savoir departager y creerait des egalites sans vainqueur.
-function avanceDuPremier(mode) { return mode === "online" ? 1 : 2; }
+// L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
+// la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
+// Mort Subite ne pouvait jamais s'ouvrir. C'est justement cette egalite qu'on veut --
+// elle se joue, au lieu d'etre donnee.
+const AVANCE_DU_PREMIER = 2;
 
 // La force brute d'une carte, pour que l'Echo compose sa Reserve sans reflechir
 // longtemps : il garde ses deux cartes aux rangs les plus hauts.
@@ -8274,7 +8276,10 @@ export default function Emprise() {
   const [advPret, setAdvPret] = useState(false);
   const [attentePreMatch, setAttentePreMatch] = useState(0);
   const [tempsOrdres, setTempsOrdres] = useState(ORDRES_SECONDS);
-  const ordresAutoRef = useRef(false); // l'echeance ne doit confirmer qu'une seule fois
+  const [tempsReserve, setTempsReserve] = useState(RESERVE_SECONDS);
+  // L'echeance ne doit confirmer qu'une seule fois, pour les Ordres comme pour la Reserve.
+  const ordresAutoRef = useRef(false);
+  const reserveAutoRef = useRef(false);
   const autoForfaitRef = useRef(false); // le forfait pour inactivite ne s'ecrit qu'une fois
   const preForfaitEcritRef = useRef(false);
   const forfaitEcritRef = useRef(false); // un seul constat de forfait par tour d'attente
@@ -8908,15 +8913,13 @@ export default function Emprise() {
     const rc = board.filter((b) => b && b.owner === "red").length;
     return {
       blueCount: bc, redCount: rc,
-      blueScore: bc + (firstPlayer === "blue" ? avanceDuPremier(mode) : 0),
-      redScore: rc + (firstPlayer === "red" ? avanceDuPremier(mode) : 0),
+      blueScore: bc + (firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0),
+      redScore: rc + (firstPlayer === "red" ? AVANCE_DU_PREMIER : 0),
     };
-  }, [board, firstPlayer, mode]);
-  // L'avance va toujours a celui qui a commence, quel que soit son camp.
-  // EN LIGNE elle vaut 1 : la somme est alors impaire (16 + 1 = 17) et l'egalite reste
-  // impossible, comme avant. HORS LIGNE elle vaut 2, et l'egalite parfaite devient
-  // possible — c'est le but : elle declenche la Mort Subite, ou chaque camp pose une
-  // carte de sa Reserve sur les cases restees vides. Voir avanceDuPremier.
+  }, [board, firstPlayer]);
+  // L'avance va toujours a celui qui a commence, quel que soit son camp. Elle vaut deux
+  // points, ce qui rend l'egalite parfaite possible — c'est le but : elle declenche la
+  // Mort Subite, ou chaque camp pose une carte de sa Reserve sur les cases restees vides.
   // Un abandon ou un forfait désigne le vainqueur quel que soit l'état du plateau.
   // vainqueurForce n'a de sens qu'en ligne : ce verrou garantit qu'un état résiduel ne
   // peut jamais décider du vainqueur d'une partie solo ou locale.
@@ -9587,7 +9590,7 @@ export default function Emprise() {
       setConfluenceActive(false);
       setTestMode(false);
       setPickerChoice([]);
-      setPhase("select-blue");
+      setPhase("online-waiting");
       return code;
     } catch (e) {
       setOnlineError("Impossible de créer la partie. Vérifiez la configuration Firebase.");
@@ -9718,6 +9721,9 @@ export default function Emprise() {
         setRedOrders(data.redOrderKeys.map((k) => ORDERS.find((l) => l.key === k)).filter(Boolean));
         setBlueHand(data.blueHand.map(hydrateFromSave));
         setRedHand(data.redHand.map(hydrateFromSave));
+        setReserveBleue((data.blueReserve || []).map(hydrateFromSave));
+        setReserveRouge((data.redReserve || []).map(hydrateFromSave));
+        setMortSubiteRonde(data.mortSubiteRonde || 0);
         setBoard(data.board.map(hydrateFromSave));
         setPoisonedCells(decoderPoisonPlateau(data.poisonedCells));
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
@@ -9826,39 +9832,19 @@ export default function Emprise() {
           return;
         }
         repriseRef.current = false;
+        // La place d'en face vient d'etre prise et je n'ai pas encore choisi : c'est
+        // maintenant que je compose ma main. Tant que le siege etait vide, il n'y avait
+        // rien a preparer. La forme fonctionnelle est indispensable : cet ecouteur ne se
+        // recree qu'au changement de partie, la valeur de phase qu'il capture est perimee.
+        if (!iAmReady && data.blueUid && data.redUid) {
+          setPhase((p) => (p === "online-waiting" ? "select-blue" : p));
+        }
         setOnlineStatus(iAmReady ? "En attente que l'adversaire choisisse ses Ordres..." : "");
       }
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, onlineGameId]);
-
-  // Applique la sélection d'Ordres du joueur en ligne : écrit sa main dans Firestore
-  // (le document commun), puis attend que l'adversaire ait fait de même — c'est
-  // l'écouteur onSnapshot ci-dessus qui bascule les deux joueurs en jeu dès que les
-  // deux mains sont prêtes.
-  async function confirmOnlineOrders(picked) {
-    const chosen = picked || pickerChoice;
-    if (chosen.length !== 2 || !onlineGameId) return;
-    const hand = makeHand(chosen[0], chosen[1]);
-    const field = onlineRole === "blue"
-      ? { blueOrderKeys: chosen.map((l) => l.key), blueHand: hand.map(stripForSave) }
-      : { redOrderKeys: chosen.map((l) => l.key), redHand: hand.map(stripForSave) };
-    try {
-      await updateDoc(doc(db, "games", onlineGameId), field);
-      setPickerChoice([]);
-      setOnlineStatus("En attente que l'adversaire choisisse ses Ordres...");
-      // Si l'adversaire avait déjà choisi ses Ordres, l'écouteur onSnapshot a basculé en
-      // "play" PENDANT l'await ci-dessus : Firestore déclenche l'écouteur dès l'écriture
-      // locale, avant que la promesse ne se résolve. Forcer "online-waiting" ici renvoyait
-      // donc le deuxième joueur à choisir sur l'écran d'attente alors que la partie avait
-      // démarré — et définitivement si c'était son tour de jouer, puisque plus personne ne
-      // pouvait toucher au document pour le réveiller.
-      setPhase((p) => (p === "play" ? p : "online-waiting"));
-    } catch (e) {
-      setOnlineError("Impossible d'enregistrer vos Ordres.");
-    }
-  }
 
   // ---------- Appariement automatique (matchmaking) ----------
   // Un unique document "matchmaking/lobby" sert de salle d'attente : le premier joueur
@@ -10215,6 +10201,11 @@ export default function Emprise() {
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
     setBlueHand([]); setRedHand([]);
+    // Les Reserves et la ronde de Mort Subite appartenaient a la manche precedente.
+    // L'ecouteur les rebatit quand la nouvelle partie demarre, mais les laisser trainer
+    // entre-temps, c'est le defaut que les lignes ci-dessus racontent deja deux fois.
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
+    setReserveOuverte(null);
     setGameOver(false);
     setPickerChoice([]);
     setOnlineRole((r) => (r === "blue" ? "red" : "blue"));
@@ -10647,8 +10638,24 @@ export default function Emprise() {
   function validerReserve() {
     if (reserveChoix.length !== RESERVE_TAILLE) return;
     const source = cartesPourReserve(phase === "select-reserve-blue" ? blueOrders : redOrders);
-    const choisies = reserveChoix.map((i, n) => ({ ...source[i], id: source[i].id + "-reserve-" + n }));
+    poserReserve(reserveChoix.map((i, n) => ({ ...source[i], id: source[i].id + "-reserve-" + n })));
+  }
+
+  // Le temps est ecoule : on part avec ce que le joueur a commence, complete d'office.
+  // Mieux vaut une Reserve choisie a sa place qu'une partie qui ne demarre jamais --
+  // c'est deja la regle pour les Ordres.
+  function validerReserveAuto() {
+    const source = cartesPourReserve(phase === "select-reserve-blue" ? blueOrders : redOrders);
+    if (reserveChoix.length === RESERVE_TAILLE) { validerReserve(); return; }
+    poserReserve(reserveAutomatique(source));
+  }
+
+  function poserReserve(choisies) {
+    if (!choisies || choisies.length !== RESERVE_TAILLE) return;
     setReserveChoix([]);
+    // En ligne, la suite ne se decide pas ici : elle depend de l'adversaire. On envoie,
+    // et l'ecouteur fera basculer les deux camps quand les deux auront envoye.
+    if (mode === "online") { envoyerOrdresEtReserve(choisies); return; }
     if (phase === "select-reserve-blue") {
       setReserveBleue(choisies);
       if (mode === "local") { setPhase("select-red"); return; }
@@ -10665,8 +10672,47 @@ export default function Emprise() {
   }
 
   function confirmOrders() {
-    if (mode === "online") { confirmOnlineOrders(); return; }
+    if (mode === "online") { commencerReserveEnLigne(pickerChoice); return; }
     applyOrderChoice(pickerChoice);
+  }
+
+  // En ligne, ce passage remplace l'envoi direct des Ordres : on garde la main et les
+  // Ordres en local, on fait choisir la Reserve, et c'est validerReserve qui ecrira le
+  // tout d'un bloc. Rien ne part vers Firestore ici.
+  function commencerReserveEnLigne(picked) {
+    const chosen = picked && picked.length === 2 ? picked : null;
+    if (!chosen || !onlineGameId || !onlineRole) return;
+    const hand = makeHand(chosen[0], chosen[1]);
+    // Pas de Heraut en ligne : les capacites superieures ne se jouent qu'hors classement.
+    if (onlineRole === "blue") { setBlueOrders(chosen); setBlueHand(hand); }
+    else { setRedOrders(chosen); setRedHand(hand); }
+    setPickerChoice([]);
+    setReserveChoix([]);
+    setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
+  }
+
+  // L'ecriture unique : Ordres, main et Reserve ensemble. Meme try/catch que partout
+  // ailleurs — updateDoc valide ses arguments de facon SYNCHRONE et leve avant de rendre
+  // une promesse, une donnee invalide echapperait donc au .catch.
+  async function envoyerOrdresEtReserve(choisies) {
+    const ordres = onlineRole === "blue" ? blueOrders : redOrders;
+    if (!ordres || ordres.length !== 2 || !onlineGameId) return;
+    const hand = makeHand(ordres[0], ordres[1]);
+    const field = onlineRole === "blue"
+      ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave) }
+      : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave) };
+    if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
+    try {
+      await updateDoc(doc(db, "games", onlineGameId), field);
+      setOnlineStatus("En attente que l'adversaire choisisse ses Ordres...");
+      // Si l'adversaire avait deja tout envoye, l'ecouteur a bascule en "play" PENDANT
+      // l'await : Firestore declenche l'ecouteur des l'ecriture locale, avant que la
+      // promesse ne se resolve. Le forcer ici renverrait le second joueur a l'ecran
+      // d'attente alors que la partie a demarre.
+      setPhase((p) => (p === "play" || p === "preview" ? p : "online-waiting"));
+    } catch (e) {
+      setOnlineError("Impossible d'enregistrer vos Ordres.");
+    }
   }
 
   function pickRandomTwoOrders() {
@@ -10677,7 +10723,7 @@ export default function Emprise() {
   }
 
   function chooseRandomOrders() {
-    if (mode === "online") { confirmOnlineOrders(pickRandomTwoOrders()); return; }
+    if (mode === "online") { commencerReserveEnLigne(pickRandomTwoOrders()); return; }
     applyOrderChoice(pickRandomTwoOrders());
   }
 
@@ -10775,7 +10821,7 @@ export default function Emprise() {
     } else if (phase === "select-reserve-red") {
       setReserveChoix([]);
       setPickerChoice([]);
-      setPhase("select-red");
+      setPhase(mode === "online" ? "select-blue" : "select-red");
     } else if (phase === "select-red") {
       // Bleu rechoisit ses 2 Ordres : on repart de sa sélection.
       setPickerChoice([]);
@@ -11023,12 +11069,11 @@ export default function Emprise() {
       // case restee vide, et l'on recompte. On lit le plateau QUI VIENT D'ETRE POSE, pas
       // l'etat React, qui ne sera a jour qu'au rendu suivant.
       let mortSubite = false;
-      if (mainsVides && mode !== "online" && mortSubiteRonde < MORT_SUBITE_RONDES_MAX) {
+      if (mainsVides && mortSubiteRonde < MORT_SUBITE_RONDES_MAX) {
         let bc = 0, rc = 0;
         newBoard.forEach((c) => { if (c) (c.owner === "blue" ? bc++ : rc++); });
-        const avance = avanceDuPremier(mode);
-        const sb = bc + (firstPlayer === "blue" ? avance : 0);
-        const sr = rc + (firstPlayer === "red" ? avance : 0);
+        const sb = bc + (firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0);
+        const sr = rc + (firstPlayer === "red" ? AVANCE_DU_PREMIER : 0);
         const carteBleue = reserveBleue[mortSubiteRonde];
         const carteRouge = reserveRouge[mortSubiteRonde];
         const placeLibre = newBoard.filter((c) => !c).length >= 2;
@@ -11039,14 +11084,17 @@ export default function Emprise() {
           setBlueHand(nextBlueHand);
           setRedHand(nextRedHand);
           setMortSubiteRonde(mortSubiteRonde + 1);
-          // C'est celui qui a COMMENCE la partie qui ouvre la Mort Subite.
-          setTurn(firstPlayer);
         }
       }
       const nowGameOver = mainsVides && !mortSubite;
-      const nextTurn = owner === "blue" ? "red" : "blue";
+      // Le tour d'apres. En Mort Subite c'est celui qui a COMMENCE la partie qui rouvre ;
+      // sinon l'autre camp. UNE SEULE variable pour l'ecran et pour Firestore : calcules
+      // separement, les deux appareils se seraient contredits sur le tour au moment
+      // precis ou la partie repart -- et le duel se figeait, chacun croyant l'autre en
+      // train de jouer.
+      const tourSuivant = mortSubite ? firstPlayer : (owner === "blue" ? "red" : "blue");
       if (nowGameOver) setGameOver(true);
-      else if (!mortSubite) setTurn(nextTurn);
+      else setTurn(tourSuivant);
 
       // Partie en ligne : on pousse notre coup vers Firestore juste après l'avoir joué
       // localement — l'adversaire le reçoit via l'écouteur onSnapshot ci-dessus. On joint
@@ -11065,8 +11113,12 @@ export default function Emprise() {
           blueHand: nextBlueHand.map(stripForSave),
           redHand: nextRedHand.map(stripForSave),
           poisonedCells: nextPoison.map(encoderPoison),
-          turn: nowGameOver ? turn : nextTurn,
+          turn: nowGameOver ? turn : tourSuivant,
           gameOver: nowGameOver,
+          // La ronde de Mort Subite voyage avec le coup : c'est elle qui dit QUELLE carte
+          // de Reserve chaque camp prendra ensuite. Sans elle, l'adversaire rejouerait la
+          // premiere carte a la seconde ronde.
+          mortSubiteRonde: mortSubite ? mortSubiteRonde + 1 : mortSubiteRonde,
           lastMove: {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             by: owner,
@@ -11612,6 +11664,23 @@ export default function Emprise() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteurOrdresActif, tempsOrdres]);
+
+  // Minuteur du choix de la Reserve, meme regle que celui des Ordres : en ligne
+  // seulement, puisque hors ligne personne n'attend en face.
+  const minuteurReserveActif = mode === "online" && !gameOver
+    && (phase === "select-reserve-blue" || phase === "select-reserve-red");
+  useEffect(() => {
+    if (!minuteurReserveActif) { setTempsReserve(RESERVE_SECONDS); reserveAutoRef.current = false; return; }
+    if (tempsReserve <= 0) {
+      if (reserveAutoRef.current) return;
+      reserveAutoRef.current = true;
+      validerReserveAuto();
+      return;
+    }
+    const t = setTimeout(() => setTempsReserve((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteurReserveActif, tempsReserve]);
 
   useEffect(() => {
     if (!isHumanTurn || testMode) return; // pas de minuteur en mode test
@@ -13869,6 +13938,12 @@ export default function Emprise() {
               Deux cartes gardées de côté, UNE PAR ORDRE. Si le duel s&apos;achève à égalité
               parfaite, vous les poserez sur les cases restées vides pour départager.
             </div>
+            {minuteurReserveActif && (
+              <div className={`ordres-minuteur ${tempsReserve <= 10 ? "urgent" : ""}`} role="timer" aria-live="off">
+                <img className="ordres-sablier" src="/nav/sablier.webp" alt="" />
+                <span className="ordres-temps">{Math.floor(tempsReserve / 60)}:{String(tempsReserve % 60).padStart(2, "0")}</span>
+              </div>
+            )}
             <div className="sub">{reserveChoix.length}/{RESERVE_TAILLE} choisies</div>
             <div className="reserve-grille">
               {/* Une carte par Ordre : des qu'un Ordre est pris, ses trois autres
