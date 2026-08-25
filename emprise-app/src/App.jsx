@@ -3056,6 +3056,27 @@ const APP_STYLES = `
         .reduced-motion .sm-coulee-veine { display: none !important; }
         .reduced-motion .sm-brasier-lueur { opacity: 0.55 !important; }
 
+        /* Le fond commun a tous les ecrans hors partie. Fixe : il ne defile pas avec la
+           page et ne bouge donc jamais d'un ecran a l'autre. z-index negatif : il passe
+           derriere le fond de la racine (rendue transparente) sans jamais recouvrir quoi
+           que ce soit. La couleur unie sous l'image evite un blanc le temps qu'elle
+           arrive. Rien ne s'anime ici. */
+        .fond-app {
+          position: fixed; inset: 0; z-index: -1;
+          background-color: #0a0810;
+          background-image: url("/fonds/fond-ecran.jpg");
+          background-size: cover; background-position: center;
+        }
+        /* Le vignettage se fait en CSS et non dans l'image : il se regle sans rien
+           reexporter, et il garantit la lisibilite meme si un export futur revient plus
+           clair. Un degrade radial pour les bords, un voile uni pour l'ensemble. */
+        .fond-app::after {
+          content: ""; position: absolute; inset: 0;
+          background:
+            radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,var(--fond-vignette, 0.7)) 100%),
+            rgba(8, 6, 14, var(--fond-voile, 0.26));
+        }
+
         /* Reference de positionnement du bouton Retour : la racine, qui defile avec la
            page, et non le conteneur d'ecran. */
         .emprise-root { position: relative; }
@@ -3064,7 +3085,15 @@ const APP_STYLES = `
           --blue: #3f6fb0; --blue-bright: #6fa4e6; --red: #a8443c; --red-bright: #e0655a; --combo: #8a63c9;
           --poison: #6ea35c; --mue: #4bc9c9; --portee: #6cc0ff; --percee: #d8d8d8; --devour: #a15fc4; --attract: #d98f3c;
           --malus: #e15b52; --bonus: #5fcf6e;
-          min-height: 100vh; min-height: 100dvh; background: radial-gradient(ellipse at 50% -10%, #241e33 0%, var(--bg) 55%), var(--bg);
+          min-height: 100vh; min-height: 100dvh;
+          /* Transparente, pour laisser voir .fond-app qui est DERRIERE elle (z-index -1).
+             Remonter le calque au-dessus aurait ete l'autre solution, mais il serait alors
+             passe par-dessus les ecrans. La couleur d'attente est sur body. */
+          background: transparent;
+          /* Reglage du vignettage, ici avec le reste de la palette. Deux nombres entre 0
+             et 1 : la noirceur des bords, et le voile uni pose sur toute l'image. Les
+             monter assombrit le fond sans toucher au fichier. */
+          --fond-vignette: 0.62; --fond-voile: 0.16;
           color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
@@ -3072,10 +3101,11 @@ const APP_STYLES = `
           position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
           align-items: center; justify-content: center; gap: 14px; padding: 32px 24px;
           text-align: center;
-          /* Noir plein : l'arene est la seule illustration de l'ecran, tout le reste doit
-             lui laisser la place. Le degrade violet et ses hachures se disputaient
-             l'attention avec elle. */
-          background: #000000;
+          /* Transparent : le fond commun passe derriere. Ce fut un noir plein tant que le
+             hub etait seul a decider de son decor -- l'arene devait rester la seule
+             illustration. La texture sombre ne lui dispute rien : elle n'a ni couleur vive
+             ni contour net, et le vignettage l'ecarte des bords ou vit le reste. */
+          background: transparent;
         }
 
         /* ---------- Séquence d'entrée de l'accueil ----------
@@ -3731,7 +3761,11 @@ const APP_STYLES = `
         /* ---------- Galerie des arenes ---------- */
         .info-overlay.arenes-voile {
           padding: 0; align-items: stretch; justify-content: stretch;
-          /* Fond noir plein, en attendant l'illustration qui viendra derriere les arenes. */
+          /* Noir plein, et il doit le rester : ce voile ne masque pas le fond commun mais
+             LE HUB, qui vit juste en dessous. Translucide, le titre EMPRISE et la barre du
+             bas traversaient la page des arenes. Le fond commun etant tout au fond
+             (z-index -1), aucun voile plein ecran pose sur le hub ne peut le laisser voir
+             sans laisser voir le hub avec lui. L'arene reste ici la seule illustration. */
           background: #000000;
           animation: arenes-ouvre 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
@@ -4850,6 +4884,12 @@ const APP_STYLES = `
         .emprise-root.ecran-histoire .story-map-cadre,
         .emprise-root.ecran-histoire .sm-brasier { border-radius: 0; }
 
+        /* EN PARTIE, rien ne change : le plateau et les cartes ont besoin d'un aplat
+           neutre derriere eux, pas d'une texture. L'ecran de jeu reprend donc le fond
+           d'origine, celui que la racine portait avant l'arrivee du calque. */
+        .emprise-root.ecran-jeu {
+          background: radial-gradient(ellipse at 50% -10%, #241e33 0%, var(--bg) 55%), var(--bg);
+        }
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
           height: 100dvh; max-height: 100dvh;
@@ -11809,6 +11849,12 @@ export default function Emprise() {
       className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${phase === "chapters" ? "ecran-histoire" : ""}`}
     >
       <style>{APP_STYLES}</style>
+
+      {/* Le fond commun. Il est pose ICI, une seule fois, a la racine : applique ecran
+          par ecran, il serait demonte et remonte a chaque navigation, et l'image
+          sauterait visiblement entre le hub, un menu et le profil. Purement decoratif,
+          donc invisible au lecteur d'ecran. */}
+      <div className="fond-app" aria-hidden="true" />
 
       {/* Premiere ouverture : on demande son nom avant toute chose. L'ecran recouvre tout
           (z-index au-dessus de l'accueil) et ne se ferme qu'une fois un nom donne : le
