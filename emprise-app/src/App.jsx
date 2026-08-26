@@ -8123,9 +8123,11 @@ export default function Emprise() {
   const defiRecu = defisValides[0] || null;
   // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
   const demandesVisibles = demandesRecues.filter((d) => !bloques.some((b) => b.uid === d.uid));
-  // La pastille les compte TOUS, pas seulement celui qu'on montre : le bandeau ne dure
-  // que dix secondes, elle est ce qui reste quand il s'est replie.
-  const pastilleAmis = demandesVisibles.length + defisValides.length;
+  // La pastille ne compte QUE les demandes d'ami. Un defi n'y figure plus : il s'annonce
+  // par le bandeau du hub, et l'y compter en plus faisait dire deux fois la meme chose.
+  // Les demandes d'ami, elles, n'ont aucun autre moyen de se signaler -- la pastille
+  // reste leur seule voix.
+  const pastilleAmis = demandesVisibles.length;
 
   // Toutes les ecritures a deux documents passent par un batch : les regles verifient
   // l'etat APRES le batch (existsAfter) et refusent les moities isolees. C'est voulu.
@@ -8403,8 +8405,10 @@ export default function Emprise() {
   const cleDefi = defiRecu ? defiRecu.uid + "-" + defiRecu.t : null;
   // Le decompte ne tourne QUE la ou il se lit. Laisse libre, il rafraichissait l'ecran
   // une fois par seconde pendant toute une partie, pour un texte que personne ne voyait.
+  // Le bandeau du hub n'en fait plus partie : il n'affiche plus de decompte. Ne restent
+  // que les deux ecrans qui portent l'encart, seuls a montrer le temps qui reste.
   const defiCompteAffiche = !!defiRecu
-    && (bandeauDefi !== null || activeModal === "amis" || phase === "online-menu");
+    && (activeModal === "amis" || phase === "online-menu");
   useEffect(() => {
     if (!defiRecu || !defiCompteAffiche) { setDefiRestant(0); return; }
     // Borne haute : l'estimation du decalage d'horloge peut donner quelques secondes
@@ -12308,8 +12312,6 @@ export default function Emprise() {
           <div className="hub-bas">
             {bandeauDefi && defiRecu && (() => {
               const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
-              const s = Math.ceil(defiRestant / 1000);
-              const minuterie = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
               const autres = defisValides.length - 1;
               return (
                 <div className={`defi-bandeau ${bandeauDefi.etat === "sort" ? "sort" : ""}`} role="status">
@@ -12318,15 +12320,19 @@ export default function Emprise() {
                   <img className="defi-bandeau-medaillon" src="/icones/amis.webp" alt="" width="34" height="34" />
                   <div className="defi-bandeau-corps">
                     <div className="defi-bandeau-titre"><b>{nom}</b> vous défie</div>
-                    <div className="defi-bandeau-sous">
-                      <span>Expire dans {minuterie}</span>
-                      {autres > 0 && (
+                    {/* Pas de decompte ici : le bandeau ne vit que dix secondes, annoncer
+                        un temps qui court neuf minutes au-dessus d'une barre qui s'en va
+                        tout de suite melangeait deux horloges. Le temps qui reste se lit
+                        dans l'ecran Amis, ou le defi attend vraiment.
+                        La seconde ligne ne s'affiche donc que s'il y a autre chose a dire. */}
+                    {autres > 0 && (
+                      <div className="defi-bandeau-sous">
                         <button
                           className="defi-bandeau-autres"
                           onClick={() => { masquerBandeauDefi(); setActiveModal("amis"); }}
                         >+{autres} autre{autres > 1 ? "s" : ""}</button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     className="reset-btn defi-bandeau-relever"
@@ -12681,7 +12687,9 @@ export default function Emprise() {
                     <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
                   </>
                 )}
-                {banniereDefi()}
+                {/* Plus d'encart de defi ici : l'ecran des Amis sert a gerer ses relations,
+                    pas a lancer une partie. Le defi s'annonce par le bandeau du hub, et se
+                    releve depuis l'ecran Affrontement en ligne, ou l'on vient pour jouer. */}
                 {demandesVisibles.length > 0 && (
                   <>
                     <div className="amis-sous-titre avec-icone">
