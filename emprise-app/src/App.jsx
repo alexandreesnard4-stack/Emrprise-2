@@ -3096,6 +3096,12 @@ const APP_STYLES = `
         .fond-app::after {
           content: ""; position: absolute; inset: 0;
           background:
+            /* Un voile de plus, en HAUT seulement. Le ciel porte une eclaircie lunaire qui
+               tombe pile derriere le titre : mesure faite, le contraste du texte y valait
+               3,14 pour 4,5 exiges. Assombrir toute l'image aurait rachete ces quelques
+               centaines de pixels en effacant les nuages partout ailleurs ; ce degrade ne
+               touche que le tiers haut et rend le titre a 6,4. */
+            linear-gradient(180deg, rgba(0,0,0,var(--fond-haut, 0.6)) 0%, rgba(0,0,0,0) 46%),
             radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,var(--fond-vignette, 0.7)) 100%),
             rgba(8, 6, 14, var(--fond-voile, 0.26));
         }
@@ -3116,7 +3122,7 @@ const APP_STYLES = `
           /* Reglage du vignettage, ici avec le reste de la palette. Deux nombres entre 0
              et 1 : la noirceur des bords, et le voile uni pose sur toute l'image. Les
              monter assombrit le fond sans toucher au fichier. */
-          --fond-vignette: 0.62; --fond-voile: 0.16;
+          --fond-vignette: 0.62; --fond-voile: 0.16; --fond-haut: 0.60;
           color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
