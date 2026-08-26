@@ -3750,18 +3750,113 @@ const APP_STYLES = `
         /* Le profil de l'adversaire, ouvert depuis son nom en partie. Il reprend les
            blocs du profil du joueur -- memes chiffres, memes titres -- pour qu'on lise
            l'autre comme on se lit soi-meme. */
-        .profil-adverse { max-width: 330px; text-align: center; }
+        /* ---------- Le profil d'un autre Commandant ----------
+           La hierarchie tenait a l'envers : le bouton le plus voyant etait FERMER, celui
+           qui fait partir. C'est desormais AJOUTER EN AMI qui porte l'or, et fermer n'est
+           plus qu'une croix. Les sections se separent par des filets, pas par des cases. */
+        .profil-adverse {
+          position: relative; max-width: 320px; padding: 18px 16px 14px; gap: 0;
+          border: 1.5px solid var(--gold); border-radius: 16px;
+          background: linear-gradient(160deg, #221a30 0%, #171122 100%);
+          box-shadow: 0 22px 54px rgba(0, 0, 0, 0.66);
+        }
+        .profil-adverse-croix {
+          position: absolute; top: 8px; right: 10px;
+          background: none; border: none; padding: 0;
+          width: 28px; height: 28px; line-height: 1;
+          font-size: 20px; color: #6d6480; cursor: pointer;
+        }
+        .profil-adverse-croix:hover { color: var(--bone); }
+
+        /* L'identite : un visage, un nom, une appartenance. */
+        .profil-adverse-identite {
+          display: flex; align-items: center; gap: 12px; text-align: left;
+          padding-bottom: 13px; border-bottom: 1px solid rgba(203,164,86,0.14);
+        }
+        .profil-adverse-medaillon {
+          flex: none; width: 58px; height: 58px; border-radius: 50%;
+          border: 2px solid var(--gold); box-sizing: border-box;
+          background-size: cover; background-position: center;
+          background-color: #14101d;
+        }
+        .profil-adverse-medaillon.neutre {
+          background-image: linear-gradient(155deg, #2c2340 0%, #16111f 100%);
+        }
+        /* min-width: 0, sans quoi un pseudo de quinze caracteres refuse de se replier et
+           pousse le medaillon hors du panneau. */
+        .profil-adverse-qui { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .profil-adverse-pseudo {
+          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700;
+          letter-spacing: 0.05em; color: #f0eaf8;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         .profil-adverse-code {
-          font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700;
-          letter-spacing: 0.12em; font-variant-numeric: tabular-nums; color: var(--gold);
+          font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+          font-size: 10.5px; letter-spacing: 0.08em; color: #845114;
         }
-        /* Une fiche incomplete se dit, plutot que de laisser trois points d'interrogation
-           sans explication : l'adversaire peut jouer une version plus ancienne. */
-        .profil-adverse-vide { line-height: 1.5; color: var(--muted); }
-        .profil-adverse-actions {
-          display: flex; flex-direction: column; align-items: center; gap: 8px;
-          margin-top: 4px;
+        .profil-adverse-arene {
+          font-style: italic; font-size: 11px; color: #b99a5e; letter-spacing: 0.02em;
         }
+
+        /* Deux colonnes, un filet entre elles. Les trophees n'y sont plus : ils se lisent
+           deja dans la ligne d'appartenance, juste au-dessus. */
+        .profil-adverse-chiffres {
+          display: flex; padding: 12px 0;
+          border-bottom: 1px solid rgba(203,164,86,0.14);
+        }
+        .profil-adverse-chiffres > div {
+          flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+        }
+        .profil-adverse-chiffres > div + div { border-left: 1px solid rgba(203,164,86,0.14); }
+        .profil-adverse-chiffres b {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: #f0eaf8;
+          font-variant-numeric: tabular-nums;
+        }
+        .profil-adverse-chiffres span {
+          font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: #6d6480;
+        }
+
+        .profil-adverse .profil-section-titre { margin-top: 13px; }
+        .profil-adverse-titre {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
+          letter-spacing: 0.06em; color: var(--gold-bright); margin: 2px 0 4px;
+        }
+        .profil-adverse-progres {
+          font-size: 11.5px; line-height: 1.5; color: var(--muted); margin-bottom: 8px;
+        }
+        /* La jauge dit ce que la phrase annonce. Trois pixels suffisent : elle accompagne
+           le texte, elle ne le concurrence pas. */
+        .profil-adverse-jauge {
+          height: 3px; border-radius: 2px; background: #2a2138; overflow: hidden;
+        }
+        .profil-adverse-jauge span {
+          display: block; height: 100%; border-radius: 2px;
+          background: linear-gradient(90deg, #a37c33 0%, #e8c877 100%);
+        }
+
+        /* L'action qui rapproche, et elle seule, porte l'or. */
+        .profil-adverse-ajouter {
+          width: 100%; margin-top: 14px; padding: 11px 14px;
+          border: none; border-radius: 11px; cursor: pointer;
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase; color: #1a1424;
+          background: linear-gradient(160deg, #e8c877 0%, #b8944a 100%);
+          transition: transform .12s ease-out;
+        }
+        .profil-adverse-ajouter:active { transform: scale(0.98); }
+        .profil-adverse-etat { margin-top: 14px; }
+
+        /* Dix pixels au moins entre eux et le bouton : ces deux mots ne doivent jamais
+           se prendre pour la suite du geste dore. */
+        .profil-adverse-liens {
+          display: flex; justify-content: space-between; margin-top: 12px;
+        }
+        .profil-adverse-liens button {
+          background: none; border: none; padding: 2px 0; cursor: pointer;
+          font-family: inherit; font-size: 8.5px; letter-spacing: 0.14em;
+          text-transform: uppercase; color: #5e556f;
+        }
+        .profil-adverse-liens button:hover { color: var(--muted); }
         .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
         .amis-mon-code-valeur {
           font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
@@ -8234,6 +8329,8 @@ export default function Emprise() {
   const [bloques, setBloques] = useState([]);                   // [{ uid, depuis }]
   const [joueurMenu, setJoueurMenu] = useState(null);           // { uid, nom, contexte: "ami" | "demande" | "adversaire" }
   const [profilAdverse, setProfilAdverse] = useState(null);     // { uid, nom } : profil ouvert depuis la partie
+  // Bloquer coupe un lien pour de bon : cela ne doit jamais partir sur un appui malheureux.
+  const [blocageAConfirmer, setBlocageAConfirmer] = useState(null); // { uid, nom }
   const [signalement, setSignalement] = useState(null);         // { uid, nom, motif }
   const [signalementEnvoye, setSignalementEnvoye] = useState({}); // uid -> true
 
@@ -9197,6 +9294,8 @@ export default function Emprise() {
     parties: Math.max(0, Math.min(1000000, Math.round(stats.gamesPlayed || 0))),
     victoires: Math.max(0, Math.min(1000000, Math.round(stats.mesVictoires || 0))),
     combos: titresDuProfil(stats).titres.map((t) => t.combo.key).slice(0, 3),
+    ordreFavori: ordreLePlusJoue(stats) || "",
+    combosParties: Math.max(0, Math.min(1000000, Math.round(stats.combosParties || 0))),
   });
   const trophyRef = useRef(null);
   useEffect(() => {
@@ -10256,9 +10355,13 @@ export default function Emprise() {
         const entierRecu = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000000, Math.floor(v))) : undefined);
         const combosRecus = (v) => (Array.isArray(v) ? v : [])
           .filter((k) => COMBOS.some((c) => c.key === k)).slice(0, 3);
+        // Une cle d'Ordre venue d'ailleurs se verifie comme le reste.
+        const ordreRecu = (v) => (ORDERS.some((o) => o.key === v) ? v : "");
         setProfilPartie({
-          blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos) },
-          red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos) },
+          blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
+                  ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties) },
+          red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
+                 ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -11241,9 +11344,11 @@ export default function Emprise() {
     const moi = profilPublic();
     const field = onlineRole === "blue"
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
-          blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos }
+          blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos,
+          blueOrdreFavori: moi.ordreFavori, blueCombosParties: moi.combosParties }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
-          redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos };
+          redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
+          redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
@@ -11407,6 +11512,7 @@ export default function Emprise() {
     // Du plus recent au plus ancien : on ferme la couche du dessus, une par pression.
     if (reserveOuverte) { setReserveOuverte(null); return true; }
     if (signalement) { setSignalement(null); return true; }
+    if (blocageAConfirmer) { setBlocageAConfirmer(null); return true; }
     if (profilAdverse) { setProfilAdverse(null); return true; }
     if (joueurMenu) { setJoueurMenu(null); return true; }
     if (amiARetirer) { setAmiARetirer(null); return true; }
@@ -11420,7 +11526,7 @@ export default function Emprise() {
     if (phase !== "landing") { goBack(); return true; }
     return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
   };
-  const retourACouvrir = !!(profilAdverse || reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
+  const retourACouvrir = !!(blocageAConfirmer || profilAdverse || reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
     || infoAbility || ordreDetail || activeModal || ceremonieFin || phase !== "landing");
   useEffect(() => {
     if (retourACouvrir && !(window.history.state && window.history.state.emprise)) {
@@ -15176,7 +15282,7 @@ export default function Emprise() {
 
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
-      {profilAdverse && !signalement && (() => {
+      {profilAdverse && !signalement && !blocageAConfirmer && (() => {
         // Le document de PARTIE passe avant la fiche publique : il arrive toujours, la ou
         // la fiche attend que les regles de /users soient publiees.
         const enPartie = (profilPartie && profilAdverse.camp && profilPartie[profilAdverse.camp]) || {};
@@ -15186,6 +15292,8 @@ export default function Emprise() {
           parties: typeof enPartie.parties === "number" ? enPartie.parties : fiche.parties,
           victoires: typeof enPartie.victoires === "number" ? enPartie.victoires : fiche.victoires,
           combos: (enPartie.combos && enPartie.combos.length) ? enPartie.combos : fiche.combos,
+          ordreFavori: enPartie.ordreFavori || fiche.ordreFavori || "",
+          combosParties: typeof enPartie.combosParties === "number" ? enPartie.combosParties : undefined,
         };
         const dejaAmi = amis.some((a) => a.uid === profilAdverse.uid);
         const ilMaDemande = demandesRecues.some((d) => d.uid === profilAdverse.uid);
@@ -15194,62 +15302,82 @@ export default function Emprise() {
         // que le jeu connait. Tout le reste est ecarte, comme pour son pseudo.
         const combos = (Array.isArray(f.combos) ? f.combos : [])
           .map((k) => COMBOS.find((c) => c.key === k))
-          .filter(Boolean)
-          .slice(0, 3);
-        const aDesChiffres = typeof f.parties === "number" || typeof f.victoires === "number";
+          .filter(Boolean);
+        const ordre = ORDERS.find((o) => o.key === f.ordreFavori) || null;
+        const trophees = typeof f.trophees === "number" ? f.trophees : 0;
+        const ligue = getLeague(trophees);
+        // La jauge lit combosParties, PAS le total : seules les parties a deux Ordres,
+        // contre un Echo ou en ligne, ouvrent droit a un titre.
+        const cp = typeof f.combosParties === "number" ? f.combosParties : null;
+        const restantes = cp === null ? null : Math.max(0, COMBOS_PARTIES_MIN - cp);
+        const avance = cp === null ? 0 : Math.min(1, cp / COMBOS_PARTIES_MIN);
         return (
           <div className="info-overlay" onClick={() => setProfilAdverse(null)}>
             <div className="info-panel profil-adverse" onClick={(e) => e.stopPropagation()}>
-              <div className="info-panel-title">{profilAdverse.nom}</div>
-              {f.codeAmi && <div className="profil-adverse-code">{codeAmiLisible(f.codeAmi)}</div>}
+              {/* Fermer n'est plus l'action mise en avant : une croix suffit. Ce qui doit
+                  se voir, c'est ce qui rapproche deux Commandants, en bas de la fenetre. */}
+              <button className="profil-adverse-croix" onClick={() => setProfilAdverse(null)}
+                      aria-label="Fermer">&times;</button>
 
-              <div className="profil-chiffres">
+              <div className="profil-adverse-identite">
+                {/* Le medaillon porte l'Ordre qu'il joue le plus. Sans cette information,
+                    un degrade sombre neutre -- jamais un trou. */}
+                <span
+                  className={`profil-adverse-medaillon ${ordre ? "" : "neutre"}`}
+                  style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+                  aria-hidden="true"
+                />
+                <div className="profil-adverse-qui">
+                  <div className="profil-adverse-pseudo">{profilAdverse.nom}</div>
+                  {f.codeAmi && <div className="profil-adverse-code">{codeAmiLisible(f.codeAmi)}</div>}
+                  <div className="profil-adverse-arene">Arène {ligue.name} · {trophees} trophées</div>
+                </div>
+              </div>
+
+              <div className="profil-adverse-chiffres">
                 <div><b>{typeof f.parties === "number" ? f.parties : "?"}</b><span>parties</span></div>
                 <div><b>{typeof f.victoires === "number" ? f.victoires : "?"}</b><span>victoires</span></div>
-                <div><b>{typeof f.trophees === "number" ? f.trophees : 0}</b><span>trophées</span></div>
               </div>
-              {!aDesChiffres && (
-                <div className="sub profil-adverse-vide">
-                  Ce Commandant n&apos;a pas encore publié son palmarès.
-                </div>
-              )}
 
               <div className="profil-section-titre">Le Commandant qu&apos;il est</div>
               {combos.length > 0 ? (
-                combos.map((c, i) => (
-                  <div key={c.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
-                    <div className="profil-titre-haut"><b>{c.nom}</b></div>
-                    <div className="profil-titre-recit">{c.recit}</div>
-                  </div>
-                ))
+                <div className="profil-adverse-titre">{combos[0].nom}</div>
               ) : (
-                <div className="sub profil-adverse-vide">
-                  {f.titre ? f.titre : "Son style ne s'est pas encore dégagé."}
-                </div>
+                <>
+                  {/* Une progression, jamais un constat vide : dire ce qui manque vaut
+                      mieux que dire que rien n'est la. */}
+                  <div className="profil-adverse-progres">
+                    Son style se dessine.{restantes === null ? "" : ` Encore ${restantes} partie${restantes > 1 ? "s" : ""} avant qu'un titre lui soit donné.`}
+                  </div>
+                  {restantes !== null && (
+                    <div className="profil-adverse-jauge" role="img"
+                         aria-label={`${Math.round(avance * 100)} pour cent du chemin vers un titre`}>
+                      <span style={{ width: Math.round(avance * 100) + "%" }} />
+                    </div>
+                  )}
+                </>
               )}
 
-              <div className="profil-adverse-actions">
-                {dejaAmi ? (
-                  <div className="revanche-attente">Déjà dans vos amis</div>
-                ) : envoyee ? (
-                  <div className="revanche-attente">Demande d&apos;ami envoyée</div>
-                ) : (
-                  <button
-                    className="reset-btn"
-                    onClick={() => { setAmitieAvis("");
-                      (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
-                        .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
-                  >{amitieAvis || (ilMaDemande ? "Accepter en ami" : "Ajouter en ami")}</button>
-                )}
-                {/* Apple demande que le signalement soit a portee de main la ou l'on voit
-                    le nom de quelqu'un. C'est ici. */}
-                <button className="landing-link" onClick={() => {
-                  setProfilAdverse(null);
-                  setJoueurMenu({ uid: profilAdverse.uid, nom: profilAdverse.nom, contexte: "adversaire" });
-                }}>Signaler ou bloquer</button>
-              </div>
+              {dejaAmi ? (
+                <div className="revanche-attente profil-adverse-etat">Déjà dans vos amis</div>
+              ) : envoyee ? (
+                <div className="revanche-attente profil-adverse-etat">Demande d&apos;ami envoyée</div>
+              ) : (
+                <button
+                  className="profil-adverse-ajouter"
+                  onClick={() => { setAmitieAvis("");
+                    (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
+                      .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
+                >{amitieAvis || (ilMaDemande ? "Accepter en ami" : "Ajouter en ami")}</button>
+              )}
 
-              <button className="reset-btn" onClick={() => setProfilAdverse(null)}>Fermer</button>
+              {/* Deux mots, petits et gris, ecartes du bouton principal. Aucun des deux
+                  n'agit tout de suite : signaler ouvre le formulaire de motif, bloquer
+                  demande confirmation. Ces gestes durent, ils ne partent pas d'un doigt. */}
+              <div className="profil-adverse-liens">
+                <button onClick={() => setSignalement({ uid: profilAdverse.uid, nom: profilAdverse.nom, motif: "pseudo" })}>Signaler</button>
+                <button onClick={() => setBlocageAConfirmer({ uid: profilAdverse.uid, nom: profilAdverse.nom })}>Bloquer</button>
+              </div>
             </div>
           </div>
         );
@@ -15297,6 +15425,25 @@ export default function Emprise() {
                 setSignalement(null); setJoueurMenu(null);
                 setAvisAmis({ texte: "Signalement envoyé.", bon: true });
               }}>Envoyer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blocageAConfirmer && (
+        <div className="info-overlay" onClick={() => setBlocageAConfirmer(null)}>
+          <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Bloquer {blocageAConfirmer.nom} ?</div>
+            <div className="confirm-text">
+              Vous ne verrez plus ses messages ni ses défis, et il disparaîtra de vos amis.
+              Vous pourrez le débloquer depuis vos réglages.
+            </div>
+            <div className="confirm-actions">
+              <button className="reset-btn" onClick={() => setBlocageAConfirmer(null)}>Annuler</button>
+              <button className="reset-btn quit-confirm" onClick={() => {
+                bloquerJoueur(blocageAConfirmer.uid).catch(() => {});
+                setBlocageAConfirmer(null); setProfilAdverse(null);
+              }}>Bloquer</button>
             </div>
           </div>
         </div>
