@@ -3750,86 +3750,102 @@ const APP_STYLES = `
         /* Le profil de l'adversaire, ouvert depuis son nom en partie. Il reprend les
            blocs du profil du joueur -- memes chiffres, memes titres -- pour qu'on lise
            l'autre comme on se lit soi-meme. */
-        /* ---------- Le profil d'un autre Commandant ----------
+        /* ---------- La fiche d'un Commandant, la sienne comme celle d'un autre ----------
            La hierarchie tenait a l'envers : le bouton le plus voyant etait FERMER, celui
            qui fait partir. C'est desormais AJOUTER EN AMI qui porte l'or, et fermer n'est
-           plus qu'une croix. Les sections se separent par des filets, pas par des cases. */
-        .profil-adverse {
+           plus qu'une croix. Les sections se separent par des filets, pas par des cases.
+           Les regles en profil-fiche valent pour LES DEUX fiches : meme visage, meme
+           identite, memes chiffres. Ce qui ne concerne qu'un autre Commandant -- l'ajouter,
+           le signaler, le bloquer -- reste en profil-adverse. */
+        .profil-adverse, .profil-fiche {
           position: relative; max-width: 320px; padding: 18px 16px 14px; gap: 0;
           border: 1.5px solid var(--gold); border-radius: 16px;
           background: linear-gradient(160deg, #221a30 0%, #171122 100%);
           box-shadow: 0 22px 54px rgba(0, 0, 0, 0.66);
         }
-        .profil-adverse-croix {
+        .profil-fiche-croix {
           position: absolute; top: 8px; right: 10px;
           background: none; border: none; padding: 0;
           width: 28px; height: 28px; line-height: 1;
           font-size: 20px; color: #6d6480; cursor: pointer;
         }
-        .profil-adverse-croix:hover { color: var(--bone); }
+        .profil-fiche-croix:hover { color: var(--bone); }
 
         /* L'identite : un visage, un nom, une appartenance. */
-        .profil-adverse-identite {
+        .profil-fiche-identite {
           display: flex; align-items: center; gap: 12px; text-align: left;
           padding-bottom: 13px; border-bottom: 1px solid rgba(203,164,86,0.14);
         }
-        .profil-adverse-medaillon {
+        .profil-fiche-medaillon {
           flex: none; width: 58px; height: 58px; border-radius: 50%;
           border: 2px solid var(--gold); box-sizing: border-box;
           background-size: cover; background-position: center;
           background-color: #14101d;
         }
-        .profil-adverse-medaillon.neutre {
+        .profil-fiche-medaillon.neutre {
           background-image: linear-gradient(155deg, #2c2340 0%, #16111f 100%);
         }
         /* min-width: 0, sans quoi un pseudo de quinze caracteres refuse de se replier et
            pousse le medaillon hors du panneau. */
-        .profil-adverse-qui { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-        .profil-adverse-pseudo {
+        .profil-fiche-qui { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .profil-fiche-pseudo {
           font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700;
           letter-spacing: 0.05em; color: #f0eaf8;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .profil-adverse-code {
+        .profil-fiche-code {
           font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
           font-size: 10.5px; letter-spacing: 0.08em; color: #845114;
         }
-        .profil-adverse-arene {
+        /* Sur SA fiche, le nom reste un bouton : on le change la ou on le lit. .profil-nom
+           pese autant que .profil-fiche-pseudo, et sa taille l'emportait -- les deux fiches
+           n'affichaient alors pas le meme nom a la meme taille. On accroche les deux
+           classes pour trancher. */
+        .profil-fiche-pseudo.profil-nom {
+          display: flex; align-items: center; gap: 6px;
+          background: none; border: none; padding: 0; cursor: pointer;
+          font-size: 17px; text-align: left;
+        }
+        .profil-fiche-pseudo.profil-nom svg { flex: none; width: 13px; height: 13px; fill: var(--gold); }
+        /* Le code se lit desormais dans la ligne d'identite : ce bloc ne garde que les
+           deux gestes, copier et envoyer. */
+        .profil-fiche-partage { justify-content: center; margin-top: 10px; }
+        .profil-fiche-arene {
           font-style: italic; font-size: 11px; color: #b99a5e; letter-spacing: 0.02em;
         }
 
         /* Deux colonnes, un filet entre elles. Les trophees n'y sont plus : ils se lisent
            deja dans la ligne d'appartenance, juste au-dessus. */
-        .profil-adverse-chiffres {
+        .profil-fiche-chiffres {
           display: flex; padding: 12px 0;
           border-bottom: 1px solid rgba(203,164,86,0.14);
         }
-        .profil-adverse-chiffres > div {
+        .profil-fiche-chiffres > div {
           flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
         }
-        .profil-adverse-chiffres > div + div { border-left: 1px solid rgba(203,164,86,0.14); }
-        .profil-adverse-chiffres b {
+        .profil-fiche-chiffres > div + div { border-left: 1px solid rgba(203,164,86,0.14); }
+        .profil-fiche-chiffres b {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: #f0eaf8;
           font-variant-numeric: tabular-nums;
         }
-        .profil-adverse-chiffres span {
+        .profil-fiche-chiffres span {
           font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: #6d6480;
         }
 
-        .profil-adverse .profil-section-titre { margin-top: 13px; }
+        .profil-adverse .profil-section-titre, .profil-fiche .profil-section-titre { margin-top: 13px; }
         .profil-adverse-titre {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700;
           letter-spacing: 0.06em; color: var(--gold-bright); margin: 2px 0 4px;
         }
-        .profil-adverse-progres {
+        .profil-fiche-progres {
           font-size: 11.5px; line-height: 1.5; color: var(--muted); margin-bottom: 8px;
         }
         /* La jauge dit ce que la phrase annonce. Trois pixels suffisent : elle accompagne
            le texte, elle ne le concurrence pas. */
-        .profil-adverse-jauge {
+        .profil-fiche-jauge {
           height: 3px; border-radius: 2px; background: #2a2138; overflow: hidden;
         }
-        .profil-adverse-jauge span {
+        .profil-fiche-jauge span {
           display: block; height: 100%; border-radius: 2px;
           background: linear-gradient(90deg, #a37c33 0%, #e8c877 100%);
         }
@@ -12936,9 +12952,14 @@ export default function Emprise() {
             const profil = titresDuProfil(stats);
             const total = stats.gamesPlayed || 0;
             const victoires = stats.mesVictoires || 0;
+            const monOrdreFavori = ORDERS.find((o) => o.key === ordreLePlusJoue(stats)) || null;
+            const maLigue = getLeague(stats.trophies || 0);
+            const avanceTitre = Math.min(1, (stats.combosParties || 0) / COMBOS_PARTIES_MIN);
             return (
               <div className="info-overlay" onClick={() => setActiveModal(null)}>
-                <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel settings-panel profil-panel profil-fiche" onClick={(e) => e.stopPropagation()}>
+                  <button className="profil-fiche-croix" onClick={() => setActiveModal(null)}
+                          aria-label="Fermer">&times;</button>
                   {/* Le nom se change ici, la ou on le lit : le toucher ouvre le champ,
                       pre-rempli du nom actuel pour le corriger plutot que le retaper. */}
                   {editionPseudo ? (
@@ -12968,21 +12989,34 @@ export default function Emprise() {
                       </div>
                     </div>
                   ) : (
-                    <button className="info-panel-title profil-nom"
-                            onClick={() => { setPseudoSaisi(pseudo); setEditionPseudo(true); }}
-                            title="Changer de nom">
-                      {pseudo}
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 17.2V20h2.8L18 8.8 15.2 6 4 17.2zm16-9.6a.9.9 0 0 0 0-1.3l-2.3-2.3a.9.9 0 0 0-1.3 0l-1.5 1.5L17.7 9l1.5-1.4z" />
-                      </svg>
-                    </button>
+                    <div className="profil-fiche-identite">
+                      {/* Le medaillon porte l'Ordre que vous jouez le plus. Sans partie
+                          posee, un degrade sombre -- jamais un trou. */}
+                      <span
+                        className={`profil-fiche-medaillon ${monOrdreFavori ? "" : "neutre"}`}
+                        style={monOrdreFavori ? { backgroundImage: `url("${monOrdreFavori.portrait}")` } : undefined}
+                        aria-hidden="true"
+                      />
+                      <div className="profil-fiche-qui">
+                        {/* Le nom reste modifiable : c'est le sien. Il garde son crayon,
+                            mais prend sa place dans la ligne d'identite. */}
+                        <button className="profil-fiche-pseudo profil-nom"
+                                onClick={() => { setPseudoSaisi(pseudo); setEditionPseudo(true); }}
+                                title="Changer de nom">
+                          {pseudo}
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 17.2V20h2.8L18 8.8 15.2 6 4 17.2zm16-9.6a.9.9 0 0 0 0-1.3l-2.3-2.3a.9.9 0 0 0-1.3 0l-1.5 1.5L17.7 9l1.5-1.4z" />
+                          </svg>
+                        </button>
+                        {monCodeAmi && <div className="profil-fiche-code">{codeAmiLisible(monCodeAmi)}</div>}
+                        <div className="profil-fiche-arene">Arène {maLigue.name} · {stats.trophies || 0} trophées</div>
+                      </div>
+                    </div>
                   )}
 
-                  {/* Sous le nom, l'identifiant : c'est par lui qu'on vous ajoute, il doit
-                      se voir des l'ouverture du profil et non au fond d'une section. */}
+                  {/* L'identifiant se copie et s'envoie : c'est par lui qu'on vous ajoute. */}
                   {monCodeAmi && (
-                    <div className="profil-identifiant">
-                      <span className="profil-identifiant-valeur">{codeAmiLisible(monCodeAmi)}</span>
+                    <div className="profil-identifiant profil-fiche-partage">
                       <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
@@ -12998,13 +13032,14 @@ export default function Emprise() {
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
 
-                  <div className="profil-chiffres">
+                  {/* Deux colonnes, plus trois : les trophees se lisent deja dans la ligne
+                      d'appartenance, juste au-dessus. */}
+                  <div className="profil-fiche-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
                     <div><b>{victoires}</b><span>victoires</span></div>
-                    <div><b>{stats.trophies || 0}</b><span>trophées</span></div>
                   </div>
 
-                  <div className="profil-section-titre">Le joueur que vous êtes</div>
+                  <div className="profil-section-titre">Le Commandant que vous êtes</div>
                   {profil.titres.length > 0 ? (
                     profil.titres.map((t, i) => (
                       <div key={t.combo.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
@@ -13019,11 +13054,26 @@ export default function Emprise() {
                       </div>
                     ))
                   ) : (
-                    <div className="profil-vide">
-                      {profil.pret
-                        ? "Vous jouez de tout, sans manie affirmée. Aucun combo ne revient assez souvent pour vous donner un titre."
-                        : `Encore ${profil.restantes} partie${profil.restantes > 1 ? "s" : ""} avant qu'un style se dégage. Seules comptent vos parties à deux Ordres, contre un Écho ou en ligne.`}
-                    </div>
+                    profil.pret ? (
+                      <div className="profil-vide">
+                        Vous jouez de tout, sans manie affirmée. Aucun combo ne revient assez
+                        souvent pour vous donner un titre.
+                      </div>
+                    ) : (
+                      <>
+                        {/* Le seuil n'est pas encore atteint : on dit ce qui manque, et la
+                            jauge le montre. Un constat vide n'apprend rien. */}
+                        <div className="profil-fiche-progres">
+                          Votre style se dessine. Encore {profil.restantes} partie{profil.restantes > 1 ? "s" : ""} avant
+                          qu&apos;un titre vous soit donné. Seules comptent vos parties à deux Ordres,
+                          contre un Écho ou en ligne.
+                        </div>
+                        <div className="profil-fiche-jauge" role="img"
+                             aria-label={`${Math.round(avanceTitre * 100)} pour cent du chemin vers un titre`}>
+                          <span style={{ width: Math.round(avanceTitre * 100) + "%" }} />
+                        </div>
+                      </>
+                    )
                   )}
 
                   {profil.classement.length > 0 && (
@@ -13041,7 +13091,6 @@ export default function Emprise() {
                     </>
                   )}
 
-                  <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
                 </div>
               </div>
             );
@@ -15316,25 +15365,25 @@ export default function Emprise() {
             <div className="info-panel profil-adverse" onClick={(e) => e.stopPropagation()}>
               {/* Fermer n'est plus l'action mise en avant : une croix suffit. Ce qui doit
                   se voir, c'est ce qui rapproche deux Commandants, en bas de la fenetre. */}
-              <button className="profil-adverse-croix" onClick={() => setProfilAdverse(null)}
+              <button className="profil-fiche-croix" onClick={() => setProfilAdverse(null)}
                       aria-label="Fermer">&times;</button>
 
-              <div className="profil-adverse-identite">
+              <div className="profil-fiche-identite">
                 {/* Le medaillon porte l'Ordre qu'il joue le plus. Sans cette information,
                     un degrade sombre neutre -- jamais un trou. */}
                 <span
-                  className={`profil-adverse-medaillon ${ordre ? "" : "neutre"}`}
+                  className={`profil-fiche-medaillon ${ordre ? "" : "neutre"}`}
                   style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
                   aria-hidden="true"
                 />
-                <div className="profil-adverse-qui">
-                  <div className="profil-adverse-pseudo">{profilAdverse.nom}</div>
-                  {f.codeAmi && <div className="profil-adverse-code">{codeAmiLisible(f.codeAmi)}</div>}
-                  <div className="profil-adverse-arene">Arène {ligue.name} · {trophees} trophées</div>
+                <div className="profil-fiche-qui">
+                  <div className="profil-fiche-pseudo">{profilAdverse.nom}</div>
+                  {f.codeAmi && <div className="profil-fiche-code">{codeAmiLisible(f.codeAmi)}</div>}
+                  <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées</div>
                 </div>
               </div>
 
-              <div className="profil-adverse-chiffres">
+              <div className="profil-fiche-chiffres">
                 <div><b>{typeof f.parties === "number" ? f.parties : "?"}</b><span>parties</span></div>
                 <div><b>{typeof f.victoires === "number" ? f.victoires : "?"}</b><span>victoires</span></div>
               </div>
@@ -15346,11 +15395,11 @@ export default function Emprise() {
                 <>
                   {/* Une progression, jamais un constat vide : dire ce qui manque vaut
                       mieux que dire que rien n'est la. */}
-                  <div className="profil-adverse-progres">
+                  <div className="profil-fiche-progres">
                     Son style se dessine.{restantes === null ? "" : ` Encore ${restantes} partie${restantes > 1 ? "s" : ""} avant qu'un titre lui soit donné.`}
                   </div>
                   {restantes !== null && (
-                    <div className="profil-adverse-jauge" role="img"
+                    <div className="profil-fiche-jauge" role="img"
                          aria-label={`${Math.round(avance * 100)} pour cent du chemin vers un titre`}>
                       <span style={{ width: Math.round(avance * 100) + "%" }} />
                     </div>
