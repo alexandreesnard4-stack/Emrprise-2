@@ -75,6 +75,11 @@ function ecrireEnvois(v) {
   try { localStorage.setItem(CLE_DEMANDES, JSON.stringify(v)); } catch (e) { /* tant pis */ }
 }
 const DEFI_PERIME_MS = 10 * 60 * 1000;     // un defi non releve en dix minutes s'efface
+// Le bandeau du hub ne dure que dix secondes, la ou le defi en vaut dix minutes. C'est
+// voulu : il annonce, il n'attend pas. Passe ce delai il se replie sur la pastille des
+// Amis, qui reste allumee jusqu'a la peremption reelle.
+const DEFI_BANDEAU_MS = 10000;
+const DEFI_GLISSE_MS = 250;                // son entree et sa sortie, par le bas
 const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes = en ligne
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
 // etiquettes de camp, sonnerait faux pour un ami.
@@ -3738,16 +3743,98 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums; color: var(--gold-bright);
           background: rgba(203,164,86,0.16); border: 1px solid rgba(203,164,86,0.35);
         }
-        /* Au hub, le defi flotte SUR l'arene au lieu de la comprimer : posee en haut de
-           page, la banniere recouvrait le titre du jeu. L'arene, grande et sombre, est
-           l'endroit ou elle se lit le mieux — et c'est elle que le defi concerne. */
-        .hub-defi-calque {
-          position: absolute; left: 0; right: 0; top: 34%; z-index: 46;
-          display: flex; justify-content: center; padding: 0 14px; box-sizing: border-box;
-          pointer-events: none;
-        }
-        .hub-defi-calque .amis-defi { pointer-events: auto; }
         .reduced-motion .amis-defi { animation: none; }
+
+        /* ---------- Le bandeau de defi, adosse a la barre du bas ----------
+           Il flottait avant SUR l'arene, au milieu du hub : le texte se lisait sur de la
+           pierre et l'illustration disparaissait derriere lui. Il est desormais ancre en
+           bas, et OPAQUE -- c'etait le defaut principal de la version d'avant.
+           Le repere de position est .hub-bas, qui enveloppe la barre de navigation :
+           bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
+           comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
+        .hub-bas { position: relative; width: 100%; flex: none; }
+        .defi-bandeau {
+          position: absolute; left: 0; right: 0; bottom: 100%; z-index: 46;
+          box-sizing: border-box;
+          display: flex; align-items: center; gap: 8px;
+          padding: 9px 10px;
+          border-top: 1.5px solid var(--gold);
+          border-radius: 14px 14px 0 0;
+          background: linear-gradient(180deg, #241c32 0%, #150f1f 100%);
+          box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.55);
+          animation: defi-bandeau-entre .25s cubic-bezier(.22, 1, .36, 1) both;
+        }
+        .defi-bandeau.sort { animation: defi-bandeau-sort .25s ease-in both; }
+        /* transform et opacity seulement : ce sont les deux proprietes que le navigateur
+           compose sans repeindre. Ce projet est deja tombe de 52 a 14 images par seconde
+           pour avoir anime une ombre. */
+        @keyframes defi-bandeau-entre {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes defi-bandeau-sort {
+          from { transform: translateY(0); opacity: 1; }
+          to { transform: translateY(100%); opacity: 0; }
+        }
+        /* Mouvement reduit : le bandeau se pose sans glisser, mais garde ses dix secondes.
+           Le retirer plus vite priverait de l'information ceux qui demandent moins de
+           mouvement, pas moins de temps. */
+        @media (prefers-reduced-motion: reduce) {
+          .defi-bandeau, .defi-bandeau.sort { animation: none; }
+        }
+        .defi-bandeau-medaillon {
+          flex: none; width: 34px; height: 34px; border-radius: 50%;
+          object-fit: cover; background: #0c0a12;
+          border: 1px solid rgba(203, 164, 86, 0.55);
+        }
+        /* Le bloc central est une COLONNE souple : une troisieme ligne -- mode de jeu,
+           trophees -- viendra s'y poser sans rien reprendre.
+           min-width: 0 est ce qui autorise l'ellipse : sans lui, un enfant de flex refuse
+           de descendre sous la largeur de son texte, et un pseudo long poussait le bouton
+           hors du bandeau. */
+        .defi-bandeau-corps {
+          flex: 1 1 auto; min-width: 0;
+          display: flex; flex-direction: column; gap: 1px;
+        }
+        /* 11,5 px et non 12,5 : mesure faite, un pseudo de quinze caracteres deborde a
+           12,5 px sur un ecran de 375 px, et le nom se coupait justement la ou il compte.
+           L'ellipse reste en dernier recours, elle ne doit jamais servir. */
+        .defi-bandeau-titre {
+          font-size: 11.5px; color: var(--bone);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .defi-bandeau-titre b {
+          font-family: 'Cinzel', serif; font-weight: 700;
+          color: var(--gold-bright); letter-spacing: 0.02em;
+        }
+        /* Chiffres tabulaires : sans eux la ligne danse a chaque seconde. */
+        .defi-bandeau-sous {
+          display: flex; align-items: baseline; gap: 8px;
+          font-size: 10px; color: var(--muted); letter-spacing: 0.04em;
+          font-variant-numeric: tabular-nums;
+        }
+        .defi-bandeau-autres {
+          flex: none; background: none; border: none; padding: 0; cursor: pointer;
+          font-family: inherit; font-size: 10px; color: var(--gold);
+          text-decoration: underline; letter-spacing: 0.04em;
+        }
+        /* .reset-btn est declare plus bas dans la feuille et pese autant que cette classe :
+           a specificite egale c'est l'ordre qui tranche, et son rembourrage de 10 par 20
+           l'emportait -- le bouton mangeait alors la place du pseudo. On monte d'un cran
+           en accrochant les deux classes. */
+        .reset-btn.defi-bandeau-relever {
+          flex: none; width: auto; padding: 7px 12px;
+          font-size: 11px; letter-spacing: 0.09em;
+        }
+        .defi-bandeau-croix {
+          flex: none; width: 30px; height: 30px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: none; border: 1px solid rgba(203, 164, 86, 0.3);
+          color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer;
+          transition: transform .12s ease-out, border-color .2s;
+        }
+        .defi-bandeau-croix:hover { border-color: var(--gold); color: var(--bone); }
+        .defi-bandeau-croix:active { transform: scale(0.94); }
         /* L'arene : elle occupe la hauteur libre entre le titre et les boutons, et se
            reduit d'elle-meme sur les ecrans bas plutot que de pousser les boutons dehors. */
         .hub-arene {
@@ -7862,6 +7949,10 @@ const APP_STYLES = `
 
 export default function Emprise() {
   const [phase, setPhase] = useState("landing"); // landing (hub) -> (bot: select-difficulty -> select-assist -> select-blue -> preview | confluence-bot: select-difficulty -> select-assist -> confluence-draft -> preview | local: select-blue -> select-red | confluence-local: confluence-draft) -> play
+  // Declare ICI, tout en haut, et non au milieu du fichier : le decompte du defi doit
+  // savoir si le panneau des Amis est ouvert pour decider de tourner ou non, et il est
+  // ecrit bien avant l'ancienne place de cette ligne.
+  const [activeModal, setActiveModal] = useState(null);
   const [mode, setMode] = useState(null); // "bot" | "local"
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   // Draft Confluence : un pool COMMUN aux deux joueurs. Chacun choisit un Ordre à son tour
@@ -8012,15 +8103,19 @@ export default function Emprise() {
   }, [amis, demandesRecues, invitationsRecues, bloques, adversaireUid]);
 
   // Le defi en cours de validite, s'il y en a un : le plus recent, pas perime, pas ignore.
-  const defiRecu = invitationsRecues
+  const defisValides = invitationsRecues
     .filter((i) => /^[A-HJ-NP-Z2-9]{5}$/.test(i.code)
       && amis.some((a) => a.uid === i.uid)
       && maintenantServeur() - i.t < DEFI_PERIME_MS
       && defisIgnores[i.uid] !== i.t)
-    .sort((a, b) => b.t - a.t)[0] || null;
+    .sort((a, b) => b.t - a.t);
+  // On n'en montre qu'UN, le plus recent : deux bandeaux empiles ne se lisent pas.
+  const defiRecu = defisValides[0] || null;
   // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
   const demandesVisibles = demandesRecues.filter((d) => !bloques.some((b) => b.uid === d.uid));
-  const pastilleAmis = demandesVisibles.length + (defiRecu ? 1 : 0);
+  // La pastille les compte TOUS, pas seulement celui qu'on montre : le bandeau ne dure
+  // que dix secondes, elle est ce qui reste quand il s'est replie.
+  const pastilleAmis = demandesVisibles.length + defisValides.length;
 
   // Toutes les ecritures a deux documents passent par un batch : les regles verifient
   // l'etat APRES le batch (existsAfter) et refusent les moities isolees. C'est voulu.
@@ -8287,15 +8382,28 @@ export default function Emprise() {
   // defi est en cours : sans lui, la banniere restait a l'ecran passe son heure, jusqu'au
   // prochain rendu provoque par autre chose.
   const [defiRestant, setDefiRestant] = useState(0);
+  // Le bandeau du hub. null quand il n'y en a pas ; sinon { cle, etat } ou etat vaut
+  // "entre" tant qu'il est a l'ecran et "sort" pendant son glissement de sortie. On le
+  // demonte a la fin de ce glissement plutot que de le laisser hors cadre : monte, ses
+  // boutons resteraient accessibles au clavier alors qu'on ne les voit plus.
+  const [bandeauDefi, setBandeauDefi] = useState(null);
+  // Le defi deja annonce. Sans cette memoire, le bandeau se rouvrait a chaque retour au
+  // hub, et masquer n'aurait rien masque du tout.
+  const defiAnnonceRef = useRef(null);
+  const cleDefi = defiRecu ? defiRecu.uid + "-" + defiRecu.t : null;
+  // Le decompte ne tourne QUE la ou il se lit. Laisse libre, il rafraichissait l'ecran
+  // une fois par seconde pendant toute une partie, pour un texte que personne ne voyait.
+  const defiCompteAffiche = !!defiRecu
+    && (bandeauDefi !== null || activeModal === "amis" || phase === "online-menu");
   useEffect(() => {
-    if (!defiRecu) { setDefiRestant(0); return; }
+    if (!defiRecu || !defiCompteAffiche) { setDefiRestant(0); return; }
     // Borne haute : l'estimation du decalage d'horloge peut donner quelques secondes
     // de trop, et « 10:03 » sur un defi de dix minutes trahirait la mecanique.
     const calcul = () => setDefiRestant(Math.min(DEFI_PERIME_MS, Math.max(0, DEFI_PERIME_MS - (maintenantServeur() - defiRecu.t))));
     calcul();
     const id = setInterval(calcul, 1000);
     return () => clearInterval(id);
-  }, [defiRecu && defiRecu.uid, defiRecu && defiRecu.t]);
+  }, [defiRecu && defiRecu.uid, defiRecu && defiRecu.t, defiCompteAffiche]);
   // Passe l'heure, le defi s'efface de lui-meme : on le retire aussi de chez nous, sinon
   // il reparaitrait au prochain lancement. La peremption se RECALCULE ici plutot que de
   // lire l'etat de la minuterie : a l'arrivee d'un defi, cet etat vaut encore zero (il ne
@@ -8313,6 +8421,43 @@ export default function Emprise() {
     return () => clearInterval(id);
   }, [defiRecu && defiRecu.uid, defiRecu && defiRecu.t, myUid]);
 
+  // Un defi arrive : le bandeau s'allume, mais seulement au hub. Ailleurs, il attendra
+  // le retour -- on ne coupe pas un ecran de choix pour une annonce.
+  useEffect(() => {
+    if (!cleDefi || phase !== "landing") return;
+    if (defiAnnonceRef.current === cleDefi) return;
+    defiAnnonceRef.current = cleDefi;
+    setBandeauDefi({ cle: cleDefi, etat: "entre" });
+  }, [cleDefi, phase]);
+
+  // Le defi a disparu (releve, refuse, perime) : le bandeau part avec lui, sans glisser.
+  useEffect(() => {
+    if (!cleDefi) setBandeauDefi(null);
+  }, [cleDefi]);
+
+  // Les dix secondes. Le minuteur meurt des que l'etat change -- donc des que le
+  // Commandant agit, puisque RELEVER comme la croix passent l'etat a "sort".
+  useEffect(() => {
+    if (!bandeauDefi || bandeauDefi.etat !== "entre") return;
+    const id = setTimeout(() => setBandeauDefi((b) => (b && b.etat === "entre" ? { ...b, etat: "sort" } : b)), DEFI_BANDEAU_MS);
+    return () => clearTimeout(id);
+  }, [bandeauDefi]);
+
+  // La sortie dure le temps du glissement, puis l'element quitte l'arbre.
+  useEffect(() => {
+    if (!bandeauDefi || bandeauDefi.etat !== "sort") return;
+    const id = setTimeout(() => setBandeauDefi(null), DEFI_GLISSE_MS);
+    return () => clearTimeout(id);
+  }, [bandeauDefi]);
+
+  // MASQUER N'EST PAS REFUSER. Cette fonction ne touche ni a Firestore ni a l'adversaire :
+  // elle range le bandeau, rien de plus. Le defi reste en attente, la pastille reste
+  // allumee, et il se releve encore depuis l'ecran Amis. Le refus, lui, se dit la-bas et
+  // en toutes lettres.
+  function masquerBandeauDefi() {
+    setBandeauDefi((b) => (b ? { ...b, etat: "sort" } : null));
+  }
+
   function banniereDefi() {
     if (!defiRecu) return null;
     const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
@@ -8326,7 +8471,7 @@ export default function Emprise() {
         </span>
         <div className="amis-defi-boutons">
           <button className="reset-btn amis-defi-btn" onClick={() => releverDefi(defiRecu)}>Relever le défi</button>
-          <button className="landing-link" onClick={() => ignorerDefi(defiRecu)}>Ignorer</button>
+          <button className="landing-link" onClick={() => ignorerDefi(defiRecu)}>Refuser le défi</button>
         </div>
       </div>
     );
@@ -8541,7 +8686,6 @@ export default function Emprise() {
       return next;
     });
   }
-  const [activeModal, setActiveModal] = useState(null);
   // ---------- Le Pantheon ----------
   // Le classement tient dans UN document, classement/top100, reecrit par le serveur.
   // Le client le lit d'un getDoc a l'ouverture de l'ecran : JAMAIS de onSnapshot, jamais
@@ -12080,12 +12224,6 @@ export default function Emprise() {
                     {onlineError}
                   </div>
                 )}
-                {/* Un defi est la seule nouvelle urgente — quelqu'un attend en face. Il se
-                    pose PAR-DESSUS l'arene, sans prendre de place dans la colonne : sinon
-                    l'arene se reduisait pour lui faire de la place, et le hub sautait a
-                    chaque defi recu. */}
-                {defiRecu && <div className="hub-defi-calque">{banniereDefi()}</div>}
-
                 {/* Un ovale de pierre cercle d'or pour l'action phare, une pastille grise
                     pour la porte des autres modes. La hierarchie tient a la couleur :
                     l'or appelle, le gris attend. Les deux appellent exactement ce qu'ils
@@ -12146,7 +12284,46 @@ export default function Emprise() {
             )}
           </main>
 
-          {/* ---------- Navigation basse : Boutique, Jouer (central), Ordres ---------- */}
+          {/* ---------- Navigation basse, et le bandeau de defi qui s'y adosse ---------- */}
+          <div className="hub-bas">
+            {bandeauDefi && defiRecu && (() => {
+              const nom = nomAffiche(fiches[defiRecu.uid] && fiches[defiRecu.uid].pseudo);
+              const s = Math.ceil(defiRestant / 1000);
+              const minuterie = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+              const autres = defisValides.length - 1;
+              return (
+                <div className={`defi-bandeau ${bandeauDefi.etat === "sort" ? "sort" : ""}`} role="status">
+                  {/* Le medaillon : un blason, faute de connaitre l'Ordre favori de
+                      l'adversaire. Le jour ou la fiche le portera, seul le src change. */}
+                  <img className="defi-bandeau-medaillon" src="/icones/amis.webp" alt="" width="34" height="34" />
+                  <div className="defi-bandeau-corps">
+                    <div className="defi-bandeau-titre"><b>{nom}</b> vous défie</div>
+                    <div className="defi-bandeau-sous">
+                      <span>Expire dans {minuterie}</span>
+                      {autres > 0 && (
+                        <button
+                          className="defi-bandeau-autres"
+                          onClick={() => { masquerBandeauDefi(); setActiveModal("amis"); }}
+                        >+{autres} autre{autres > 1 ? "s" : ""}</button>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    className="reset-btn defi-bandeau-relever"
+                    onClick={() => { masquerBandeauDefi(); releverDefi(defiRecu); }}
+                  >Relever</button>
+                  {/* La croix MASQUE. Elle ne refuse pas, n'envoie rien, et le defi reste
+                      en attente derriere la pastille des Amis : le libelle doit le dire,
+                      sans quoi le Commandant croirait avoir decline. */}
+                  <button
+                    className="defi-bandeau-croix"
+                    onClick={masquerBandeauDefi}
+                    aria-label="Masquer ce défi. Il reste en attente dans l'écran Amis."
+                    title="Masquer, le défi reste en attente"
+                  >&times;</button>
+                </div>
+              );
+            })()}
           <nav className="hub-nav" aria-label="Navigation du hub">
             {/* Degrade metallique partage par les trois icones. Un seul <defs> pour tout
                 le hub : les tracés y font référence par identifiant. */}
@@ -12193,6 +12370,7 @@ export default function Emprise() {
               <span>Ordres</span>
             </button>
           </nav>
+          </div>
 
           {ordreDetail && (() => {
             const order = ORDERS.find((o) => o.key === ordreDetail);
