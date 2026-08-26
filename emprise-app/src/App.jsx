@@ -3742,7 +3742,6 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700;
           letter-spacing: 0.12em; font-variant-numeric: tabular-nums; color: var(--gold);
         }
-        .profil-adverse-presence { margin-top: -4px; min-height: 15px; }
         /* Une fiche incomplete se dit, plutot que de laisser trois points d'interrogation
            sans explication : l'adversaire peut jouer une version plus ancienne. */
         .profil-adverse-vide { line-height: 1.5; color: var(--muted); }
@@ -6819,13 +6818,12 @@ const APP_STYLES = `
           @keyframes adoub-fondu { from { opacity: 0; } to { opacity: 1; } }
         }
 
-        /* Le nom de l'adversaire est un bouton : il en garde l'apparence du texte, mais
-           un trait pointille sous le mot dit qu'il mene quelque part. */
+        /* Le nom de l'adversaire est un bouton, mais rien ne doit le dire : ni trait, ni
+           couleur a part. Il se donne pour ce qu'il est, un nom -- seul l'enfoncement au
+           toucher repond. */
         .turn-label-porte {
           background: none; border: none; padding: 0; cursor: pointer;
           font: inherit; color: inherit; letter-spacing: inherit;
-          text-decoration: underline; text-decoration-style: dotted;
-          text-underline-offset: 3px; text-decoration-color: rgba(203,164,86,0.55);
         }
         .turn-label-porte:active { opacity: 0.7; }
 
@@ -8670,6 +8668,8 @@ export default function Emprise() {
   // Trophees des deux camps, lus depuis le document de la partie classee.
   const [trophesPartie, setTrophesPartie] = useState(null);
   const [titresPartie, setTitresPartie] = useState(null); // titres de style des deux camps
+  // Palmares des deux camps, lu dans le document de partie : parties, victoires, combos.
+  const [profilPartie, setProfilPartie] = useState(null);
   // Identifiant du dernier coup ADVERSE déjà rejoué en animation : sans lui, chaque
   // nouvelle notification Firestore sur la partie relancerait les mêmes effets visuels.
   const dernierCoupDistantRef = useRef(null);
@@ -9456,7 +9456,7 @@ export default function Emprise() {
         {mode === "online" && onlineRole !== camp && adversaireUid ? (
           <button
             className="turn-label-nom turn-label-porte"
-            onClick={() => setProfilAdverse({ uid: adversaireUid, nom: nomDuCamp(camp) })}
+            onClick={() => setProfilAdverse({ uid: adversaireUid, nom: nomDuCamp(camp), camp })}
             aria-haspopup="dialog"
             aria-label={`Voir le profil de ${nomDuCamp(camp)}`}
             title="Voir son profil"
@@ -10218,6 +10218,15 @@ export default function Emprise() {
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
+        // Borne les compteurs et jette les cles de combo inconnues : ces valeurs viennent
+        // de l'appareil d'en face, comme son pseudo, et se traitent avec la meme mefiance.
+        const entierRecu = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000000, Math.floor(v))) : undefined);
+        const combosRecus = (v) => (Array.isArray(v) ? v : [])
+          .filter((k) => COMBOS.some((c) => c.key === k)).slice(0, 3);
+        setProfilPartie({
+          blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos) },
+          red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos) },
+        });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
         // celui qu'il protege. Il vaut aussi pour les noms deja ecrits en base avant que
@@ -11196,9 +11205,12 @@ export default function Emprise() {
     // different de celui que le joueur avait sous les yeux.
     const hand = onlineRole === "blue" ? blueHand : redHand;
     if (hand.length !== 8) return;
+    const moi = profilPublic();
     const field = onlineRole === "blue"
-      ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave) }
-      : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave) };
+      ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
+          blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos }
+      : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
+          redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
@@ -15129,7 +15141,16 @@ export default function Emprise() {
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
       {profilAdverse && !signalement && (() => {
-        const f = fiches[profilAdverse.uid] || {};
+        // Le document de PARTIE passe avant la fiche publique : il arrive toujours, la ou
+        // la fiche attend que les regles de /users soient publiees.
+        const enPartie = (profilPartie && profilAdverse.camp && profilPartie[profilAdverse.camp]) || {};
+        const fiche = fiches[profilAdverse.uid] || {};
+        const f = {
+          ...fiche,
+          parties: typeof enPartie.parties === "number" ? enPartie.parties : fiche.parties,
+          victoires: typeof enPartie.victoires === "number" ? enPartie.victoires : fiche.victoires,
+          combos: (enPartie.combos && enPartie.combos.length) ? enPartie.combos : fiche.combos,
+        };
         const dejaAmi = amis.some((a) => a.uid === profilAdverse.uid);
         const ilMaDemande = demandesRecues.some((d) => d.uid === profilAdverse.uid);
         const envoyee = demandesEnvoyees[profilAdverse.uid];
@@ -15145,7 +15166,6 @@ export default function Emprise() {
             <div className="info-panel profil-adverse" onClick={(e) => e.stopPropagation()}>
               <div className="info-panel-title">{profilAdverse.nom}</div>
               {f.codeAmi && <div className="profil-adverse-code">{codeAmiLisible(f.codeAmi)}</div>}
-              <div className="sub profil-adverse-presence">{presenceDe(f) || "\u00A0"}</div>
 
               <div className="profil-chiffres">
                 <div><b>{typeof f.parties === "number" ? f.parties : "?"}</b><span>parties</span></div>
