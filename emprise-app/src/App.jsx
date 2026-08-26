@@ -14445,7 +14445,12 @@ export default function Emprise() {
               <RecitsAttente actif pleinEcran />
             </>
           )}
-          {!fileAttente && onlineRole === "blue" && onlineGameId && (
+          {/* Ni en Classe, ni en tournoi : l'adversaire y est APPARIE, il n'a pas de code
+              a taper. Entre l'instant ou l'appariement aboutit et celui ou l'ecran des
+              Ordres s'ouvre, ce bloc avait le temps de montrer le code de la partie --
+              une fraction de seconde, mais assez pour le lire, et rien n'invite plus a
+              partager un duel classe que de voir son code s'afficher. */}
+          {!fileAttente && !partieClassee && !tournoiOnlineId && onlineRole === "blue" && onlineGameId && (
             <>
               {defiEnvoye ? (() => {
                 const f = fiches[defiEnvoye.uid];
