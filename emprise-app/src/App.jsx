@@ -3053,7 +3053,16 @@ function TimerBar({ timeLeft, max = TURN_SECONDS }) {
 }
 
 const APP_STYLES = `
-        html, body { margin: 0; background: #0a0810; }
+        /* La couleur d'attente est sur html SEUL, et body n'en porte plus.
+           C'est la condition pour que le fond commun se voie. L'ordre de peinture d'un
+           contexte d'empilement place le fond de la racine, PUIS les calques a z-index
+           negatif, PUIS les fonds des blocs ordinaires -- dont body. Tant que html ET
+           body portaient la meme couleur, celle de body cessait d'etre propagee au
+           canevas : elle devenait un fond de bloc comme un autre, peint APRES .fond-app,
+           qu'elle recouvrait entierement. L'image etait chargee, posee, dimensionnee, et
+           invisible. Verifier le style calcule ne le disait pas ; seul l'oeil l'a dit. */
+        html { background: #0a0810; }
+        body { margin: 0; background: transparent; }
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap');
 
         /* Option d'accessibilité "animations réduites" : neutralise toutes les animations et
@@ -3088,11 +3097,17 @@ const APP_STYLES = `
            page et ne bouge donc jamais d'un ecran a l'autre. z-index negatif : il passe
            derriere le fond de la racine (rendue transparente) sans jamais recouvrir quoi
            que ce soit. La couleur unie sous l'image evite un blanc le temps qu'elle
-           arrive. Rien ne s'anime ici. */
+           arrive. Rien ne s'anime ici.
+           LE NOM DU FICHIER DIT CE QU'IL CONTIENT, et change avec lui. Les fichiers de
+           public/ ne sont pas empreintes par l'outil de construction : ils sont servis
+           sous leur nom, tel quel. En remplacant le contenu de fond-ecran.jpg sans
+           toucher a son nom, on condamnait tout telephone qui l'avait deja vu a garder
+           l'ancienne image -- ici une texture presque noire, la ou l'on attendait un
+           ciel. Un fond nouveau prend desormais un nom nouveau. */
         .fond-app {
           position: fixed; inset: 0; z-index: -1;
           background-color: #0a0810;
-          background-image: url("/fonds/fond-ecran.jpg");
+          background-image: url("/fonds/ciel-orage.jpg");
           background-size: cover; background-position: center;
         }
         /* Le vignettage se fait en CSS et non dans l'image : il se regle sans rien
@@ -3121,7 +3136,13 @@ const APP_STYLES = `
           /* Reglage du vignettage, ici avec le reste de la palette. Deux nombres entre 0
              et 1 : la noirceur des bords, et le voile uni pose sur toute l'image. Les
              monter assombrit le fond sans toucher au fichier. */
-          --fond-vignette: 0.62; --fond-voile: 0.16;
+          /* Volontairement legers. Balayage de tout le tiers haut sur une fenetre de
+             375 par 667 : a 0,45 et 0,10, la luminance moyenne tombait a 37 et seul un
+             quart du haut passait 45 -- le ciel se lisait comme un aplat. A 0,20 et 0,04,
+             la moyenne monte a 51 et la moitie du haut passe 45. Le titre, protege par
+             son propre halo, ne perd que 1,6 de contraste : il reste a 13,0 pour 4,5
+             exiges. Assombrir davantage ne protegeait plus rien, cela effacait le ciel. */
+          --fond-vignette: 0.20; --fond-voile: 0.04;
           color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
@@ -3258,16 +3279,18 @@ const APP_STYLES = `
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
         .landing-line-single { width: 110px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
-        /* Un halo sombre sous le titre, et sous lui seul. Les trois arrets suivent la
-           courbe mesuree : plein au centre, a moitie a 42 %, eteint a 72 % -- au-dela,
-           la brume reprend ses droits. Il ne coute qu'un pseudo-element, ne s'anime pas,
-           et se regle en changeant ces trois nombres. */
+        /* Un halo sombre sous le titre, et SOUS LUI SEUL. Il faisait d'abord 350 par 200
+           et couvrait a lui seul toute la bande de nuages : un voile large deguise en
+           halo. Resserre a 260 par 110, il epouse le mot et son sous-titre, et le ciel
+           reprend autour. Les trois arrets suivent la courbe mesuree : plein au centre,
+           a moitie a 42 %, eteint a 72 %. Il ne coute qu'un pseudo-element, ne s'anime
+           pas, et se regle en changeant ces trois nombres. */
         .landing-title::before {
           content: ""; position: absolute; z-index: -1; pointer-events: none;
-          left: 50%; top: 50%; width: 350px; height: 200px; margin: -83px 0 0 -175px;
+          left: 50%; top: 50%; width: 260px; height: 110px; margin: -38px 0 0 -130px;
           background: radial-gradient(ellipse,
-            rgba(4, 3, 10, 0.80) 0%,
-            rgba(4, 3, 10, 0.54) 42%,
+            rgba(4, 3, 10, 0.85) 0%,
+            rgba(4, 3, 10, 0.57) 42%,
             rgba(4, 3, 10, 0) 72%);
         }
         .landing-title {
@@ -3302,7 +3325,13 @@ const APP_STYLES = `
           width: 100%; box-sizing: border-box;
           display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
           padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
-          background: linear-gradient(180deg, rgba(10,8,15,0.92), rgba(10,8,15,0.55) 75%, transparent);
+          /* Ce voile protege le pseudo et les icones, et il est ecrit du temps ou le fond
+             etait un aplat sombre : a 0,92 il ne coutait rien. Sur un ciel, il tombe pile
+             sur la bande de nuages -- la seule partie de l'image ou il y a quelque chose a
+             voir -- et l'eteint. Mesure sous le bandeau : le point le plus clair vaut 192
+             de luminance ; a 0,92 il retombe a 15, a 0,60 a 77. Le texte y garde 6,6 de
+             contraste pour 4,5 exiges, et le ciel passe cinq fois mieux. */
+          background: linear-gradient(180deg, rgba(10,8,15,0.60), rgba(10,8,15,0.32) 75%, transparent);
           flex: none;
         }
         /* Aligne sur la premiere rangee de boutons, pas sur le milieu du bloc. */
