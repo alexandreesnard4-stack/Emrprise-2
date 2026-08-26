@@ -78,6 +78,24 @@ const DEFI_PERIME_MS = 10 * 60 * 1000;     // un defi non releve en dix minutes 
 // Le bandeau du hub ne dure que dix secondes, la ou le defi en vaut dix minutes. C'est
 // voulu : il annonce, il n'attend pas. Passe ce delai il se replie sur la pastille des
 // Amis, qui reste allumee jusqu'a la peremption reelle.
+// L'Adoubement : la ceremonie qui donne son titre au Commandant, une seule fois dans sa
+// vie de joueur. Deux nombres, le temps de la scene et celui de son effacement.
+const ADOUBEMENT_MS = 2400;
+const ADOUBEMENT_SORTIE_MS = 400;
+// Le nom ne se tronque JAMAIS : c'est le sujet meme de l'ecran. Il maigrit plutot que de
+// se couper, et le moins possible.
+// Les paliers sont MESURES au navigateur, en Cinzel gras avec l'interlettrage de 0.14em,
+// sur le plus etroit des telephones vises : 375 px moins 48 de marge, soit 327 utiles.
+// A 30 px, treize caracteres en occupent 323 et quinze en demanderaient 377. Chaque
+// palier ramene donc le nom autour de 300 px, ce qui laisse une respiration a chacun.
+function tailleAdoubement(nom) {
+  const n = (nom || "").length;
+  if (n <= 12) return 30;
+  if (n === 13) return 28;
+  if (n === 14) return 26;
+  return 24;
+}
+
 const DEFI_BANDEAU_MS = 10000;
 const DEFI_GLISSE_MS = 250;                // son entree et sa sortie, par le bas
 const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes = en ligne
@@ -6684,6 +6702,107 @@ const APP_STYLES = `
           max-width: 300px; font-size: 11.5px; line-height: 1.45;
           color: var(--red-bright); letter-spacing: 0.02em;
         }
+        /* ---------- L'Adoubement ----------
+           La ceremonie qui donne son titre au Commandant, entre la validation de son nom
+           et son arrivee au hub. Elle ne se joue qu'UNE FOIS dans sa vie de joueur, et
+           n'est donc pas soumise a la regle des boucles : elle peut animer une couleur ou
+           une largeur, ce qu'aucune animation permanente ne ferait ici. Aucune ne tourne
+           a l'infini, et toutes se figent sur leur derniere image (forwards). */
+        .adoubement {
+          position: fixed; inset: 0; z-index: 210;
+          display: flex; align-items: center; justify-content: center;
+          padding: 24px; box-sizing: border-box;
+          background: radial-gradient(ellipse at 50% 45%, #191322 0%, #0a0810 70%);
+          cursor: pointer;
+        }
+        .adoubement.sort { animation: adoub-sortie .4s ease-in forwards; }
+        @keyframes adoub-sortie { from { opacity: 1; } to { opacity: 0; } }
+        .adoubement-scene { position: relative; text-align: center; max-width: 100%; }
+
+        /* Le halo se gonfle derriere le nom et s'eteint. transform et opacity seuls. */
+        .adoubement-halo {
+          position: absolute; left: 50%; top: 34%;
+          width: 280px; height: 280px; margin: -140px 0 0 -140px;
+          border-radius: 50%; pointer-events: none; opacity: 0;
+          background: radial-gradient(circle, rgba(232,200,119,0.30) 0%, rgba(232,200,119,0.10) 42%, rgba(232,200,119,0) 70%);
+          animation: adoub-halo 1.1s ease-out .35s forwards;
+        }
+        @keyframes adoub-halo {
+          0% { opacity: 0; transform: scale(0.55); }
+          40% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(1.28); }
+        }
+
+        /* La boite qui COUPE le balayage. Sans overflow: hidden, la bande deborderait du
+           mot et traverserait tout l'ecran. */
+        .adoubement-nom-boite { position: relative; overflow: hidden; padding: 4px 0; }
+        .adoubement-nom {
+          position: relative; z-index: 1;
+          font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.14em;
+          color: #cfc3a8; white-space: nowrap;
+          animation:
+            adoub-nom-entre .5s cubic-bezier(.2, .7, .3, 1) forwards,
+            adoub-nom-grave .45s ease-out .78s forwards;
+        }
+        @keyframes adoub-nom-entre {
+          from { opacity: 0; transform: scale(0.82); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        /* Au passage du voile, le nom est grave : il prend l'or et une lueur. */
+        @keyframes adoub-nom-grave {
+          to { color: #e8c877; text-shadow: 0 0 16px rgba(232,200,119,0.45), 0 0 40px rgba(232,200,119,0.18); }
+        }
+
+        .adoubement-balayage { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+        .adoubement-balayage span {
+          position: absolute; top: 0; bottom: 0; left: 0; width: 70px;
+          background: linear-gradient(90deg, rgba(232,200,119,0) 0%, rgba(232,200,119,0.85) 50%, rgba(232,200,119,0) 100%);
+          filter: blur(3px); will-change: transform;
+          animation: adoub-balaye .85s cubic-bezier(.36, 0, .3, 1) .35s forwards;
+        }
+        /* Le flou est POSE, jamais anime : seul le deplacement bouge, et il se compose
+           sans repeindre. La course va de gauche du mot a sa droite, largement au-dela
+           dans les deux sens pour que la bande entre et sorte hors du cadre. */
+        @keyframes adoub-balaye {
+          from { transform: translateX(-90px); }
+          to { transform: translateX(380px); }
+        }
+
+        /* Le trait se deploie du centre vers les cotes : margin auto sur un bloc, et
+           c'est la largeur qui pousse des deux cotes a la fois. */
+        .adoubement-trait {
+          width: 0; height: 1px; margin: 13px auto 0;
+          background: linear-gradient(90deg, rgba(203,164,86,0) 0%, #e8c877 50%, rgba(203,164,86,0) 100%);
+          animation: adoub-trait .6s cubic-bezier(.2, .7, .3, 1) .75s forwards;
+        }
+        @keyframes adoub-trait { from { width: 0; } to { width: 210px; } }
+
+        /* text-indent compense l'interlettrage : sans lui, l'espace ajoute apres la
+           derniere lettre decale le mot vers la gauche. */
+        .adoubement-titre {
+          margin-top: 11px; opacity: 0;
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 600;
+          letter-spacing: 0.42em; text-indent: 0.42em; text-transform: uppercase;
+          color: #8d82a0;
+          animation: adoub-titre .55s ease-out 1.05s forwards;
+        }
+        @keyframes adoub-titre {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mouvement reduit : le nom et son titre se posent en un fondu d'une seconde.
+           Ni balayage, ni halo, ni deplacement -- mais la ceremonie a bien lieu. */
+        @media (prefers-reduced-motion: reduce) {
+          .adoubement-halo, .adoubement-balayage { display: none; }
+          .adoubement-nom {
+            color: #e8c877; animation: adoub-fondu 1s ease-out forwards;
+          }
+          .adoubement-trait { width: 210px; animation: adoub-fondu 1s ease-out forwards; }
+          .adoubement-titre { animation: adoub-fondu 1s ease-out forwards; }
+          @keyframes adoub-fondu { from { opacity: 0; } to { opacity: 1; } }
+        }
+
         .pseudo-ecran .reset-btn { transition: opacity .3s ease-out; }
         .pseudo-ecran .reset-btn:disabled { opacity: 0; cursor: default; }
 
@@ -8740,6 +8859,10 @@ export default function Emprise() {
   // joueur efface son nom pour se raviser, et se rejouerait a la frappe suivante :
   // un clignotement, la ou on voulait un evenement.
   const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
+  // La ceremonie en cours : null, ou { nom, etat } ou etat vaut "sort" pendant son
+  // effacement. adoubementVu vient du document du joueur : il empeche de la rejouer.
+  const [adoubement, setAdoubement] = useState(null);
+  const [adoubementVu, setAdoubementVu] = useState(false);
   const [editionPseudo, setEditionPseudo] = useState(false);
   const [pseudoRefus, setPseudoRefus] = useState("");
 
@@ -8761,6 +8884,26 @@ export default function Emprise() {
   // le onChange : nettoyer a chaque frappe est une chose, juger a chaque frappe en est une
   // autre — un nom honnete passerait par des etats intermediaires refuses et le champ
   // semblerait casse.
+  // La ceremonie s'efface d'elle-meme, ou sous le doigt du joueur. Les deux minuteurs
+  // meurent au demontage : personne ne doit se retrouver enferme dans une animation,
+  // meme belle, meme courte.
+  useEffect(() => {
+    if (!adoubement) return;
+    const t1 = setTimeout(() => setAdoubement((a) => (a ? { ...a, etat: "sort" } : null)), ADOUBEMENT_MS);
+    const t2 = setTimeout(() => setAdoubement(null), ADOUBEMENT_MS + ADOUBEMENT_SORTIE_MS);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adoubement && adoubement.nom]);
+
+  // N'importe quelle touche l'abrege, comme n'importe quel toucher. Le clic est pose sur
+  // le voile lui-meme ; ceci est pour qui joue au clavier.
+  useEffect(() => {
+    if (!adoubement) return;
+    const passer = () => setAdoubement(null);
+    window.addEventListener("keydown", passer);
+    return () => window.removeEventListener("keydown", passer);
+  }, [adoubement]);
+
   function validerPseudo() {
     const nom = nettoyerPseudo(pseudoSaisi);
     if (!nom) return false;
@@ -8770,10 +8913,21 @@ export default function Emprise() {
     // passe. En cas de faux positif, c'est aussi une accusation adressee a quelqu'un qui
     // s'appelle Hercule.
     if (nomRefuse(nom)) { setPseudoRefus("Ce nom ne peut pas être utilisé. Choisissez-en un autre."); return false; }
+    const premierNom = !pseudo;
     ecrirePseudo(nom);
     setPseudo(nom);
     // Le nom que voient les amis est celui du profil public : on l'y pousse aussitot.
     if (myUid) updateDoc(doc(db, "users", myUid), { pseudo: nom }).catch(() => {});
+    if (premierNom && !adoubementVu) {
+      setAdoubementVu(true);
+      setAdoubement({ nom, etat: "entre" });
+      // La marque part dans une ecriture SEPAREE, et surtout pas jointe au pseudo. Les
+      // regles de /users n'acceptent qu'une liste fermee de champs : groupees, un champ
+      // refuse emportait le pseudo avec lui, et les amis voyaient un nom vide. Separee,
+      // elle peut echouer sans consequence -- la condition qui compte vraiment est
+      // d'arriver ici sans pseudo, ce qui n'arrive qu'a la premiere ouverture.
+      if (myUid) updateDoc(doc(db, "users", myUid), { adoubementVu: true }).catch(() => {});
+    }
     setPseudoSaisi("");
     setPseudoRefus("");
     return true;
@@ -8939,7 +9093,7 @@ export default function Emprise() {
         if (snap.exists()) {
           const d = snap.data();
           await updateDoc(ref, { pseudo: pseudo || "", vuLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
-          if (!annule) setMonCodeAmi(d.codeAmi || "");
+          if (!annule) { setMonCodeAmi(d.codeAmi || ""); setAdoubementVu(!!d.adoubementVu); }
           return;
         }
         for (let essai = 0; essai < 5; essai++) {
@@ -12115,6 +12269,28 @@ export default function Emprise() {
               className="pseudo-identifiant-note"
               style={{ animationDelay: (ID_ANIM_DEPART + (IDENTIFIANT_CHIFFRES + 1) * ID_ANIM_PAS + ID_ANIM_APRES) + "ms" }}
             >Votre identifiant. Un autre joueur peut porter le même nom que vous&nbsp;; ce numéro, lui, n'appartient qu'à vous.</span>
+          </div>
+        </div>
+      )}
+
+      {adoubement && (
+        <div
+          className={`adoubement ${adoubement.etat === "sort" ? "sort" : ""}`}
+          onClick={() => setAdoubement(null)}
+        >
+          <div className="adoubement-scene" role="status">
+            <div className="adoubement-halo" aria-hidden="true" />
+            {/* Le balayage vit dans une boite qui le coupe : une bande translatee, rien
+                de plus. C'est du transform pur, le navigateur n'a rien a redessiner. */}
+            <div className="adoubement-nom-boite">
+              <div className="adoubement-nom" style={{ fontSize: tailleAdoubement(adoubement.nom) + "px" }}>
+                {adoubement.nom}
+              </div>
+              <div className="adoubement-balayage" aria-hidden="true"><span /></div>
+            </div>
+            <div className="adoubement-trait" aria-hidden="true" />
+            <div className="adoubement-titre">Commandant</div>
+            <span className="lecteur-seul">Appuyez n&apos;importe où pour continuer.</span>
           </div>
         </div>
       )}

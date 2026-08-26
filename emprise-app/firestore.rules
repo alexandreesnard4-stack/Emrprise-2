@@ -236,7 +236,9 @@ service cloud.firestore {
       // prennent que l'heure du serveur ; le code ami peut changer si l'index du
       // nouveau code pointe vers soi après le batch.
       allow update: if connecte() && moi() == uid
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre'])
+        // adoubementVu : la cérémonie de première ouverture a eu lieu. Un simple témoin,
+        // que seul son propriétaire écrit et qui ne sert qu'à ne pas la rejouer.
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
