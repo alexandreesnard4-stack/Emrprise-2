@@ -1146,6 +1146,11 @@ const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0
 // Conséquence à connaître : le point d'équilibre est à 33 % de victoires. En dessous, le
 // joueur recule ; au-dessus, il progresse. Un joueur à 50 % gagne 7,5 trophées par partie
 // en moyenne, soit environ 333 parties pour atteindre Légende.
+// Le bilan ne s'affiche pas d'un bloc : il MONTE, de un jusqu'a sa valeur. Court, parce
+// qu'il accompagne la fin de partie sans la retenir. Il part apres l'entree du badge, le
+// temps qu'il ait fini de se poser.
+const BILAN_DECOMPTE_MS = 420;
+const BILAN_DECOMPTE_DELAI_MS = 500;
 const TROPHEES_VICTOIRE = 30;
 const TROPHEES_DEFAITE = -15;
 
@@ -4953,6 +4958,14 @@ const APP_STYLES = `
           border: 1px solid; animation: cer-trophees-entree .5s cubic-bezier(.2,.9,.3,1.2) .35s both;
         }
         .cer-trophees img { width: 18px; height: 24px; object-fit: contain; display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+        /* La largeur est RESERVEE d'avance. Sans elle, le badge s'elargissait au passage
+           de 9 a 10 : la pastille sautait en plein decompte, ce qui attire l'oeil sur le
+           cadre au lieu du chiffre. Chiffres tabulaires pour la meme raison, a l'unite
+           pres cette fois. */
+        .cer-trophees-nombre {
+          display: inline-block; min-width: 3.1ch; text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
         .cer-trophees.gain { color: var(--gold-bright); border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.1); }
         .cer-trophees.perte { color: var(--red-bright); border-color: rgba(224,101,90,0.5); background: rgba(224,101,90,0.1); }
         @keyframes cer-trophees-entree {
@@ -11555,13 +11568,38 @@ export default function Emprise() {
     return () => window.removeEventListener("popstate", surRetour);
   }, []);
 
+  // Le nombre qui monte. Pilote par le TEMPS et non par un compteur de pas : a trente
+  // pas pour 420 ms, chaque pas durerait moins qu'une image, et un appareil lent aurait
+  // saute la moitie du chemin. Ici, chaque image affiche la valeur qui correspond a
+  // l'instant ou elle est peinte -- le decompte dure le meme temps partout.
+  const [bilanAffiche, setBilanAffiche] = useState(0);
+  useEffect(() => {
+    if (!partieClassee || !onlineRole || !gameOver) { setBilanAffiche(0); return; }
+    const cible = Math.abs(winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE);
+    // Mouvement reduit : le chiffre se pose, sans monter.
+    if (reducedMotion) { setBilanAffiche(cible); return; }
+    let image = 0, depart = 0;
+    const lancer = setTimeout(() => {
+      const pas = (t) => {
+        if (!depart) depart = t;
+        const avance = Math.min(1, (t - depart) / BILAN_DECOMPTE_MS);
+        setBilanAffiche(Math.max(1, Math.round(avance * cible)));
+        if (avance < 1) image = requestAnimationFrame(pas);
+      };
+      image = requestAnimationFrame(pas);
+    }, BILAN_DECOMPTE_DELAI_MS);
+    return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
+  }, [partieClassee, onlineRole, gameOver, winner, reducedMotion]);
+
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
     return (
       <div className={`cer-trophees ${gain >= 0 ? "gain" : "perte"}`} aria-label={`${gain >= 0 ? "Gain" : "Perte"} de ${Math.abs(gain)} trophées`}>
         <img src="/nav/trophee.webp" alt="" />
-        <span>{gain >= 0 ? "+" : "−"}{Math.abs(gain)}</span>
+        {/* Cache au lecteur d'ecran : il entendrait une volee de nombres. L'etiquette du
+            badge, elle, annonce d'emblee la valeur finale. */}
+        <span className="cer-trophees-nombre" aria-hidden="true">{gain >= 0 ? "+" : "−"}{bilanAffiche}</span>
       </div>
     );
   }
