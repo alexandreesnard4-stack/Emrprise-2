@@ -158,9 +158,20 @@ const PORTRAITS = {
 // qu'il ne puisse être choisi ou distribué avant d'être vraiment prêt.
 const ORDER_STATUS = { AVAILABLE: "disponible", COMING_SOON: "prochainement" };
 
-// Date de sortie prévue du prochain Ordre (30 jours après son annonce) — à mettre à
-// jour manuellement quand un nouvel Ordre est planifié, pour garder le décompte honnête.
-const NEXT_ORDER_RELEASE = new Date("2026-09-01T00:00:00");
+// Date de sortie prévue du prochain Ordre — à mettre à jour manuellement quand un
+// nouvel Ordre est planifié, pour garder le décompte honnête.
+//
+// Repoussée au 26 septembre 2026 le 26 août : le décompte n'affichait plus que cinq
+// jours et allait tomber à zéro avant que les Geôliers ne soient prêts. Passé l'échéance
+// le panneau annonce « Son heure est venue », alors que l'Ordre reste scellé : une
+// promesse que le jeu ne tient pas.
+//
+// Le 26 et non le 25 : la date se lit à MINUIT, et une journée déjà entamée ampute le
+// premier jour. À trente jours pile, le décompte se serait ouvert sur « 29j ».
+//
+// Pas de fuseau écrit : la date est donc locale, et chacun voit minuit chez lui. C'est
+// voulu pour une sortie annoncée « le 26 », pas à une heure précise.
+const NEXT_ORDER_RELEASE = new Date("2026-09-26T00:00:00");
 
 // ⚠️ PIÈGE : trois Ordres ont une CLÉ différente de leur NOM DE CAPACITÉ.
 //    cendres → attraction   |   scribes → scribe   |   maudits → maudit
