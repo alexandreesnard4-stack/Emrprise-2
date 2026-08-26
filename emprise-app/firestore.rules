@@ -188,7 +188,12 @@ service cloud.firestore {
           && (!('victoires' in request.resource.data)
               || (request.resource.data.victoires is int && request.resource.data.victoires >= 0 && request.resource.data.victoires <= 1000000))
           && (!('combos' in request.resource.data)
-              || (request.resource.data.combos is list && request.resource.data.combos.size() <= 3));
+              || (request.resource.data.combos is list && request.resource.data.combos.size() <= 3))
+          // Les tournois en ligne remportes. Huit joueurs par tournoi : en gagner dix
+          // mille supposerait quatre-vingt mille adversaires. La borne est large sans
+          // etre ouverte, comme les autres.
+          && (!('tournois' in request.resource.data)
+              || (request.resource.data.tournois is int && request.resource.data.tournois >= 0 && request.resource.data.tournois <= 10000));
     }
 
     // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
@@ -247,7 +252,7 @@ service cloud.firestore {
       allow update: if connecte() && moi() == uid
         // adoubementVu : la cérémonie de première ouverture a eu lieu. Un simple témoin,
         // que seul son propriétaire écrit et qui ne sert qu'à ne pas la rejouer.
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)

@@ -1150,7 +1150,7 @@ function reserveAutomatique(main) {
     .map((c, i) => ({ ...c, id: c.id + "-reserve-" + i }));
 }
 
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, maitriseVersion: MAITRISE_VERSION };
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, tournoisGagnes: 0, tournoisCredites: [], maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
@@ -1289,6 +1289,27 @@ const STORY_CHAPTERS = STORY_CHAPTER_ORDER_KEYS.map((key, i) => {
   const hero = HEROES.find((h) => h.orderKey === key);
   return { chapterNumber: i + 1, orderKey: key, order, hero, numGames: Math.max(...order.ranks) };
 });
+
+// ---------- Carte de reprise : ce que la sauvegarde sait dire d'elle-meme ----------
+// Lu depuis la sauvegarde et non depuis l'etat React : apres un rechargement, l'etat est
+// revenu a ses valeurs de depart et seule la sauvegarde se souvient de la partie. Les
+// scores comptent l'avance du premier joueur, comme l'ecran de jeu : la carte et la
+// partie doivent annoncer les memes nombres.
+function resumeDeSauvegarde(data) {
+  const cases = Array.isArray(data.board) ? data.board : [];
+  const bleues = cases.filter((c) => c && c.owner === "blue").length;
+  const rouges = cases.filter((c) => c && c.owner === "red").length;
+  return {
+    mode: data.mode || "bot",
+    confluence: !!data.confluenceActive,
+    chapitre: data.storyChapterKey || null,
+    niveau: data.botDifficulty || null,
+    tournoiTour: Number.isInteger(data.tourneyRound) ? data.tourneyRound : null,
+    posees: bleues + rouges,
+    scoreBleu: bleues + (data.firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0),
+    scoreRouge: rouges + (data.firstPlayer === "red" ? AVANCE_DU_PREMIER : 0),
+  };
+}
 
 // ---------- Carte du mode Histoire : thème visuel par chapitre ----------
 // Chaque chapitre a son ambiance : couleurs du cadre qui borde l'écran, couleur de la
@@ -1679,6 +1700,20 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
   });
   // Plancher à 0 : une série de défaites ne peut jamais faire passer le total en négatif.
   stats.trophies = Math.max(0, (stats.trophies || 0) + trophyGain);
+  await writeStatsRaw(JSON.stringify(stats));
+  return stats;
+}
+
+// Un tournoi en ligne remporte. Le verrou est ICI, dans le stockage, et non dans l'appel :
+// la fonction relit la sauvegarde avant de decider, si bien qu'un second appel sur le meme
+// tournoi -- au redemarrage de l'application, par exemple -- ne compte rien de plus.
+// La liste ne garde que les douze derniers identifiants.
+async function recordTournoiGagne(tournoiId) {
+  const stats = await loadStats();
+  const vus = Array.isArray(stats.tournoisCredites) ? stats.tournoisCredites : [];
+  if (vus.includes(tournoiId)) return stats;
+  stats.tournoisCredites = [...vus, tournoiId].slice(-12);
+  stats.tournoisGagnes = (stats.tournoisGagnes || 0) + 1;
   await writeStatsRaw(JSON.stringify(stats));
   return stats;
 }
@@ -3212,7 +3247,7 @@ const APP_STYLES = `
         .landing.intro-e0 .hub-jouer-rang, .landing.intro-e1 .hub-jouer-rang,
         .landing.intro-e0 .hub-nav, .landing.intro-e1 .hub-nav,
         .landing.intro-e0 .hub-avis, .landing.intro-e1 .hub-avis,
-        .landing.intro-e0 .landing-link, .landing.intro-e1 .landing-link,
+        .landing.intro-e0 .reprise-carte, .landing.intro-e1 .reprise-carte,
         .landing.intro-e0 .hub-arene-nom, .landing.intro-e1 .hub-arene-nom {
           opacity: 0; transform: translateY(18px);
         }
@@ -3224,7 +3259,7 @@ const APP_STYLES = `
         .landing.intro-e2 .hub-jouer-rang, .landing.intro-e3 .hub-jouer-rang,
         .landing.intro-e2 .hub-nav, .landing.intro-e3 .hub-nav,
         .landing.intro-e2 .hub-avis, .landing.intro-e3 .hub-avis,
-        .landing.intro-e2 .landing-link, .landing.intro-e3 .landing-link,
+        .landing.intro-e2 .reprise-carte, .landing.intro-e3 .reprise-carte,
         .landing.intro-e2 .hub-arene-nom, .landing.intro-e3 .hub-arene-nom {
           opacity: 1; transform: translateY(0);
           transition: opacity .85s ease, transform .85s cubic-bezier(.22,.9,.3,1);
@@ -3239,8 +3274,8 @@ const APP_STYLES = `
         .landing.intro-e2 .hub-nav { transition-delay: .5s; }
         /* Le titre garde son reflet dore, mais seulement une fois pose : sinon les deux
            animations (reflet + glissement) se disputent la meme propriete. */
-        .landing.intro-e0 .landing-title, .landing.intro-e1 .landing-title,
-        .landing.intro-e2 .landing-title { animation: none; }
+        .landing.intro-e0 .landing-title-or, .landing.intro-e1 .landing-title-or,
+        .landing.intro-e2 .landing-title-or { animation: none; }
 
         /* Engrenage des parametres, en haut a droite. */
         /* Volontairement discret : l'engrenage ne doit pas concurrencer "Nouvelle partie".
@@ -3304,13 +3339,32 @@ const APP_STYLES = `
             rgba(4, 3, 10, 0.57) 42%,
             rgba(4, 3, 10, 0) 72%);
         }
+        /* Le titre est un empilement de deux spans qui portent le MEME mot : l'aura
+           sombre dessous, l'or dessus. Il a fallu en passer par la. Une ombre posee sur
+           un texte rempli par background-clip: text se peint PAR-DESSUS le remplissage ;
+           et un jumeau en pseudo-element a z negatif repasse lui aussi devant les glyphes
+           des que l'intro pose un transform sur le titre, qui devient alors son propre
+           contexte d'empilement -- ou le fond se peint AVANT les enfants negatifs. Deux
+           freres dans le flux, eux, se peignent dans l'ordre ou ils sont ecrits, et
+           aucun contexte ne peut les inverser. */
         .landing-title {
           position: relative;
           font-family: 'Cinzel', serif; font-weight: 700; font-size: 44px; letter-spacing: 0.14em; margin: 0;
-          background: linear-gradient(115deg, #7d745f 30%, #cfc6b0 45%, #fff8e0 50%, #cfc6b0 55%, #7d745f 70%);
+        }
+        .landing-title-aura {
+          position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+          pointer-events: none; color: transparent;
+          text-shadow:
+            0 0 2px rgba(4, 3, 10, 0.95),
+            0 0 6px rgba(4, 3, 10, 0.85),
+            0 0 14px rgba(4, 3, 10, 0.65),
+            0 2px 18px rgba(0, 0, 0, 0.6);
+        }
+        .landing-title-or {
+          position: relative;
+          background: linear-gradient(115deg, #b89a68 30%, #e6d7ae 45%, #fff8e0 50%, #e6d7ae 55%, #b89a68 70%);
           background-size: 250% 100%;
           -webkit-background-clip: text; background-clip: text; color: transparent;
-          text-shadow: 0 2px 18px rgba(0,0,0,0.6);
           animation: title-shine 9s ease-in-out infinite;
         }
         @keyframes title-shine {
@@ -3838,9 +3892,11 @@ const APP_STYLES = `
           letter-spacing: 0.05em; color: #f0eaf8;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        /* L'identifiant se lit ET se recopie : c'est par lui qu'on vous ajoute. A
+           10,5 px dans un brun a 2,6 de contraste, il ne faisait ni l'un ni l'autre. */
         .profil-fiche-code {
           font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-          font-size: 10.5px; letter-spacing: 0.08em; color: #845114;
+          font-size: 13px; letter-spacing: 0.1em; color: #b8832e;
         }
         /* Sur SA fiche, le nom reste un bouton : on le change la ou on le lit. .profil-nom
            pese autant que .profil-fiche-pseudo, et sa taille l'emportait -- les deux fiches
@@ -3859,14 +3915,16 @@ const APP_STYLES = `
           font-style: italic; font-size: 11px; color: #b99a5e; letter-spacing: 0.02em;
         }
 
-        /* Deux colonnes, un filet entre elles. Les trophees n'y sont plus : ils se lisent
-           deja dans la ligne d'appartenance, juste au-dessus. */
+        /* Trois colonnes, un filet entre elles. Les trophees n'y sont pas : ils se lisent
+           deja dans la ligne d'appartenance, juste au-dessus. Chaque colonne a le droit de
+           se retrecir (min-width: 0), sinon la plus large impose sa mesure aux autres. */
         .profil-fiche-chiffres {
           display: flex; padding: 12px 0;
           border-bottom: 1px solid rgba(203,164,86,0.14);
         }
         .profil-fiche-chiffres > div {
-          flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+          flex: 1 1 0; min-width: 0;
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
         }
         .profil-fiche-chiffres > div + div { border-left: 1px solid rgba(203,164,86,0.14); }
         .profil-fiche-chiffres b {
@@ -3874,7 +3932,8 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums;
         }
         .profil-fiche-chiffres span {
-          font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: #6d6480;
+          font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: #6d6480;
+          text-align: center; line-height: 1.25;
         }
 
         .profil-adverse .profil-section-titre, .profil-fiche .profil-section-titre { margin-top: 13px; }
@@ -4823,6 +4882,45 @@ const APP_STYLES = `
           text-decoration: underline; text-underline-offset: 3px;
         }
         .landing-link:hover { color: var(--gold-bright); }
+
+        /* ---------- La carte de reprise ---------- */
+        /* Un lien souligne disait "Reprendre la partie en cours" sans rien dire de la
+           partie. Ce qui ramene un Commandant, c'est de savoir ou il en etait : le mode
+           et le score. Le liseret dore de gauche signale l'urgence sans crier, et TOUTE
+           la carte se clique, pas seulement son bouton. */
+        .reprise-carte {
+          display: flex; align-items: center; gap: 12px;
+          width: 100%; max-width: 320px; margin-top: 8px;
+          background: linear-gradient(180deg, #241c34 0%, #181222 100%);
+          border: 1px solid rgba(203, 164, 86, 0.42);
+          border-left: 3px solid #e8c877;
+          border-radius: 11px; padding: 10px 12px;
+          cursor: pointer; text-align: left;
+          transition: transform .12s ease-out;
+        }
+        .reprise-carte:active { transform: scale(0.98); }
+        /* min-width: 0 : sans lui, un enfant de flex refuse de se retrecir et un libelle
+           long pousserait le bouton hors de la carte. */
+        .reprise-texte { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .reprise-titre {
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.18em; text-transform: uppercase; color: #cfc3a8;
+        }
+        /* Un bouton n'herite pas de la fonte de la page : sans cette ligne, le detail
+           s'ecrivait dans la fonte du systeme. */
+        .reprise-detail {
+          font-family: 'Spectral', Georgia, serif;
+          font-size: 9px; letter-spacing: 0.05em; color: #8d82a0; line-height: 1.45;
+        }
+        .reprise-detail b { color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+        .reprise-bouton {
+          flex: none;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          color: #1c1526;
+          background: linear-gradient(180deg, #e8c877 0%, #b8944a 100%);
+          border-radius: 8px; padding: 8px 13px;
+        }
 
         /* RETOUR : repere fixe en haut a gauche, au-dessus du titre, en miroir de
            l'engrenage de l'accueil qui occupe le coin droit a la meme hauteur.
@@ -6503,6 +6601,12 @@ const APP_STYLES = `
         .reserve-grille {
           display: grid; grid-template-columns: repeat(4, auto); gap: 8px;
           justify-content: center; margin: 4px 0 2px;
+          /* 92 px retires a la largeur : 28 de marge de la racine, 24 des trois ecarts,
+             40 des quatre cadres. Ce qui reste se partage en quatre. Le terme en dvh
+             plafonne la carte sur un ecran court, ou deux rangees de 95 px pousseraient
+             le bouton Confirmer hors de vue. */
+          --res-l: clamp(56px, min(calc((100vw - 92px) / 4), 11.8dvh), 78px);
+          --res-h: calc(var(--res-l) * 1.345);
         }
         .reserve-case {
           position: relative; cursor: pointer; border-radius: 10px;
@@ -6517,11 +6621,17 @@ const APP_STYLES = `
         /* Grisees plutot que retirees : le joueur doit continuer a voir ce qu'il ecarte,
            sinon il ne peut plus comparer avant de changer d'avis. */
         .reserve-case.grisee { opacity: 0.4; cursor: default; }
-        .reserve-case .card.hand { width: 58px; height: 78px; }
+        .reserve-case .card.hand { width: var(--res-l); height: var(--res-h); }
+        /* Les pastilles suivent la carte. Agrandir le portrait en laissant les chiffres
+           ou ils etaient donne une carte qui parait vide en son milieu. */
+        .reserve-case .card.hand .rank {
+          width: calc(var(--res-l) * 0.355); height: calc(var(--res-l) * 0.355);
+          font-size: calc(var(--res-l) * 0.195); border-width: 2px;
+        }
         /* Le retournement. Les deux faces sont dos a dos dans le meme volume ; seule la
            face tournee vers nous se voit (backface-visibility). */
         .reserve-flip {
-          position: relative; width: 58px; height: 78px;
+          position: relative; width: var(--res-l); height: var(--res-h);
           -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
           /* 0,9 s : un retournement de carte doit se REGARDER. A 0,45 s l'oeil ne
              voyait qu'un clignotement, pas une carte qui tourne. La courbe part
@@ -6569,7 +6679,8 @@ const APP_STYLES = `
         /* Le meme medaillon que sur la pile en partie : c'est le meme dos. */
         .reserve-face.arriere::after {
           content: ""; position: absolute; left: 50%; top: 50%;
-          width: 26px; height: 26px; margin: -13px 0 0 -13px;
+          width: calc(var(--res-l) * 0.45); height: calc(var(--res-l) * 0.45);
+          margin: calc(var(--res-l) * -0.225) 0 0 calc(var(--res-l) * -0.225);
           border-radius: 50%;
           background-color: #8a6f34;
           background-image: var(--dos-portrait, none);
@@ -6631,9 +6742,11 @@ const APP_STYLES = `
         .timer-bar-fill {
           height: 100%; border-radius: 999px; transition: width 1s linear, background-color .4s ease;
         }
-        .timer-bar-fill.green { background: #3d6b47; }
-        .timer-bar-fill.orange { background: #8a6428; }
-        .timer-bar-fill.red { background: #7a332f; animation: pulse-timer 0.8s ease infinite; }
+        /* Un cran plus clair qu'avant : les trois teintes d'origine se noyaient dans le
+           fond du plateau, et une barre qu'on ne distingue pas ne previent de rien. */
+        .timer-bar-fill.green { background: #4d8459; }
+        .timer-bar-fill.orange { background: #a87a30; }
+        .timer-bar-fill.red { background: #99403a; animation: pulse-timer 0.8s ease infinite; }
         @keyframes pulse-timer { 0%,100%{opacity:1} 50%{opacity:0.55} }
 
         .reset-btn { font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 12px; text-transform: uppercase;
@@ -9019,7 +9132,9 @@ export default function Emprise() {
   }, []);
   const [gameOver, setGameOver] = useState(false);
   const [infoAbility, setInfoAbility] = useState(null);
-  const [hasSavedGame, setHasSavedGame] = useState(false);
+  // null : rien a reprendre. Sinon, le resume de la partie interrompue (mode, score) :
+  // la carte de reprise doit dire OU le Commandant en etait, pas seulement qu'il y est.
+  const [sauvegardeReprise, setSauvegardeReprise] = useState(null);
   // Duel local à deux sur le même appareil : on se passe le téléphone SANS le retourner.
   // L'écran ne pivote donc pas — il échange les deux mains, pour que celui qui doit jouer
   // trouve toujours la sienne en bas, à portée du pouce, et tout le texte à l'endroit.
@@ -9359,6 +9474,7 @@ export default function Emprise() {
   // comprendre pourquoi. Une sauvegarde abimee ne doit pas pouvoir provoquer cela.
   const tropheesPublics = () => Math.max(0, Math.min(100000, Math.round(stats.trophies || 0)));
   // Ce qu'un adversaire peut lire de nous : de quoi se faire une idee, rien de plus.
+  const tournoisPublics = () => Math.max(0, Math.min(10000, Math.round(stats.tournoisGagnes || 0)));
   const profilPublic = () => ({
     parties: Math.max(0, Math.min(1000000, Math.round(stats.gamesPlayed || 0))),
     victoires: Math.max(0, Math.min(1000000, Math.round(stats.mesVictoires || 0))),
@@ -9374,6 +9490,10 @@ export default function Emprise() {
     updateDoc(doc(db, "users", myUid), { trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" }).catch(() => {});
     // Ecriture a part, et qui a le droit d'echouer : voir le commentaire de profilPublic.
     updateDoc(doc(db, "users", myUid), profilPublic()).catch(() => {});
+    // Et celle-ci a part des deux autres. Les regles de /users enumerent les champs
+    // permis ; tant que "tournois" n'y figure pas, cette ecriture est refusee -- seule,
+    // sans entrainer les parties ni les victoires dans sa chute.
+    updateDoc(doc(db, "users", myUid), { tournois: tournoisPublics() }).catch(() => {});
   }, [myUid, monCodeAmi, stats]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
@@ -9864,10 +9984,10 @@ export default function Emprise() {
       // bouton "Reprendre" : on la jette au lieu de la proposer.
       const brute = sessionStorage.getItem("emprise-save");
       if (brute) {
-        let finie = false;
-        try { finie = !!JSON.parse(brute).gameOver; } catch (e) { finie = true; }
-        if (finie) sessionStorage.removeItem("emprise-save");
-        else setHasSavedGame(true);
+        let donnees = null;
+        try { donnees = JSON.parse(brute); } catch (e) { donnees = null; }
+        if (!donnees || donnees.gameOver) sessionStorage.removeItem("emprise-save");
+        else setSauvegardeReprise(resumeDeSauvegarde(donnees));
       }
     } catch (e) { /* stockage indisponible (mode privé, etc.) : tant pis, pas de sauvegarde */ }
   }, []);
@@ -9914,7 +10034,7 @@ export default function Emprise() {
 
   function clearSavedGame() {
     try { sessionStorage.removeItem("emprise-save"); } catch (e) {}
-    setHasSavedGame(false);
+    setSauvegardeReprise(null);
   }
 
   function reset() {
@@ -10217,6 +10337,21 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiOnlineId]);
 
+  // Le tournoi est fini et c'est moi le champion : cela se compte. Le garde en memoire
+  // evite deux appels simultanes -- l'ecoute peut livrer deux instantanes coup sur coup,
+  // et tous deux liraient la sauvegarde avant que le premier ne l'ait ecrite. Le verrou
+  // durable, lui, reste la liste des tournois deja credites.
+  const tournoiCrediteRef = useRef(null);
+  useEffect(() => {
+    if (!myUid || !tournoiData || !tournoiOnlineId) return;
+    if (tournoiData.champion !== myUid) return;
+    if (tournoiCrediteRef.current === tournoiOnlineId) return;
+    if ((stats.tournoisCredites || []).includes(tournoiOnlineId)) return;
+    tournoiCrediteRef.current = tournoiOnlineId;
+    recordTournoiGagne(tournoiOnlineId).then(setStats);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiData, tournoiOnlineId, myUid]);
+
   // Dépôt du résultat de MON match dès qu'il se termine (victoire comme défaite : les
   // deux clients tentent, le premier gagne, l'autre ne fait rien).
   useEffect(() => {
@@ -10428,9 +10563,11 @@ export default function Emprise() {
         const ordreRecu = (v) => (ORDERS.some((o) => o.key === v) ? v : "");
         setProfilPartie({
           blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
-                  ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties) },
+                  ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties),
+                  tournois: entierRecu(data.blueTournois) },
           red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
-                 ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties) },
+                 ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties),
+                 tournois: entierRecu(data.redTournois) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -11414,10 +11551,12 @@ export default function Emprise() {
     const field = onlineRole === "blue"
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
           blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos,
-          blueOrdreFavori: moi.ordreFavori, blueCombosParties: moi.combosParties }
+          blueOrdreFavori: moi.ordreFavori, blueCombosParties: moi.combosParties,
+          blueTournois: tournoisPublics() }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
-          redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties };
+          redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties,
+          redTournois: tournoisPublics() };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
@@ -12297,9 +12436,13 @@ export default function Emprise() {
         // Le chapitre et ses assistances font partie de la partie : sans eux, la reprise
         // rendait une partie d'Histoire meconnaissable.
         storyChapterKey, storySecondPick, allowUndo, allowHint,
+        // Le tour du tournoi solo. Pour la carte de reprise seulement : la reprise ne
+        // restaure pas le tournoi (elle ne l'a jamais fait), mais la carte peut au
+        // moins dire ou l'on en etait.
+        tourneyRound: tourney.active ? tourney.round : null,
       };
       sessionStorage.setItem("emprise-save", JSON.stringify(data));
-      setHasSavedGame(true);
+      setSauvegardeReprise(resumeDeSauvegarde(data));
     } catch (e) { /* stockage indisponible : tant pis, on continue sans sauvegarder */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board, blueHand, redHand, poisonedCells, turn, gameOver, phase]);
@@ -12511,7 +12654,7 @@ export default function Emprise() {
           par defaut. Il pourra en changer depuis son profil. */}
       {!pseudo && (
         <div className="pseudo-ecran">
-          <h1 className="landing-title">EMPRISE</h1>
+          <h1 className="landing-title"><span className="landing-title-aura" aria-hidden="true">EMPRISE</span><span className="landing-title-or">EMPRISE</span></h1>
           <input
             className="pseudo-champ"
             type="text"
@@ -12692,16 +12835,57 @@ export default function Emprise() {
             {hubPage === "jouer" && (
               <section key="jouer" className={`hub-page hub-glisse-${hubSens}`} aria-label="Jouer">
                 <div className="landing-emblem"><span className="landing-line-single" /></div>
-                <h1 className="landing-title">EMPRISE</h1>
+                <h1 className="landing-title"><span className="landing-title-aura" aria-hidden="true">EMPRISE</span><span className="landing-title-or">EMPRISE</span></h1>
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
                 <div className="league-badge">Le multijoueur arrive prochainement</div>
 
                 {/* Seules les parties SOLO se reprennent. En ligne, un adversaire attend
                     en face : une partie quittee est abandonnee, le forfait tranche pour
                     celui qui reste. Proposer d'y revenir laissait croire le contraire. */}
-                {hasSavedGame && (
-                  <button className="landing-link" onClick={resumeSavedGame}>Reprendre la partie en cours</button>
-                )}
+                {sauvegardeReprise && (() => {
+                  const r = sauvegardeReprise;
+                  // Le libelle du mode. Une information qui manque efface sa part du
+                  // libelle -- jamais un trou a sa place.
+                  let libelle;
+                  if (r.chapitre) {
+                    const ch = STORY_CHAPTERS.find((c) => c.orderKey === r.chapitre);
+                    libelle = ch ? `Chapitre ${ch.chapterNumber} · ${ch.order.name}` : "Mode Histoire";
+                  } else if (r.confluence) {
+                    libelle = "Confluence";
+                  } else if (r.tournoiTour !== null) {
+                    const tour = TOURNEY_ROUNDS[r.tournoiTour];
+                    libelle = tour ? `Tournoi · ${tour.label}` : "Tournoi";
+                  } else if (r.mode === "local") {
+                    libelle = "Deux Commandants";
+                  } else {
+                    const niv = DIFFICULTIES.find((d) => d.key === r.niveau);
+                    libelle = niv ? `Écho · ${niv.label}` : "Écho";
+                  }
+                  // Le score, seulement quand il dit quelque chose : une partie sans
+                  // carte posee n'a que l'avance du premier a montrer, et l'Histoire se
+                  // raconte par chapitres. Le score en defaveur s'affiche aussi --
+                  // revenir finir une partie mal engagee est une raison comme une autre.
+                  const sansScore = !!r.chapitre || r.posees === 0;
+                  const phraseScore = sansScore ? null
+                    : r.scoreBleu === r.scoreRouge ? "à égalité"
+                    : r.mode === "local" ? null
+                    : r.scoreBleu > r.scoreRouge ? "vous menez" : "vous êtes mené";
+                  const scores = sansScore ? null : `${r.scoreBleu} - ${r.scoreRouge}`;
+                  const ariaScore = sansScore ? "" : `, ${phraseScore || "score"} ${r.scoreBleu} à ${r.scoreRouge}`;
+                  return (
+                    <button className="reprise-carte" onClick={resumeSavedGame}
+                            aria-label={`Reprendre la partie en cours. ${libelle}${ariaScore}.`}>
+                      <span className="reprise-texte">
+                        <span className="reprise-titre">Partie en cours</span>
+                        <span className="reprise-detail">
+                          {libelle}
+                          {scores && <> · {phraseScore ? `${phraseScore} ` : ""}<b>{scores}</b></>}
+                        </span>
+                      </span>
+                      <span className="reprise-bouton">Reprendre</span>
+                    </button>
+                  );
+                })()}
 
                 {/* L'arène de la ligue : la pièce centrale du hub, et ce qui pousse les
                     deux boutons vers le bas de l'écran, à portée du pouce. Seul le Bronze
@@ -13110,11 +13294,12 @@ export default function Emprise() {
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
 
-                  {/* Deux colonnes, plus trois : les trophees se lisent deja dans la ligne
-                      d'appartenance, juste au-dessus. */}
+                  {/* Trois colonnes, jamais quatre : les trophees se lisent deja dans la
+                      ligne d'appartenance, juste au-dessus. */}
                   <div className="profil-fiche-chiffres">
                     <div><b>{total}</b><span>parties</span></div>
                     <div><b>{victoires}</b><span>victoires</span></div>
+                    <div><b>{stats.tournoisGagnes || 0}</b><span>tournois</span></div>
                   </div>
 
                   <div className="profil-section-titre">Le Commandant que vous êtes</div>
@@ -15426,6 +15611,7 @@ export default function Emprise() {
           combos: (enPartie.combos && enPartie.combos.length) ? enPartie.combos : fiche.combos,
           ordreFavori: enPartie.ordreFavori || fiche.ordreFavori || "",
           combosParties: typeof enPartie.combosParties === "number" ? enPartie.combosParties : undefined,
+          tournois: typeof enPartie.tournois === "number" ? enPartie.tournois : fiche.tournois,
         };
         const dejaAmi = amis.some((a) => a.uid === profilAdverse.uid);
         const ilMaDemande = demandesRecues.some((d) => d.uid === profilAdverse.uid);
@@ -15469,6 +15655,7 @@ export default function Emprise() {
               <div className="profil-fiche-chiffres">
                 <div><b>{typeof f.parties === "number" ? f.parties : "?"}</b><span>parties</span></div>
                 <div><b>{typeof f.victoires === "number" ? f.victoires : "?"}</b><span>victoires</span></div>
+                <div><b>{typeof f.tournois === "number" ? f.tournois : "?"}</b><span>tournois</span></div>
               </div>
 
               <div className="profil-section-titre">Le Commandant qu&apos;il est</div>
