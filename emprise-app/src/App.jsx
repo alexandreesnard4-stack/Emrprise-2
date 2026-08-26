@@ -6206,11 +6206,17 @@ const APP_STYLES = `
         }
         /* Le motif du dos : un losange dore, simple, qui tiendra lieu de place au vrai
            cosmetique le jour ou les dos de carte s'achetteront. */
+        /* Le dos porte le portrait de son Ordre, en medaillon. Le fond dore reste dessous :
+           si un portrait manquait, le dos garde une pastille pleine au lieu d'un trou. */
         .reserve-dos::after {
           content: ""; position: absolute; left: 50%; top: 50%;
-          width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
-          background: linear-gradient(160deg, #e8c877, #8a6f34);
-          transform: rotate(45deg); border-radius: 2px; opacity: 0.85;
+          width: 18px; height: 18px; margin: -9px 0 0 -9px;
+          border-radius: 50%;
+          background-color: #8a6f34;
+          background-image: var(--dos-portrait, none);
+          background-size: cover; background-position: center;
+          border: 1px solid rgba(232, 200, 119, 0.75);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
         }
         .reserve-dos.d0 { transform: translate(0, 4px) rotate(-5deg); }
         .reserve-dos.d1 { transform: translate(8px, 0) rotate(4deg); }
@@ -6252,7 +6258,7 @@ const APP_STYLES = `
              l interieur et le dos faisait 2 px de moins que la carte d a cote. */
           box-sizing: content-box;
         }
-        .reserve-pile.grande .reserve-dos::after { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+        .reserve-pile.grande .reserve-dos::after { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
         .reserve-pile.grande .reserve-dos.d1 { transform: translate(12px, 0) rotate(4deg); }
         .reserve-compte {
           position: absolute; right: -3px; bottom: -3px;
@@ -6330,12 +6336,16 @@ const APP_STYLES = `
             linear-gradient(160deg, #2a2138 0%, #14101d 100%);
           border: 1px solid rgba(203,164,86,0.5); box-sizing: border-box;
         }
-        /* Le meme losange que sur la pile en partie : c'est le meme dos. */
+        /* Le meme medaillon que sur la pile en partie : c'est le meme dos. */
         .reserve-face.arriere::after {
           content: ""; position: absolute; left: 50%; top: 50%;
-          width: 18px; height: 18px; margin: -9px 0 0 -9px;
-          background: linear-gradient(160deg, #e8c877, #8a6f34);
-          transform: rotate(45deg); border-radius: 3px; opacity: 0.85;
+          width: 26px; height: 26px; margin: -13px 0 0 -13px;
+          border-radius: 50%;
+          background-color: #8a6f34;
+          background-image: var(--dos-portrait, none);
+          background-size: cover; background-position: center;
+          border: 1px solid rgba(232, 200, 119, 0.75);
+          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
         }
         @media (prefers-reduced-motion: reduce) {
           .reserve-flip { transition: none; }
@@ -9284,6 +9294,16 @@ export default function Emprise() {
   }
 
   function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
+
+  // Ce que porte le dos d'une carte. En attendant les cosmetiques, c'est le portrait de
+  // son Ordre. Passe par une variable CSS : la feuille de style n'a ainsi pas a connaitre
+  // les dix Ordres, et le jour venu une seule ligne change ici.
+  // Cela ne revele RIEN a l'adversaire : les deux mains sont publiques et l'apercu les
+  // montre, et la Reserve tient une carte par Ordre -- ses deux Ordres etaient donc deja
+  // connus. Ce qui reste cache, et qui seul compte, c'est l'orientation de ses rangs.
+  function dosDeCarte(c) {
+    return { "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none" };
+  }
   // Ce qu'il reste a poser : les cartes des rondes deja jouees sont passees en main.
   function reserveRestante(camp) { return reserveDe(camp).slice(mortSubiteRonde); }
 
@@ -9295,7 +9315,7 @@ export default function Emprise() {
     if (!cartes || cartes.length === 0) return null;
     const contenu = (
       <>
-        {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} aria-hidden="true" />))}
+        {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} style={dosDeCarte(c)} aria-hidden="true" />))}
         <span className="reserve-compte" aria-hidden="true">{cartes.length}</span>
       </>
     );
@@ -14307,7 +14327,7 @@ export default function Emprise() {
                           visible a la fois. */}
                       <div className="reserve-flip">
                         <span className="reserve-face avant"><Card card={c} owner={camp} extraClass="hand" /></span>
-                        <span className="reserve-face arriere" aria-hidden="true" />
+                        <span className="reserve-face arriere" style={dosDeCarte(c)} aria-hidden="true" />
                       </div>
                     </div>
                   );
