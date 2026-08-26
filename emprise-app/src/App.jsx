@@ -3734,6 +3734,22 @@ const APP_STYLES = `
           position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
           overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
         }
+        /* Le profil de l'adversaire, ouvert depuis son nom en partie. Il reprend les
+           blocs du profil du joueur -- memes chiffres, memes titres -- pour qu'on lise
+           l'autre comme on se lit soi-meme. */
+        .profil-adverse { max-width: 330px; text-align: center; }
+        .profil-adverse-code {
+          font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700;
+          letter-spacing: 0.12em; font-variant-numeric: tabular-nums; color: var(--gold);
+        }
+        .profil-adverse-presence { margin-top: -4px; min-height: 15px; }
+        /* Une fiche incomplete se dit, plutot que de laisser trois points d'interrogation
+           sans explication : l'adversaire peut jouer une version plus ancienne. */
+        .profil-adverse-vide { line-height: 1.5; color: var(--muted); }
+        .profil-adverse-actions {
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          margin-top: 4px;
+        }
         .amis-mon-code { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
         .amis-mon-code-valeur {
           font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.14em;
@@ -6803,6 +6819,16 @@ const APP_STYLES = `
           @keyframes adoub-fondu { from { opacity: 0; } to { opacity: 1; } }
         }
 
+        /* Le nom de l'adversaire est un bouton : il en garde l'apparence du texte, mais
+           un trait pointille sous le mot dit qu'il mene quelque part. */
+        .turn-label-porte {
+          background: none; border: none; padding: 0; cursor: pointer;
+          font: inherit; color: inherit; letter-spacing: inherit;
+          text-decoration: underline; text-decoration-style: dotted;
+          text-underline-offset: 3px; text-decoration-color: rgba(203,164,86,0.55);
+        }
+        .turn-label-porte:active { opacity: 0.7; }
+
         .pseudo-ecran .reset-btn { transition: opacity .3s ease-out; }
         .pseudo-ecran .reset-btn:disabled { opacity: 0; cursor: default; }
 
@@ -8176,6 +8202,7 @@ export default function Emprise() {
   const [amitieAvis, setAmitieAvis] = useState("");
   const [bloques, setBloques] = useState([]);                   // [{ uid, depuis }]
   const [joueurMenu, setJoueurMenu] = useState(null);           // { uid, nom, contexte: "ami" | "demande" | "adversaire" }
+  const [profilAdverse, setProfilAdverse] = useState(null);     // { uid, nom } : profil ouvert depuis la partie
   const [signalement, setSignalement] = useState(null);         // { uid, nom, motif }
   const [signalementEnvoye, setSignalementEnvoye] = useState({}); // uid -> true
 
@@ -8218,9 +8245,17 @@ export default function Emprise() {
         const d = snap.exists() ? snap.data() : {};
         // Le titre vient de l'autre joueur : il ne peut valoir que l'un des titres du jeu.
         const titre = COMBOS.some((c) => c.nom === d.titre) ? d.titre : "";
+        // Palmares et combos, lus avec la meme mefiance : un nombre venu d'ailleurs est
+        // borne, et une cle de combo qui n'existe pas dans le jeu est jetee. undefined
+        // et non zero quand le champ manque -- le panneau doit pouvoir dire "inconnu"
+        // plutot que d'annoncer zero partie a qui en a joue cent.
+        const entier = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000000, Math.floor(v))) : undefined);
+        const combos = (Array.isArray(d.combos) ? d.combos : [])
+          .filter((k) => COMBOS.some((c) => c.key === k)).slice(0, 3);
         return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
-          trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre, lu: Date.now() }];
-      } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", lu: Date.now() }]; }
+          trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
+          parties: entier(d.parties), victoires: entier(d.victoires), combos, lu: Date.now() }];
+      } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
     const suivant = { ...fichesRef.current };
     for (const [u, f] of lus) suivant[u] = f;
@@ -9124,12 +9159,20 @@ export default function Emprise() {
   // bornes ferait refuser toute mise a jour du profil — le joueur perdrait ses amis sans
   // comprendre pourquoi. Une sauvegarde abimee ne doit pas pouvoir provoquer cela.
   const tropheesPublics = () => Math.max(0, Math.min(100000, Math.round(stats.trophies || 0)));
+  // Ce qu'un adversaire peut lire de nous : de quoi se faire une idee, rien de plus.
+  const profilPublic = () => ({
+    parties: Math.max(0, Math.min(1000000, Math.round(stats.gamesPlayed || 0))),
+    victoires: Math.max(0, Math.min(1000000, Math.round(stats.mesVictoires || 0))),
+    combos: titresDuProfil(stats).titres.map((t) => t.combo.key).slice(0, 3),
+  });
   const trophyRef = useRef(null);
   useEffect(() => {
     const cle = (stats.trophies || 0) + "/" + (titrePrincipal(stats) || "");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
     updateDoc(doc(db, "users", myUid), { trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" }).catch(() => {});
+    // Ecriture a part, et qui a le droit d'echouer : voir le commentaire de profilPublic.
+    updateDoc(doc(db, "users", myUid), profilPublic()).catch(() => {});
   }, [myUid, monCodeAmi, stats]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
@@ -9407,10 +9450,23 @@ export default function Emprise() {
     const rouge = camp === "red";
     return (
       <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
+        {/* En ligne, le nom d'en face OUVRE SON PROFIL : c'est le seul moment ou l'on
+            croise ce joueur, et le seul endroit ou son nom se lit. Le notre reste un
+            simple texte -- on a deja son propre profil au hub. */}
+        {mode === "online" && onlineRole !== camp && adversaireUid ? (
+          <button
+            className="turn-label-nom turn-label-porte"
+            onClick={() => setProfilAdverse({ uid: adversaireUid, nom: nomDuCamp(camp) })}
+            aria-haspopup="dialog"
+            aria-label={`Voir le profil de ${nomDuCamp(camp)}`}
+            title="Voir son profil"
+          >{nomDuCamp(camp)}</button>
+        ) : (
         <span className="turn-label-nom">
           {nomDuCamp(camp)}
           {!rouge && tourney.active ? `, ${TOURNEY_ROUNDS[tourney.round].label}` : ""}
         </span>
+        )}
         {pucesTrophees(camp)}
         {pucesTitre(camp)}
       </div>
@@ -11306,6 +11362,7 @@ export default function Emprise() {
     // Du plus recent au plus ancien : on ferme la couche du dessus, une par pression.
     if (reserveOuverte) { setReserveOuverte(null); return true; }
     if (signalement) { setSignalement(null); return true; }
+    if (profilAdverse) { setProfilAdverse(null); return true; }
     if (joueurMenu) { setJoueurMenu(null); return true; }
     if (amiARetirer) { setAmiARetirer(null); return true; }
     if (confirmQuit) { setConfirmQuit(false); return true; }
@@ -11318,7 +11375,7 @@ export default function Emprise() {
     if (phase !== "landing") { goBack(); return true; }
     return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
   };
-  const retourACouvrir = !!(reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
+  const retourACouvrir = !!(profilAdverse || reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
     || infoAbility || ordreDetail || activeModal || ceremonieFin || phase !== "landing");
   useEffect(() => {
     if (retourACouvrir && !(window.history.state && window.history.state.emprise)) {
@@ -15071,6 +15128,77 @@ export default function Emprise() {
 
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
+      {profilAdverse && !signalement && (() => {
+        const f = fiches[profilAdverse.uid] || {};
+        const dejaAmi = amis.some((a) => a.uid === profilAdverse.uid);
+        const ilMaDemande = demandesRecues.some((d) => d.uid === profilAdverse.uid);
+        const envoyee = demandesEnvoyees[profilAdverse.uid];
+        // Les combos sont des CLES venues d'un autre appareil : on ne garde que celles
+        // que le jeu connait. Tout le reste est ecarte, comme pour son pseudo.
+        const combos = (Array.isArray(f.combos) ? f.combos : [])
+          .map((k) => COMBOS.find((c) => c.key === k))
+          .filter(Boolean)
+          .slice(0, 3);
+        const aDesChiffres = typeof f.parties === "number" || typeof f.victoires === "number";
+        return (
+          <div className="info-overlay" onClick={() => setProfilAdverse(null)}>
+            <div className="info-panel profil-adverse" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel-title">{profilAdverse.nom}</div>
+              {f.codeAmi && <div className="profil-adverse-code">{codeAmiLisible(f.codeAmi)}</div>}
+              <div className="sub profil-adverse-presence">{presenceDe(f) || "\u00A0"}</div>
+
+              <div className="profil-chiffres">
+                <div><b>{typeof f.parties === "number" ? f.parties : "?"}</b><span>parties</span></div>
+                <div><b>{typeof f.victoires === "number" ? f.victoires : "?"}</b><span>victoires</span></div>
+                <div><b>{typeof f.trophees === "number" ? f.trophees : 0}</b><span>trophées</span></div>
+              </div>
+              {!aDesChiffres && (
+                <div className="sub profil-adverse-vide">
+                  Ce Commandant n&apos;a pas encore publié son palmarès.
+                </div>
+              )}
+
+              <div className="profil-section-titre">Le Commandant qu&apos;il est</div>
+              {combos.length > 0 ? (
+                combos.map((c, i) => (
+                  <div key={c.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
+                    <div className="profil-titre-haut"><b>{c.nom}</b></div>
+                    <div className="profil-titre-recit">{c.recit}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="sub profil-adverse-vide">
+                  {f.titre ? f.titre : "Son style ne s'est pas encore dégagé."}
+                </div>
+              )}
+
+              <div className="profil-adverse-actions">
+                {dejaAmi ? (
+                  <div className="revanche-attente">Déjà dans vos amis</div>
+                ) : envoyee ? (
+                  <div className="revanche-attente">Demande d&apos;ami envoyée</div>
+                ) : (
+                  <button
+                    className="reset-btn"
+                    onClick={() => { setAmitieAvis("");
+                      (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
+                        .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
+                  >{amitieAvis || (ilMaDemande ? "Accepter en ami" : "Ajouter en ami")}</button>
+                )}
+                {/* Apple demande que le signalement soit a portee de main la ou l'on voit
+                    le nom de quelqu'un. C'est ici. */}
+                <button className="landing-link" onClick={() => {
+                  setProfilAdverse(null);
+                  setJoueurMenu({ uid: profilAdverse.uid, nom: profilAdverse.nom, contexte: "adversaire" });
+                }}>Signaler ou bloquer</button>
+              </div>
+
+              <button className="reset-btn" onClick={() => setProfilAdverse(null)}>Fermer</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {joueurMenu && !signalement && (
         <div className="info-overlay" onClick={() => setJoueurMenu(null)}>
           <div className="info-panel confirm-panel" onClick={(e) => e.stopPropagation()}>
