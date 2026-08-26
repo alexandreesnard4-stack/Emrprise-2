@@ -3096,12 +3096,6 @@ const APP_STYLES = `
         .fond-app::after {
           content: ""; position: absolute; inset: 0;
           background:
-            /* Un voile de plus, en HAUT seulement. Le ciel porte une eclaircie lunaire qui
-               tombe pile derriere le titre : mesure faite, le contraste du texte y valait
-               3,14 pour 4,5 exiges. Assombrir toute l'image aurait rachete ces quelques
-               centaines de pixels en effacant les nuages partout ailleurs ; ce degrade ne
-               touche que le tiers haut et rend le titre a 6,4. */
-            linear-gradient(180deg, rgba(0,0,0,var(--fond-haut, 0.6)) 0%, rgba(0,0,0,0) 46%),
             radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,var(--fond-vignette, 0.7)) 100%),
             rgba(8, 6, 14, var(--fond-voile, 0.26));
         }
@@ -3122,7 +3116,7 @@ const APP_STYLES = `
           /* Reglage du vignettage, ici avec le reste de la palette. Deux nombres entre 0
              et 1 : la noirceur des bords, et le voile uni pose sur toute l'image. Les
              monter assombrit le fond sans toucher au fichier. */
-          --fond-vignette: 0.62; --fond-voile: 0.16; --fond-haut: 0.60;
+          --fond-vignette: 0.62; --fond-voile: 0.16;
           color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
@@ -3259,7 +3253,20 @@ const APP_STYLES = `
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
         .landing-line-single { width: 110px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+        /* Un halo sombre sous le titre, et sous lui seul. Les trois arrets suivent la
+           courbe mesuree : plein au centre, a moitie a 42 %, eteint a 72 % -- au-dela,
+           la brume reprend ses droits. Il ne coute qu'un pseudo-element, ne s'anime pas,
+           et se regle en changeant ces trois nombres. */
+        .landing-title::before {
+          content: ""; position: absolute; z-index: -1; pointer-events: none;
+          left: 50%; top: 50%; width: 350px; height: 200px; margin: -83px 0 0 -175px;
+          background: radial-gradient(ellipse,
+            rgba(4, 3, 10, 0.80) 0%,
+            rgba(4, 3, 10, 0.54) 42%,
+            rgba(4, 3, 10, 0) 72%);
+        }
         .landing-title {
+          position: relative;
           font-family: 'Cinzel', serif; font-weight: 700; font-size: 44px; letter-spacing: 0.14em; margin: 0;
           background: linear-gradient(115deg, #7d745f 30%, #cfc6b0 45%, #fff8e0 50%, #cfc6b0 55%, #7d745f 70%);
           background-size: 250% 100%;
@@ -4056,9 +4063,29 @@ const APP_STYLES = `
           text-transform: uppercase; color: var(--muted);
         }
         .arene-page-nom {
-          font-family: 'Cinzel', serif; font-size: 19px; font-weight: 700;
-          letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-bright);
-          text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700;
+          letter-spacing: 0.14em; text-transform: uppercase;
+          background: linear-gradient(100deg,
+            var(--arene-teinte, var(--gold)) 12%, var(--gold-bright) 34%, #fff6de 50%,
+            var(--gold-bright) 66%, var(--arene-teinte, var(--gold)) 88%);
+          background-size: 240% 100%;
+          -webkit-background-clip: text; background-clip: text; color: transparent;
+          text-shadow: 0 2px 6px rgba(0,0,0,0.55);
+          filter: drop-shadow(0 0 10px var(--arene-teinte, rgba(203,164,86,0.5)));
+          animation: arene-nom-forge 7s ease-in-out infinite;
+        }
+        /* La meme respiration que le titre d'un chapitre : la lumiere passe, s'attarde,
+           puis attend. C'est background-position qui bouge, seule entorse a la regle des
+           boucles -- deja consentie pour le titre du jeu et celui des chapitres, et sur
+           un seul mot a l'ecran. */
+        @keyframes arene-nom-forge {
+          0% { background-position: 190% 0; }
+          55%, 100% { background-position: -70% 0; }
+        }
+        /* Une arene qu'on n'a pas conquise ne brille pas. */
+        .arene-page-nom.eteinte { animation: none; filter: none; opacity: 0.55; }
+        @media (prefers-reduced-motion: reduce) {
+          .arene-page-nom { animation: none; background-position: 50% 0; }
         }
         .arene-page-seuil {
           display: inline-flex; align-items: center; gap: 5px;
@@ -12735,7 +12762,10 @@ export default function Emprise() {
                         {/* Le nom coiffe la page : on doit savoir ou l'on est des que
                             l'arene se pose, sans avoir a descendre le regard. */}
                         <div className="arene-page-entete">
-                          <div className="arene-page-nom">Arène {l.name}</div>
+                          <div
+                            className={`arene-page-nom ${verrouillee ? "eteinte" : ""}`}
+                            style={{ "--arene-teinte": (ARENE_GEMMES[l.name] || {}).teinte || "var(--gold)" }}
+                          >Arène {l.name}</div>
                           {/* Le prix d'entree de l'arene, et rien d'autre. "Encore X
                               trophees" changeait a chaque partie et faisait de l'echelle
                               un decompte ; le seuil, lui, ne bouge jamais. */}
