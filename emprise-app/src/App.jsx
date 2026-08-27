@@ -1159,7 +1159,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "28 août · 21h";
+const VERSION_AFFICHEE = "28 août · 23h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1300,20 +1300,16 @@ async function copierTexte(texte) {
 // Le bilan ne s'affiche pas d'un bloc : il MONTE, de un jusqu'a sa valeur. Court, parce
 // qu'il accompagne la fin de partie sans la retenir. Il part apres l'entree du badge, le
 // temps qu'il ait fini de se poser.
-// Les rouleaux de la machine a sous du bilan. Le premier s'arrete a 900 ms, chaque
-// suivant roule 350 ms de plus : les dizaines se calent, les unites roulent encore,
-// comme sur une vraie machine. TOURS regle combien de fois un rouleau fait defiler ses
-// dix chiffres avant de se poser -- assez pour lire un defilement, pas assez pour lasser.
-const BILAN_ROULEAU_MS = 900;
-const BILAN_ROULEAU_ECART_MS = 350;
-const BILAN_ROULEAU_TOURS = 2;
-// Le DEPART des rouleaux, compte depuis l'ouverture de la ceremonie : il doit tomber
-// APRES l'entree de la recap, qui est invisible avant. Victoire : cer-monte finit a
-// 1,75 + 0,65 s. Defaite : buttonFadeUp finit a 1,5 + 0,6 s. Un souffle de plus, et les
-// rouleaux partent sous les yeux -- avant ce reglage ils finissaient a 1,75 s, PILE quand
-// le rideau se levait, et personne ne les a jamais vus.
-const BILAN_DEPART_VICTOIRE_MS = 2550;
-const BILAN_DEPART_DEFAITE_MS = 2250;
+// Le compte du bilan : de 1 jusqu'au total, en presque trois secondes -- lent, a la
+// demande du Commandant, et long a dessein : meme si l'entree du panneau se decale d'une
+// seconde sur un appareil, l'essentiel du compte reste sous les yeux.
+const BILAN_COMPTE_MS = 2800;
+// Le DEPART du compte, depuis l'ouverture de la ceremonie : il doit tomber APRES le
+// lever de rideau de la recap, invisible avant. Victoire : cer-monte finit a
+// 1,75 + 0,65 s. Defaite : buttonFadeUp finit a 1,5 + 0,6 s. Partir avant, c'est compter
+// dans le noir -- trois signalements du Commandant pour l'apprendre.
+const BILAN_DEPART_VICTOIRE_MS = 2500;
+const BILAN_DEPART_DEFAITE_MS = 2200;
 const TROPHEES_VICTOIRE = 30;
 const TROPHEES_DEFAITE = -15;
 
@@ -5527,33 +5523,9 @@ const APP_STYLES = `
            la course du translateY parlent la meme unite, quel que soit le corps de police.
            Seul transform voyage : ce projet est deja tombe de 52 a 14 images par seconde
            pour avoir anime une ombre. */
-        .cer-rouleau {
-          display: inline-block; height: 1em; overflow: hidden;
-          line-height: 1;
-        }
-        .cer-rouleau-bande {
-          display: flex; flex-direction: column;
-          /* Une ANIMATION et non une transition : une transition ne joue jamais sur un
-             premier rendu, or le badge ne se monte qu'apres la ceremonie de victoire --
-             les rouleaux naissaient poses. Une animation part au montage, ou qu'il ait
-             lieu. La courbe freine longuement en fin de course : les derniers crans se
-             lisent un a un, comme les rouleaux d'une machine qui se calent.
-             both : avant le delai la bande attend a zero, apres la course elle reste
-             posee sur son chiffre. */
-          animation: cer-rouleau-defile 0.9s cubic-bezier(0.12, 0.68, 0.22, 1) both;
-        }
-        /* PAS de var() ici : pendant des annees WebKit ne resolvait pas les variables
-           dans les keyframes -- la regle d'arrivee devenait invalide et les rouleaux
-           restaient a zero, badge fige sur +00. L'arrivee n'a pas besoin d'etre dite par
-           element : une bande de N crans s'arrete TOUJOURS a -100 % de sa hauteur plus
-           un cran, quel que soit N. */
-        @keyframes cer-rouleau-defile {
-          from { transform: translateY(0); }
-          to { transform: translateY(calc(-100% + 1em)); }
-        }
-        .cer-rouleau-chiffre { display: block; height: 1em; line-height: 1; text-align: center; }
-        /* Mouvement reduit : le style en ligne pose deja la bande sur son chiffre. */
-        .reduced-motion .cer-rouleau-bande { animation: none; }
+
+        /* (Les rouleaux de machine a sous ont vecu ici : remplaces par un compte de 1
+           au total, plus lent et plus lisible, a la demande du Commandant.) */
         .cer-trophees.gain { color: var(--gold-bright); border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.1); }
         .cer-trophees.perte { color: var(--red-bright); border-color: rgba(224,101,90,0.5); background: rgba(224,101,90,0.1); }
         @keyframes cer-trophees-entree {
@@ -12393,42 +12365,45 @@ export default function Emprise() {
     return () => window.removeEventListener("popstate", surRetour);
   }, []);
 
-  function bilanTrophees(depart) {
+  // Le compte, pilote par le TEMPS et cale sur la CEREMONIE : la ceremonie de defaite
+  // ne s'ouvre que 2,4 s apres la fin de partie, un compte parti a gameOver aurait deja
+  // fini dans le noir. Chaque image affiche la valeur de l'instant ou elle est peinte :
+  // le compte dure le meme temps sur tous les appareils, lents compris. La courbe freine
+  // en fin de course -- les derniers points se lisent un a un.
+  const [bilanAffiche, setBilanAffiche] = useState(0);
+  useEffect(() => {
+    if (!ceremonieFin || !partieClassee || !onlineRole) { setBilanAffiche(0); return; }
+    const cible = Math.abs(winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE);
+    // Le toucher qui saute la ceremonie saute AUSSI le compte : sans cela, le panneau
+    // surgissait avec un badge vide pendant deux secondes et demie. Sauter, c est sauter.
+    if (reducedMotion || cerPose) { setBilanAffiche(cible); return; }
+    const depart = ceremonieFin === "victoire" ? BILAN_DEPART_VICTOIRE_MS : BILAN_DEPART_DEFAITE_MS;
+    let image = 0, t0 = 0;
+    const lancer = setTimeout(() => {
+      const pas = (t) => {
+        if (!t0) t0 = t;
+        const lineaire = Math.min(1, (t - t0) / BILAN_COMPTE_MS);
+        const freinee = 1 - Math.pow(1 - lineaire, 2.2);
+        setBilanAffiche(Math.max(1, Math.round(freinee * cible)));
+        if (lineaire < 1) image = requestAnimationFrame(pas);
+      };
+      image = requestAnimationFrame(pas);
+    }, depart);
+    return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ceremonieFin, cerPose, partieClassee, onlineRole, winner, reducedMotion]);
+
+  function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
-    const chiffres = String(Math.abs(gain)).split("");
     return (
       <div className={`cer-trophees ${gain >= 0 ? "gain" : "perte"}`} aria-label={`${gain >= 0 ? "Gain" : "Perte"} de ${Math.abs(gain)} trophées`}>
         <img src="/nav/trophee.webp" alt="" />
         {/* Cache au lecteur d'ecran : il entendrait une volee de nombres. L'etiquette du
-            badge, elle, annonce d'emblee la valeur finale. */}
+            badge, elle, annonce d'emblee la valeur finale. Avant le depart du compte, le
+            nombre reste vide plutot que d'afficher un faux zero. */}
         <span className="cer-trophees-nombre" aria-hidden="true">
-          {gain >= 0 ? "+" : "−"}
-          {chiffres.map((ch, i) => {
-            // Chaque rouleau porte ses tours complets puis s'arrete sur son chiffre. Le
-            // DERNIER rouleau roule le plus longtemps, comme sur une vraie machine.
-            const pas = BILAN_ROULEAU_TOURS * 10 + Number(ch);
-            const bande = Array.from({ length: pas + 1 }, (_, n) => n % 10);
-            const duree = BILAN_ROULEAU_MS + i * BILAN_ROULEAU_ECART_MS;
-            return (
-              <span key={i} className="cer-rouleau">
-                {/* L'animation part au MONTAGE du badge : c'est ce qui la met sous les
-                    yeux, quel que soit le temps que la ceremonie a pris avant lui. Son
-                    point d'arrivee est dans les keyframes memes -- moins 100 % de la
-                    bande plus un cran -- jamais dans une variable : les vieux Safari ne
-                    resolvent pas var() dans les keyframes, et les rouleaux y restaient
-                    figes sur +00. Mouvement reduit : la bande nait posee, sans rouler. */}
-                <span
-                  className="cer-rouleau-bande"
-                  style={reducedMotion
-                    ? { transform: `translateY(${-pas}em)` }
-                    : { animationDuration: duree + "ms", animationDelay: depart + "ms" }}
-                >
-                  {bande.map((n, k) => <span key={k} className="cer-rouleau-chiffre">{n}</span>)}
-                </span>
-              </span>
-            );
-          })}
+          {bilanAffiche > 0 ? (gain >= 0 ? "+" : "−") + bilanAffiche : "\u00A0"}
         </span>
       </div>
     );
@@ -16342,7 +16317,7 @@ export default function Emprise() {
                 <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
-              {bilanTrophees(BILAN_DEPART_VICTOIRE_MS)}
+              {bilanTrophees()}
               {boutonRevanche()}
               {boutonAmitie()}
               {lienSignalerAdversaire()}
@@ -16377,7 +16352,7 @@ export default function Emprise() {
               <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
-            {bilanTrophees(BILAN_DEPART_DEFAITE_MS)}
+            {bilanTrophees()}
             {boutonRevanche()}
             {boutonAmitie()}
             {lienSignalerAdversaire()}
