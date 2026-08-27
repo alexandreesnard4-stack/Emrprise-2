@@ -3366,7 +3366,7 @@ const APP_STYLES = `
         .fond-app {
           position: fixed; inset: 0; z-index: -1;
           background-color: #0a0810;
-          background-image: url("/fonds/damas-nuit.jpg");
+          background-image: url("/fonds/ciel-orage.jpg");
           background-size: cover; background-position: center;
         }
         /* Le vignettage se fait en CSS et non dans l'image : il se regle sans rien
@@ -5723,8 +5723,23 @@ const APP_STYLES = `
         /* EN PARTIE, rien ne change : le plateau et les cartes ont besoin d'un aplat
            neutre derriere eux, pas d'une texture. L'ecran de jeu reprend donc le fond
            d'origine, celui que la racine portait avant l'arrivee du calque. */
+        /* Le damas heraldique, ICI et nulle part ailleurs : c'est la partie que le
+           Commandant voulait habiller. Trois couches, dans l'ordre de peinture :
+           le voile sombre qui garde le plateau lisible, l'image, puis la couleur unie
+           qui tient l'ecran pendant que l'image arrive -- sans elle, le plateau
+           clignotait au premier affichage.
+           La lueur du haut d'origine est conservee par-dessus le voile : elle donnait sa
+           profondeur a l'ecran, et rien ne justifiait de la perdre. */
         .emprise-root.ecran-jeu {
-          background: radial-gradient(ellipse at 50% -10%, #241e33 0%, var(--bg) 55%), var(--bg);
+          background:
+            radial-gradient(ellipse at 50% -10%, rgba(36,30,51,0.55) 0%, rgba(0,0,0,0) 55%),
+            linear-gradient(rgba(8, 6, 14, 0.34), rgba(8, 6, 14, 0.34)),
+            url("/fonds/damas-nuit.jpg"),
+            var(--bg);
+          background-size: auto, auto, cover, auto;
+          background-position: center, center, center, center;
+          background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+          background-attachment: fixed, fixed, fixed, scroll;
         }
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
