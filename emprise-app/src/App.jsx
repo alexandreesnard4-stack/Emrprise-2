@@ -44,6 +44,11 @@ function codeAmiLisible(code) {
 const ID_ANIM_DEPART = 340;   // ms de silence avant le premier caractere
 const ID_ANIM_PAS = 190;      // ms entre deux caracteres
 const ID_ANIM_APRES = 260;    // ms entre le dernier chiffre et la phrase d'explication
+const ID_ANIM_NOTE_MS = 800;  // duree du fondu de la phrase (pseudo-note-entre)
+// Le devoilement entier, de la premiere seconde de silence au dernier point de la phrase.
+// C'est ce que l'ecran de saisie doit tenir avant de rendre la main.
+const ID_ANIM_TOTAL = ID_ANIM_DEPART + (IDENTIFIANT_CHIFFRES + 1) * ID_ANIM_PAS
+  + ID_ANIM_APRES + ID_ANIM_NOTE_MS;
 
 // A la saisie, le joueur n'a que des chiffres a taper : le dièse est deja a l'ecran. On
 // le tolere quand meme s'il colle un identifiant complet.
@@ -9211,6 +9216,9 @@ export default function Emprise() {
   // joueur efface son nom pour se raviser, et se rejouerait a la frappe suivante :
   // un clignotement, la ou on voulait un evenement.
   const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
+  // Le nom valide qui attend la fin du devoilement. Tant qu'il est la, l'ecran de saisie
+  // reste, le champ se tait, et le bouton ne repond plus.
+  const [pseudoEnAttente, setPseudoEnAttente] = useState(null);
   // La ceremonie en cours : null, ou { nom, etat } ou etat vaut "sort" pendant son
   // effacement. adoubementVu vient du document du joueur : il empeche de la rejouer.
   const [adoubement, setAdoubement] = useState(null);
@@ -9256,16 +9264,29 @@ export default function Emprise() {
     return () => window.removeEventListener("keydown", passer);
   }, [adoubement]);
 
-  function validerPseudo() {
-    const nom = nettoyerPseudo(pseudoSaisi);
-    if (!nom) return false;
-    if (nom.length < PSEUDO_MIN) { setPseudoRefus(`Trois caractères au minimum.`); return false; }
-    // Le message ne nomme jamais le mot en cause. Le repeter, c'est le reafficher ; et le
-    // designer transforme le champ en oracle ou l'on cherche a tatons la formule qui
-    // passe. En cas de faux positif, c'est aussi une accusation adressee a quelqu'un qui
-    // s'appelle Hercule.
-    if (nomRefuse(nom)) { setPseudoRefus("Ce nom ne peut pas être utilisé. Choisissez-en un autre."); return false; }
-    const premierNom = !pseudo;
+  // Le devoilement de l'identifiant s'acheve de lui-meme, ou sous le doigt du Commandant.
+  // Meme regle que la ceremonie juste au-dessus : le minuteur meurt au demontage, et rien
+  // ne peut enfermer qui que ce soit dans une animation. Animations reduites : le nom se
+  // pose tout de suite, les chiffres sont deja la.
+  useEffect(() => {
+    if (!pseudoEnAttente) return;
+    const finir = () => { poserPseudo(pseudoEnAttente, true); setPseudoEnAttente(null); };
+    if (reducedMotion) { finir(); return; }
+    const t = setTimeout(finir, ID_ANIM_TOTAL);
+    const passer = () => { clearTimeout(t); finir(); };
+    window.addEventListener("keydown", passer);
+    window.addEventListener("pointerdown", passer);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", passer);
+      window.removeEventListener("pointerdown", passer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pseudoEnAttente, reducedMotion]);
+
+  // Ce qui se passe une fois le nom accepte. Sorti de validerPseudo parce que la premiere
+  // ouverture le repousse : l'ecran doit d'abord montrer l'identifiant se composer.
+  function poserPseudo(nom, premierNom) {
     ecrirePseudo(nom);
     setPseudo(nom);
     // Le nom que voient les amis est celui du profil public : on l'y pousse aussitot.
@@ -9282,6 +9303,29 @@ export default function Emprise() {
     }
     setPseudoSaisi("");
     setPseudoRefus("");
+  }
+
+  function validerPseudo() {
+    const nom = nettoyerPseudo(pseudoSaisi);
+    if (!nom) return false;
+    if (nom.length < PSEUDO_MIN) { setPseudoRefus(`Trois caractères au minimum.`); return false; }
+    // Le message ne nomme jamais le mot en cause. Le repeter, c'est le reafficher ; et le
+    // designer transforme le champ en oracle ou l'on cherche a tatons la formule qui
+    // passe. En cas de faux positif, c'est aussi une accusation adressee a quelqu'un qui
+    // s'appelle Hercule.
+    if (nomRefuse(nom)) { setPseudoRefus("Ce nom ne peut pas être utilisé. Choisissez-en un autre."); return false; }
+    const premierNom = !pseudo;
+    // Premiere ouverture, et le numero est revenu du serveur : le nom attend le temps que
+    // l'identifiant se compose sous les yeux du Commandant. C'est ce clic-ci qui declenche
+    // le devoilement, et l'ecran reste en place jusqu'a la derniere lettre de la phrase.
+    // Si le numero n'est pas encore la, rien a devoiler : on passe outre plutot que de
+    // faire attendre devant une ligne vide.
+    if (premierNom && monCodeAmi && !identifiantDevoile) {
+      setIdentifiantDevoile(true);
+      setPseudoEnAttente(nom);
+      return true;
+    }
+    poserPseudo(nom, premierNom);
     return true;
   }
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
@@ -12684,9 +12728,9 @@ export default function Emprise() {
               const nom = nettoyerPseudo(e.target.value);
               setPseudoSaisi(nom);
               setPseudoRefus("");
-              if (nom) setIdentifiantDevoile(true);
             }}
             onKeyDown={(e) => { if (e.key === "Enter") validerPseudo(); }}
+            readOnly={!!pseudoEnAttente}
             placeholder="Votre nom"
             maxLength={PSEUDO_MAX}
             autoCapitalize="off"
@@ -12705,7 +12749,7 @@ export default function Emprise() {
           {/* Le bouton n'est pas grisé tant qu'il n'y a rien à valider : il est absent.
               Sa place reste réservée pour que son arrivée ne déplace rien, et la touche
               Entrée fonctionne de bout en bout. */}
-          <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
+          <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi) || !!pseudoEnAttente} onClick={validerPseudo}>Entrer</button>
           {/* Le nom n'est pas unique : deux joueurs peuvent porter le meme. On le dit ici,
               au moment ou le choix se fait, en montrant le numero qui les distingue.
               Il n'apparaît qu'une fois le nom commencé : d'abord on se nomme, ensuite le
