@@ -1195,6 +1195,33 @@ const PLATEAUX = [
     lueur: "rgba(244,238,224,0.12)" },
 ];
 const PLATEAU_DEFAUT = "faille";
+
+// Les dos de cartes. Le commentaire de .reserve-dos annoncait ce jour : « un losange dore
+// qui tiendra lieu de place au vrai cosmetique ». Le voici, et toujours sans une image :
+// des degrades et des motifs repetes, donc nets a toute taille et gratuits a charger.
+// Blason est le dos d'origine, valeur pour valeur.
+const DOS_CARTES = [
+  { cle: "blason", nom: "Blason", matiere: "Le dos des premiers duels",
+    fond: "radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%), linear-gradient(160deg, #2a2138 0%, #14101d 100%)",
+    bord: "rgba(203,164,86,0.5)", anneau: "rgba(232,200,119,0.75)", socle: "#8a6f34" },
+  { cle: "cuir", nom: "Cuir clouté", matiere: "Peau tannée, rivets de bronze",
+    fond: "radial-gradient(circle at 50% 38%, rgba(226,160,96,0.18) 0%, rgba(226,160,96,0) 60%), radial-gradient(circle at 3px 3px, rgba(255,214,168,0.14) 0.9px, rgba(0,0,0,0) 1.7px) 0 0 / 9px 9px, linear-gradient(160deg, #3b2a1e 0%, #1c130d 100%)",
+    bord: "rgba(214,150,84,0.55)", anneau: "rgba(246,206,150,0.8)", socle: "#7a5326" },
+  { cle: "damas", nom: "Damas", matiere: "Soie tissée en chevrons",
+    fond: "repeating-linear-gradient(45deg, rgba(203,164,86,0.075) 0 3px, rgba(0,0,0,0) 3px 7px), repeating-linear-gradient(-45deg, rgba(203,164,86,0.06) 0 3px, rgba(0,0,0,0) 3px 7px), linear-gradient(160deg, #1f2a26 0%, #0d1512 100%)",
+    bord: "rgba(168,196,150,0.5)", anneau: "rgba(214,232,196,0.78)", socle: "#4c6b45" },
+  { cle: "obsidienne", nom: "Obsidienne", matiere: "Verre noir, tranchant de lumière",
+    fond: "linear-gradient(115deg, rgba(255,255,255,0) 36%, rgba(198,214,232,0.16) 48%, rgba(255,255,255,0) 60%), linear-gradient(160deg, #1c1c23 0%, #08080b 100%)",
+    bord: "rgba(178,196,214,0.5)", anneau: "rgba(214,230,246,0.75)", socle: "#3a4450" },
+];
+const DOS_DEFAUT = "blason";
+function dosDe(cle) { return DOS_CARTES.find((d) => d.cle === cle) || DOS_CARTES[0]; }
+// Les quatre variables que le dos et son medaillon lisent. Le portrait de l'Ordre, lui,
+// vient de la carte et se pose a cote : le dos habille, le portrait dit QUI.
+function variablesDos(cle) {
+  const d = dosDe(cle);
+  return { "--dos-fond": d.fond, "--dos-bord": d.bord, "--dos-anneau": d.anneau, "--dos-socle": d.socle };
+}
 function plateauDe(cle) { return PLATEAUX.find((p) => p.cle === cle) || PLATEAUX[0]; }
 // Les cinq variables que .table et .cell lisent. Posees sur la dalle, elles descendent
 // d'elles-memes jusqu'aux cases : c'est de l'heritage, pas une regle par case.
@@ -1785,7 +1812,21 @@ async function resetStats() {
 // ---------- Cosmetiques choisis (meme mecanisme de stockage hybride que les stats) ----------
 // Un seul objet pour toute la famille : le jour ou s'ajoutent les dos de cartes et les
 // cadres, ils prennent leur cle ici et rien d'autre ne bouge.
-const DEFAUT_COSMETIQUES = { plateau: PLATEAU_DEFAUT };
+const DEFAUT_COSMETIQUES = { plateau: PLATEAU_DEFAUT, dos: DOS_DEFAUT };
+// Une famille = un catalogue et une valeur par defaut. Ajouter les cadres demain, c'est
+// ajouter une ligne ici, et rien ailleurs : la lecture, l'ecriture et la validation la
+// suivent toutes seules.
+const FAMILLES_COSMETIQUES = {
+  plateau: { catalogue: PLATEAUX, defaut: PLATEAU_DEFAUT },
+  dos: { catalogue: DOS_CARTES, defaut: DOS_DEFAUT },
+};
+// Une cle inconnue -- sauvegarde abimee, ou cosmetique retire du catalogue depuis -- ne
+// doit jamais laisser une carte sans dos ni un plateau sans couleur.
+function cleValide(famille, cle) {
+  const f = FAMILLES_COSMETIQUES[famille];
+  if (!f) return null;
+  return f.catalogue.some((x) => x.cle === cle) ? cle : f.defaut;
+}
 let memoryCosmetiques = null;
 
 async function readCosmetiquesRaw() {
@@ -1821,14 +1862,19 @@ async function loadCosmetiques() {
   if (!brut) return { ...DEFAUT_COSMETIQUES };
   try {
     const lu = JSON.parse(brut);
-    const plateau = PLATEAUX.some((p) => p.cle === lu.plateau) ? lu.plateau : PLATEAU_DEFAUT;
-    return { ...DEFAUT_COSMETIQUES, ...lu, plateau };
+    const sain = { ...DEFAUT_COSMETIQUES, ...lu };
+    for (const famille of Object.keys(FAMILLES_COSMETIQUES)) sain[famille] = cleValide(famille, sain[famille]);
+    return sain;
   } catch (e) { return { ...DEFAUT_COSMETIQUES }; }
 }
 
-async function choisirPlateau(cle) {
+// Valide des DEUX cotes, lecture comme ecriture : une cle refusee a l'entree ne doit pas
+// pouvoir se glisser par la sortie.
+async function choisirCosmetique(famille, cle) {
   const c = await loadCosmetiques();
-  c.plateau = PLATEAUX.some((p) => p.cle === cle) ? cle : PLATEAU_DEFAUT;
+  const valide = cleValide(famille, cle);
+  if (valide === null) return c;
+  c[famille] = valide;
   await writeCosmetiquesRaw(JSON.stringify(c));
   return c;
 }
@@ -3698,6 +3744,18 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: center; gap: 9px;
           animation: hub-page-entre 0.28s ease-out both;
         }
+        /* SEULE la Boutique defile. C'est la seule page du hub plus haute que l'ecran, et
+           elle le restera : un catalogue grandit. Jouer et Ordres gardent la regle de la
+           maison -- le hub tient sans defilement.
+           Sans cette ligne, la moitie des etals etait inatteignable AU DOIGT : .hub-pages
+           est en overflow hidden, ce qui laisse passer un scrollIntoView mais refuse le
+           geste. Un contenu qu'on ne peut atteindre qu'en JavaScript n'existe pas.
+           justify-content ramene a flex-start : centre, un contenu plus haut que sa boite
+           deborde des DEUX cotes, et le haut devient injoignable par defilement. */
+        .hub-page.page-boutique {
+          overflow-y: auto; -webkit-overflow-scrolling: touch;
+          justify-content: flex-start;
+        }
         /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
         .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
         /* Le bloc de titre monte CONTRE le bandeau. Les 14 px qui l en separaient se
@@ -3766,6 +3824,37 @@ const APP_STYLES = `
           border: 1px solid var(--plateau-case-bord);
           box-shadow: inset 0 2px 4px rgba(0,0,0,0.7);
         }
+        /* Le deuxieme rayon respire, sinon les deux grilles se touchent et on lit une
+           seule liste de neuf articles au lieu de deux familles. */
+        .boutique-titre.second { margin-top: 20px; }
+        /* La pile de dos : deux cartes decalees, comme celle qu'on pose a cote de sa main.
+           Le rapport 3/4 est celui d'une carte -- l'apercu ne doit pas mentir sur la forme
+           non plus. */
+        .boutique-dos-pile {
+          position: relative; width: 100%; aspect-ratio: 3 / 4;
+          display: block; margin-bottom: 2px;
+        }
+        .boutique-dos {
+          position: absolute; left: 50%; top: 50%; width: 58%; height: 84%;
+          margin: -42% 0 0 -29%; border-radius: 7px; box-sizing: border-box;
+          background: var(--dos-fond);
+          border: 1px solid var(--dos-bord);
+          box-shadow: 0 3px 9px rgba(0,0,0,0.55);
+        }
+        .boutique-dos.b0 { transform: translate(-16%, 4%) rotate(-6deg); }
+        .boutique-dos.b1 { transform: translate(16%, -2%) rotate(5deg); }
+        /* Le medaillon, comme sur la vraie pile. Seule la carte du dessus le porte : deux
+           medaillons a cette taille ne feraient qu'un amas. */
+        .boutique-dos.b1::after {
+          content: ""; position: absolute; left: 50%; top: 50%;
+          width: 34%; height: 24%; margin: -12% 0 0 -17%;
+          border-radius: 50%;
+          background-color: var(--dos-socle);
+          background-image: var(--dos-portrait, none);
+          background-size: cover; background-position: center;
+          border: 1px solid var(--dos-anneau);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+        }
         .boutique-nom {
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
           color: #f0eaf8; margin-top: 4px;
@@ -3781,11 +3870,17 @@ const APP_STYLES = `
         .boutique-carte.choisi .boutique-etat { color: var(--gold-bright); }
         /* La marge du bas n'est pas decorative : sans elle la derniere ligne s'arretait
            au pixel pres sur la barre de navigation, et la page paraissait coupee. */
+        /* La marge du bas n'est pas decorative : la derniere ligne s'arretait au pixel
+           pres sur la barre de navigation, et la page paraissait coupee. */
         .boutique-note {
           font-family: 'Spectral', Georgia, serif; font-style: italic;
           font-size: 11px; color: var(--muted); text-align: center;
-          margin: 12px 0 14px; max-width: 300px; line-height: 1.45;
+          margin: 12px 0 4px; max-width: 300px; line-height: 1.45;
         }
+        /* Le pied de la page, pour que la derniere ligne se detache de la barre du bas au
+           lieu de s'y coller. Pose sur la page et non sur la note : c'est la fin du
+           DEFILEMENT qu'on veut degager, pas le dernier paragraphe. */
+        .boutique-page { padding-bottom: 14px; }
 
         .hub-boutique-vide {
           display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -6743,10 +6838,10 @@ const APP_STYLES = `
         .reserve-dos {
           position: absolute; left: 0; top: 0; width: 38px; height: 54px;
           border-radius: 7px; box-sizing: border-box;
-          background:
+          background: var(--dos-fond,
             radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%),
-            linear-gradient(160deg, #2a2138 0%, #14101d 100%);
-          border: 1px solid rgba(203,164,86,0.5);
+            linear-gradient(160deg, #2a2138 0%, #14101d 100%));
+          border: 1px solid var(--dos-bord, rgba(203,164,86,0.5));
           box-shadow: 0 3px 9px rgba(0,0,0,0.55);
         }
         /* Le motif du dos : un losange dore, simple, qui tiendra lieu de place au vrai
@@ -6757,10 +6852,10 @@ const APP_STYLES = `
           content: ""; position: absolute; left: 50%; top: 50%;
           width: 18px; height: 18px; margin: -9px 0 0 -9px;
           border-radius: 50%;
-          background-color: #8a6f34;
+          background-color: var(--dos-socle, #8a6f34);
           background-image: var(--dos-portrait, none);
           background-size: cover; background-position: center;
-          border: 1px solid rgba(232, 200, 119, 0.75);
+          border: 1px solid var(--dos-anneau, rgba(232, 200, 119, 0.75));
           box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
         }
         .reserve-dos.d0 { transform: translate(0, 4px) rotate(-5deg); }
@@ -6888,10 +6983,10 @@ const APP_STYLES = `
         }
         .reserve-face.arriere {
           transform: rotateY(180deg);
-          background:
+          background: var(--dos-fond,
             radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%),
-            linear-gradient(160deg, #2a2138 0%, #14101d 100%);
-          border: 1px solid rgba(203,164,86,0.5); box-sizing: border-box;
+            linear-gradient(160deg, #2a2138 0%, #14101d 100%));
+          border: 1px solid var(--dos-bord, rgba(203,164,86,0.5)); box-sizing: border-box;
         }
         /* Le meme medaillon que sur la pile en partie : c'est le meme dos. */
         .reserve-face.arriere::after {
@@ -6899,10 +6994,10 @@ const APP_STYLES = `
           width: calc(var(--res-l) * 0.45); height: calc(var(--res-l) * 0.45);
           margin: calc(var(--res-l) * -0.225) 0 0 calc(var(--res-l) * -0.225);
           border-radius: 50%;
-          background-color: #8a6f34;
+          background-color: var(--dos-socle, #8a6f34);
           background-image: var(--dos-portrait, none);
           background-size: cover; background-position: center;
-          border: 1px solid rgba(232, 200, 119, 0.75);
+          border: 1px solid var(--dos-anneau, rgba(232, 200, 119, 0.75));
           box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
         }
         @media (prefers-reduced-motion: reduce) {
@@ -10115,7 +10210,10 @@ export default function Emprise() {
   // montre, et la Reserve tient une carte par Ordre -- ses deux Ordres etaient donc deja
   // connus. Ce qui reste cache, et qui seul compte, c'est l'orientation de ses rangs.
   function dosDeCarte(c) {
-    return { "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none" };
+    return {
+      ...variablesDos(cosmetiques.dos),
+      "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none",
+    };
   }
   // Ce qu'il reste a poser : les cartes des rondes deja jouees sont passees en main.
   function reserveRestante(camp) { return reserveDe(camp).slice(mortSubiteRonde); }
@@ -13107,7 +13205,7 @@ export default function Emprise() {
             onClickCapture={glisseAvaleLeClic}
           >
             {hubPage === "boutique" && (
-              <section key="boutique" className={`hub-page hub-glisse-${hubSens}`} aria-label="Boutique">
+              <section key="boutique" className={`hub-page page-boutique hub-glisse-${hubSens}`} aria-label="Boutique">
                 <div className="boutique-page">
                   <h2 className="boutique-titre">Plateaux</h2>
                   <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
@@ -13118,7 +13216,7 @@ export default function Emprise() {
                         <button
                           key={p.cle}
                           className={`boutique-carte ${choisi ? "choisi" : ""}`}
-                          onClick={() => choisirPlateau(p.cle).then(setCosmetiques)}
+                          onClick={() => choisirCosmetique("plateau", p.cle).then(setCosmetiques)}
                           aria-pressed={choisi}
                           aria-label={`Plateau ${p.nom}. ${p.monde}.${choisi ? " Choisi." : ""}`}
                         >
@@ -13136,8 +13234,37 @@ export default function Emprise() {
                       );
                     })}
                   </div>
+
+                  <h2 className="boutique-titre second">Dos de cartes</h2>
+                  <p className="boutique-sous">L&apos;étoffe de votre Réserve, vue par l&apos;adversaire.</p>
+                  <div className="boutique-grille">
+                    {DOS_CARTES.map((d) => {
+                      const choisi = cosmetiques.dos === d.cle;
+                      return (
+                        <button
+                          key={d.cle}
+                          className={`boutique-carte ${choisi ? "choisi" : ""}`}
+                          onClick={() => choisirCosmetique("dos", d.cle).then(setCosmetiques)}
+                          aria-pressed={choisi}
+                          aria-label={`Dos ${d.nom}. ${d.matiere}.${choisi ? " Choisi." : ""}`}
+                        >
+                          {/* Deux dos poses l'un sur l'autre, comme la pile en partie, avec
+                              un vrai portrait d'Ordre au medaillon : ce qu'on voit ici est
+                              ce qu'on posera a cote de sa main. */}
+                          <span className="boutique-dos-pile" aria-hidden="true">
+                            <span className="boutique-dos b0" style={variablesDos(d.cle)} />
+                            <span className="boutique-dos b1" style={{ ...variablesDos(d.cle), "--dos-portrait": `url("${ORDERS[0].portrait}")` }} />
+                          </span>
+                          <span className="boutique-nom">{d.nom}</span>
+                          <span className="boutique-monde">{d.matiere}</span>
+                          <span className="boutique-etat">{choisi ? "Choisi" : "Offert"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <p className="boutique-note">
-                    Les dos de cartes et les cadres suivront. Rien ici ne s&apos;achète encore.
+                    Les cadres de profil suivront. Rien ici ne s&apos;achète encore.
                   </p>
                 </div>
               </section>
