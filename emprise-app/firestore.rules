@@ -193,7 +193,15 @@ service cloud.firestore {
           // mille supposerait quatre-vingt mille adversaires. La borne est large sans
           // etre ouverte, comme les autres.
           && (!('tournois' in request.resource.data)
-              || (request.resource.data.tournois is int && request.resource.data.tournois >= 0 && request.resource.data.tournois <= 10000));
+              || (request.resource.data.tournois is int && request.resource.data.tournois >= 0 && request.resource.data.tournois <= 10000))
+          // L'Ordre le plus joue : une cle courte, pas un champ de texte deguise. Le
+          // client verifie de son cote qu'elle designe un Ordre qui existe ; ici on borne
+          // seulement ce qu'un document peut contenir.
+          && (!('ordreFavori' in request.resource.data)
+              || (request.resource.data.ordreFavori is string && request.resource.data.ordreFavori.size() <= 30))
+          // Les parties qui ouvrent droit a un titre : le denominateur de la jauge.
+          && (!('combosParties' in request.resource.data)
+              || (request.resource.data.combosParties is int && request.resource.data.combosParties >= 0 && request.resource.data.combosParties <= 1000000));
     }
 
     // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
@@ -252,7 +260,7 @@ service cloud.firestore {
       allow update: if connecte() && moi() == uid
         // adoubementVu : la cérémonie de première ouverture a eu lieu. Un simple témoin,
         // que seul son propriétaire écrit et qui ne sert qu'à ne pas la rejouer.
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)

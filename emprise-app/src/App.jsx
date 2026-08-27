@@ -1304,7 +1304,9 @@ function resumeDeSauvegarde(data) {
     confluence: !!data.confluenceActive,
     chapitre: data.storyChapterKey || null,
     niveau: data.botDifficulty || null,
-    tournoiTour: Number.isInteger(data.tourneyRound) ? data.tourneyRound : null,
+    tournoiTour: data.tourney && data.tourney.active && Number.isInteger(data.tourney.round)
+      ? data.tourney.round
+      : Number.isInteger(data.tourneyRound) ? data.tourneyRound : null,
     posees: bleues + rouges,
     scoreBleu: bleues + (data.firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0),
     scoreRouge: rouges + (data.firstPlayer === "red" ? AVANCE_DU_PREMIER : 0),
@@ -8558,9 +8560,14 @@ export default function Emprise() {
         const entier = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000000, Math.floor(v))) : undefined);
         const combos = (Array.isArray(d.combos) ? d.combos : [])
           .filter((k) => COMBOS.some((c) => c.key === k)).slice(0, 3);
+        // Une cle d'Ordre venue d'ailleurs se verifie comme le reste : seule une cle que
+        // le jeu connait passe.
+        const ordreFavori = ORDERS.some((o) => o.key === d.ordreFavori) ? d.ordreFavori : "";
         return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
-          parties: entier(d.parties), victoires: entier(d.victoires), combos, lu: Date.now() }];
+          parties: entier(d.parties), victoires: entier(d.victoires), combos,
+          ordreFavori, combosParties: entier(d.combosParties), tournois: entier(d.tournois),
+          lu: Date.now() }];
       } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
     const suivant = { ...fichesRef.current };
@@ -9480,16 +9487,26 @@ export default function Emprise() {
   });
   const trophyRef = useRef(null);
   useEffect(() => {
-    const cle = (stats.trophies || 0) + "/" + (titrePrincipal(stats) || "");
+    // La cle couvre TOUT ce qui part ci-dessous. Elle ne portait que les trophees et le
+    // titre : un tournoi gagne n'en rapporte aucun et ne change pas de titre, si bien
+    // que son compteur restait a quai jusqu'a la prochaine partie classee.
+    const cle = [stats.trophies || 0, titrePrincipal(stats) || "", stats.gamesPlayed || 0,
+                 stats.mesVictoires || 0, stats.combosParties || 0, stats.tournoisGagnes || 0].join("/");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
+    const moi = profilPublic();
     updateDoc(doc(db, "users", myUid), { trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" }).catch(() => {});
-    // Ecriture a part, et qui a le droit d'echouer : voir le commentaire de profilPublic.
-    updateDoc(doc(db, "users", myUid), profilPublic()).catch(() => {});
-    // Et celle-ci a part des deux autres. Les regles de /users enumerent les champs
-    // permis ; tant que "tournois" n'y figure pas, cette ecriture est refusee -- seule,
-    // sans entrainer les parties ni les victoires dans sa chute.
-    updateDoc(doc(db, "users", myUid), { tournois: tournoisPublics() }).catch(() => {});
+    // TROIS ecritures, et le decoupage n'est pas un detail. Les regles de /users
+    // enumerent les champs permis, et une liste hasOnly refuse TOUTE l'ecriture des
+    // qu'un champ lui est inconnu. Groupes, ordreFavori et combosParties -- qui n'ont
+    // jamais figure dans cette liste -- emportaient parties, victoires et combos dans
+    // leur chute, depuis le premier jour : aucun ami n'a jamais vu ces chiffres, et le
+    // "?" du panneau n'etait pas une precaution mais le seul affichage possible.
+    // Ce que les regles publiees permettent DEJA :
+    updateDoc(doc(db, "users", myUid), { parties: moi.parties, victoires: moi.victoires, combos: moi.combos }).catch(() => {});
+    // Ce qui attend la publication des regles, et qui a le droit d'echouer seul :
+    updateDoc(doc(db, "users", myUid), { ordreFavori: moi.ordreFavori, combosParties: moi.combosParties,
+                                         tournois: tournoisPublics() }).catch(() => {});
   }, [myUid, monCodeAmi, stats]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
@@ -10018,6 +10035,15 @@ export default function Emprise() {
       // correctif n'en porte pas : elle reprend en partie solo, comme avant.
       setStoryChapterKey(data.storyChapterKey || null);
       setStorySecondPick(data.storySecondPick || null);
+      // Le tournoi solo reprend son tour et son bannissement. Sans cette ligne, la carte
+      // de reprise annoncait "Tournoi, Quart de finale" et le match repris se terminait
+      // sur "Nouvelle partie" : ni ban, ni demi-finale, ni finale, la course perdue apres
+      // le match qu'on venait de nommer. Toujours pose, meme absent de la sauvegarde :
+      // reprendre une partie ordinaire doit ETEINDRE un tournoi reste allume.
+      const tSauve = data.tourney;
+      setTourney(tSauve && tSauve.active
+        ? { active: true, round: tSauve.round || 0, ban: tSauve.ban || null }
+        : { active: false, round: 0, ban: null });
       setAllowUndo(!!data.allowUndo);
       setAllowHint(!!data.allowHint);
       setHistory([]);
@@ -12432,10 +12458,9 @@ export default function Emprise() {
         // Le chapitre et ses assistances font partie de la partie : sans eux, la reprise
         // rendait une partie d'Histoire meconnaissable.
         storyChapterKey, storySecondPick, allowUndo, allowHint,
-        // Le tour du tournoi solo. Pour la carte de reprise seulement : la reprise ne
-        // restaure pas le tournoi (elle ne l'a jamais fait), mais la carte peut au
-        // moins dire ou l'on en etait.
-        tourneyRound: tourney.active ? tourney.round : null,
+        // Le tournoi solo en entier : son tour ET son bannissement. La carte de reprise
+        // le nomme, la reprise doit donc le rendre.
+        tourney,
       };
       sessionStorage.setItem("emprise-save", JSON.stringify(data));
       setSauvegardeReprise(resumeDeSauvegarde(data));
