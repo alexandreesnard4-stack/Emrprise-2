@@ -1157,6 +1157,56 @@ function reserveAutomatique(main) {
 
 const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, tournoisGagnes: 0, tournoisCredites: [], maitriseVersion: MAITRISE_VERSION };
 
+// ---------- Plateaux : la premiere famille de cosmetiques ----------
+// Rien qu'en CSS, sans une seule image : le plateau reste net a toute taille, ne coute
+// aucun telechargement, et un nouveau theme n'est que cinq couleurs de plus.
+// FAILLE est le plateau d'origine, valeur pour valeur -- changer de catalogue ne doit
+// rien changer a ce que voient les joueurs qui n'y touchent pas.
+const PLATEAUX = [
+  { cle: "faille", nom: "Faille", monde: "Le plateau des premiers duels",
+    dalle: "linear-gradient(180deg, #2b2438 0%, #241d31 46%, #17121f 100%)",
+    bord: "rgba(203,164,86,0.16)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.42), rgba(255,255,255,0.028) 62%, rgba(255,255,255,0.045))",
+    caseBord: "rgba(203,164,86,0.09)",
+    lueur: "rgba(255,240,205,0.10)" },
+  { cle: "braise", nom: "Braise", monde: "Les forges éteintes des Cendres",
+    dalle: "linear-gradient(180deg, #38251c 0%, #2b1a14 46%, #1a0f0b 100%)",
+    bord: "rgba(226,133,72,0.22)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.46), rgba(255,146,74,0.035) 62%, rgba(255,168,96,0.06))",
+    caseBord: "rgba(226,133,72,0.12)",
+    lueur: "rgba(255,196,140,0.12)" },
+  { cle: "abysse", nom: "Abysse", monde: "La fosse d'où remontent les Abysses",
+    dalle: "linear-gradient(180deg, #17303a 0%, #10242d 46%, #08141a 100%)",
+    bord: "rgba(86,196,203,0.20)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.46), rgba(96,214,224,0.03) 62%, rgba(120,226,236,0.055))",
+    caseBord: "rgba(86,196,203,0.11)",
+    lueur: "rgba(178,238,246,0.11)" },
+  { cle: "sylve", nom: "Sylve", monde: "Les futaies profondes des Archers",
+    dalle: "linear-gradient(180deg, #21301f 0%, #182518 46%, #0d150d 100%)",
+    bord: "rgba(138,190,104,0.20)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.44), rgba(160,214,124,0.03) 62%, rgba(182,228,148,0.05))",
+    caseBord: "rgba(138,190,104,0.11)",
+    lueur: "rgba(206,238,182,0.11)" },
+  { cle: "ossuaire", nom: "Ossuaire", monde: "La terre sèche des Maudits",
+    dalle: "linear-gradient(180deg, #33302c 0%, #26241f 46%, #15130f 100%)",
+    bord: "rgba(214,203,178,0.20)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.45), rgba(232,224,204,0.03) 62%, rgba(240,234,216,0.05))",
+    caseBord: "rgba(214,203,178,0.11)",
+    lueur: "rgba(244,238,224,0.12)" },
+];
+const PLATEAU_DEFAUT = "faille";
+function plateauDe(cle) { return PLATEAUX.find((p) => p.cle === cle) || PLATEAUX[0]; }
+// Les cinq variables que .table et .cell lisent. Posees sur la dalle, elles descendent
+// d'elles-memes jusqu'aux cases : c'est de l'heritage, pas une regle par case.
+function variablesPlateau(cle) {
+  const p = plateauDe(cle);
+  return {
+    "--plateau-dalle": p.dalle, "--plateau-bord": p.bord,
+    "--plateau-case": p.case, "--plateau-case-bord": p.caseBord,
+    "--plateau-lueur": p.lueur,
+  };
+}
+
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
 // Conséquence à connaître : le point d'équilibre est à 33 % de victoires. En dessous, le
@@ -1730,6 +1780,57 @@ async function resetStats() {
   memoryStats = null;
   await writeStatsRaw(JSON.stringify(DEFAULT_STATS));
   return { ...DEFAULT_STATS };
+}
+
+// ---------- Cosmetiques choisis (meme mecanisme de stockage hybride que les stats) ----------
+// Un seul objet pour toute la famille : le jour ou s'ajoutent les dos de cartes et les
+// cadres, ils prennent leur cle ici et rien d'autre ne bouge.
+const DEFAUT_COSMETIQUES = { plateau: PLATEAU_DEFAUT };
+let memoryCosmetiques = null;
+
+async function readCosmetiquesRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-cosmetiques");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { return null; }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-cosmetiques");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryCosmetiques;
+}
+
+async function writeCosmetiquesRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-cosmetiques", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-cosmetiques", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryCosmetiques = str;
+}
+
+// Une sauvegarde abimee, ou un plateau retire du catalogue depuis, ne doit pas laisser le
+// joueur devant une dalle sans couleur : on retombe toujours sur un theme qui existe.
+async function loadCosmetiques() {
+  const brut = await readCosmetiquesRaw();
+  if (!brut) return { ...DEFAUT_COSMETIQUES };
+  try {
+    const lu = JSON.parse(brut);
+    const plateau = PLATEAUX.some((p) => p.cle === lu.plateau) ? lu.plateau : PLATEAU_DEFAUT;
+    return { ...DEFAUT_COSMETIQUES, ...lu, plateau };
+  } catch (e) { return { ...DEFAUT_COSMETIQUES }; }
+}
+
+async function choisirPlateau(cle) {
+  const c = await loadCosmetiques();
+  c.plateau = PLATEAUX.some((p) => p.cle === cle) ? cle : PLATEAU_DEFAUT;
+  await writeCosmetiquesRaw(JSON.stringify(c));
+  return c;
 }
 
 // ---------- Mode Histoire : progression (même mécanisme de stockage hybride que les stats) ----------
@@ -3619,6 +3720,73 @@ const APP_STYLES = `
           text-transform: uppercase; color: var(--gold-bright); margin: 6px 0 0;
         }
         .hub-page-sous { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
+        /* ---------- Boutique : ce qu'on possede, et bientot ce qu'on achete ---------- */
+        .boutique-page { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 2px; }
+        .boutique-titre {
+          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700; letter-spacing: 0.1em;
+          color: var(--gold-bright); margin: 2px 0 0; text-transform: uppercase;
+        }
+        .boutique-sous {
+          font-family: 'Spectral', Georgia, serif; font-style: italic;
+          font-size: 12px; color: var(--muted); margin: 0 0 10px;
+        }
+        /* Deux colonnes : a une seule, il fallait defiler pour comparer, et comparer est
+           tout ce qu'on vient faire ici. */
+        .boutique-grille {
+          display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+          width: 100%; max-width: 340px;
+        }
+        .boutique-carte {
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
+          padding: 9px 7px 8px; border-radius: 13px; cursor: pointer;
+          background: linear-gradient(180deg, rgba(36,28,52,0.82), rgba(24,18,34,0.82));
+          border: 1px solid rgba(203,164,86,0.20);
+          font: inherit; color: inherit; text-align: center;
+          transition: transform .12s ease-out, border-color .2s;
+        }
+        .boutique-carte:active { transform: scale(0.97); }
+        /* Le choix se dit par la bordure ET par le mot en dessous : jamais par la seule
+           couleur, qui ne se voit pas de la meme facon pour tout le monde. */
+        .boutique-carte.choisi {
+          border-color: var(--gold-bright);
+          box-shadow: 0 0 0 1px var(--gold-bright), 0 4px 16px rgba(232,200,119,0.16);
+        }
+        /* L'apercu porte les memes variables que la dalle de jeu : trois colonnes, deux
+           rangees, de quoi lire la pierre ET le creux d'une case. */
+        .boutique-apercu {
+          display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
+          width: 100%; padding: 6px; border-radius: 9px;
+          background: var(--plateau-dalle);
+          border: 1px solid var(--plateau-bord);
+          box-shadow: inset 0 1px 0 var(--plateau-lueur), inset 0 0 14px rgba(0,0,0,0.45);
+        }
+        .boutique-apercu-case {
+          aspect-ratio: 3 / 4; border-radius: 4px;
+          background: var(--plateau-case);
+          border: 1px solid var(--plateau-case-bord);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.7);
+        }
+        .boutique-nom {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          color: #f0eaf8; margin-top: 4px;
+        }
+        .boutique-monde {
+          font-family: 'Spectral', Georgia, serif; font-style: italic;
+          font-size: 10px; line-height: 1.3; color: var(--muted);
+        }
+        .boutique-etat {
+          font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase;
+          color: #6d6480; margin-top: 2px;
+        }
+        .boutique-carte.choisi .boutique-etat { color: var(--gold-bright); }
+        /* La marge du bas n'est pas decorative : sans elle la derniere ligne s'arretait
+           au pixel pres sur la barre de navigation, et la page paraissait coupee. */
+        .boutique-note {
+          font-family: 'Spectral', Georgia, serif; font-style: italic;
+          font-size: 11px; color: var(--muted); text-align: center;
+          margin: 12px 0 14px; max-width: 300px; line-height: 1.45;
+        }
+
         .hub-boutique-vide {
           display: flex; flex-direction: column; align-items: center; gap: 8px;
           margin: auto 0; padding: 46px 20px;
@@ -5297,11 +5465,11 @@ const APP_STYLES = `
            Le padding passe de 8 a 13 px : sans marge, un rebord n'a nulle part ou
            exister, il se confondrait avec la premiere rangee de cases. */
         .table { position: relative; display: grid; isolation: isolate; grid-template-columns: repeat(var(--board-cols, 5), 1fr); gap: 5px;
-          background: linear-gradient(180deg, #2b2438 0%, #241d31 46%, #17121f 100%);
+          background: var(--plateau-dalle, linear-gradient(180deg, #2b2438 0%, #241d31 46%, #17121f 100%));
           padding: 13px; border-radius: 16px;
-          border: 1px solid rgba(203,164,86,0.16);
+          border: 1px solid var(--plateau-bord, rgba(203,164,86,0.16));
           box-shadow:
-            inset 0 1.5px 0 rgba(255,240,205,0.10),
+            inset 0 1.5px 0 var(--plateau-lueur, rgba(255,240,205,0.10)),
             inset 0 -2px 3px rgba(0,0,0,0.75),
             inset 0 0 46px rgba(0,0,0,0.5),
             0 3px 0 rgba(10,8,14,0.9),
@@ -5622,11 +5790,11 @@ const APP_STYLES = `
            Le liseré dore n'est pas supprime : il devient un filet grave au fond, discret,
            pour que la case jouable (qui garde un or franc) tranche enfin nettement. */
         .cell { position: relative; width: clamp(50px, 16vw, 66px); height: clamp(68px, 21vw, 88px); border-radius: 9px;
-          background: linear-gradient(180deg, rgba(0,0,0,0.42), rgba(255,255,255,0.028) 62%, rgba(255,255,255,0.045));
-          border: 1px solid rgba(203,164,86,0.09);
+          background: var(--plateau-case, linear-gradient(180deg, rgba(0,0,0,0.42), rgba(255,255,255,0.028) 62%, rgba(255,255,255,0.045)));
+          border: 1px solid var(--plateau-case-bord, rgba(203,164,86,0.09));
           box-shadow:
             inset 0 3px 6px rgba(0,0,0,0.72),
-            inset 0 -1.5px 0 rgba(255,240,205,0.07),
+            inset 0 -1.5px 0 var(--plateau-lueur, rgba(255,240,205,0.07)),
             inset 0 0 14px rgba(0,0,0,0.45);
           display: flex; align-items: center; justify-content: center; }
         /* La case ou l'on peut poser : la pierre s'allume par en dessous, comme si la
@@ -9261,6 +9429,10 @@ export default function Emprise() {
   // Une fois le numero devoile, il reste. Sans ce verrou il disparaitrait des que le
   // joueur efface son nom pour se raviser, et se rejouerait a la frappe suivante :
   // un clignotement, la ou on voulait un evenement.
+  // Les cosmetiques choisis. Charges une fois au demarrage ; le defaut tient l'affichage
+  // en attendant, et c'est le plateau d'origine -- rien ne clignote.
+  const [cosmetiques, setCosmetiques] = useState(DEFAUT_COSMETIQUES);
+  useEffect(() => { loadCosmetiques().then(setCosmetiques); }, []);
   const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
   // Le nom valide qui attend la fin du devoilement. Tant qu'il est la, l'ecran de saisie
   // reste, le champ se tait, et le bouton ne repond plus.
@@ -12936,13 +13108,37 @@ export default function Emprise() {
           >
             {hubPage === "boutique" && (
               <section key="boutique" className={`hub-page hub-glisse-${hubSens}`} aria-label="Boutique">
-                <div className="hub-boutique-vide" role="status">
-                  <svg className="hub-boutique-icone" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M5 8l1.5-4h11L19 8v12H5V8zm2.3-2l-.75 2h10.9l-.75-2H7.3zM7 10v8h10v-8H7zm3 2h4v2h-4v-2z" />
-                  </svg>
-                  <h2 className="hub-boutique-titre">Boutique</h2>
-                  <p className="hub-boutique-texte">Prochainement.</p>
-                  <p className="hub-boutique-sous">Les marchands de la Faille préparent leurs étals.</p>
+                <div className="boutique-page">
+                  <h2 className="boutique-titre">Plateaux</h2>
+                  <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
+                  <div className="boutique-grille">
+                    {PLATEAUX.map((p) => {
+                      const choisi = cosmetiques.plateau === p.cle;
+                      return (
+                        <button
+                          key={p.cle}
+                          className={`boutique-carte ${choisi ? "choisi" : ""}`}
+                          onClick={() => choisirPlateau(p.cle).then(setCosmetiques)}
+                          aria-pressed={choisi}
+                          aria-label={`Plateau ${p.nom}. ${p.monde}.${choisi ? " Choisi." : ""}`}
+                        >
+                          {/* Une vraie dalle, de vraies cases, les memes variables qu'en
+                              partie : l'apercu ne peut pas mentir sur ce qu'on aura. */}
+                          <span className="boutique-apercu" style={variablesPlateau(p.cle)} aria-hidden="true">
+                            {[0, 1, 2, 3, 4, 5].map((i) => <span key={i} className="boutique-apercu-case" />)}
+                          </span>
+                          <span className="boutique-nom">{p.nom}</span>
+                          <span className="boutique-monde">{p.monde}</span>
+                          {/* Le mot ne remplace pas la bordure doree : la couleur seule ne
+                              doit jamais porter une information a elle toute seule. */}
+                          <span className="boutique-etat">{choisi ? "Choisi" : "Offert"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="boutique-note">
+                    Les dos de cartes et les cadres suivront. Rien ici ne s&apos;achète encore.
+                  </p>
                 </div>
               </section>
             )}
@@ -15365,6 +15561,7 @@ export default function Emprise() {
           <div
             className={`table ${areneActive ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""}`}
             style={{
+              ...variablesPlateau(cosmetiques.plateau),
               "--board-cols": COLS,
               ...(areneActive ? { "--arene": `url(${ARENES[areneActive].img})`, "--arene-marge": ARENES[areneActive].marge, "--arene-braise": ARENES[areneActive].braise } : {}),
             }}
