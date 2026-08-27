@@ -406,7 +406,9 @@ const APERCU_MS = 20000;
 // Minuteur du choix des Ordres, en ligne uniquement : sans lui, un joueur qui pose son
 // telephone bloque l'autre sur un ecran d'attente. A l'echeance, la selection en cours
 // est confirmee ; si elle est incomplete, deux Ordres sont tires au sort.
-const ORDRES_SECONDS = 60;
+// 90 et non plus 60 : depuis que la Reserve existe, choisir ses Ordres c'est aussi
+// preparer ce qu'on gardera de cote. Trente secondes de plus, a la demande du Commandant.
+const ORDRES_SECONDS = 90;
 const RESERVE_SECONDS = 30;                // le meme compte a rebours, pour la Reserve
 // Passé de 60 à 105 s avec la main en éventail : les cartes ne sont plus toutes visibles
 // d'un coup, il faut déployer chaque Ordre pour lire ses rangs avant de choisir. Une
@@ -476,10 +478,33 @@ const TUTORIAL_STEPS = [
   },
   {
     kind: "info",
+    title: "La Réserve et la Mort Subite",
+    text: "Avant chaque duel, vous gardez deux cartes de côté : votre Réserve, une par Ordre. Le camp qui joue en premier part avec 2 points d'avance au score. Et si le duel s'achève à égalité parfaite, la Mort Subite tranche : chaque camp pose une carte de sa Réserve sur les cases restées vides, et le duel continue jusqu'à ce qu'un vainqueur se dégage.",
+  },
+  {
+    kind: "info",
     title: "Vous êtes prêt !",
     text: "C'est tout ce qu'il faut savoir pour commencer. Chaque Ordre a sa propre capacité, vous les découvrirez en jouant. Bonne chance, Commandant.",
   },
 ];
+
+// Les modes qu'un defi entre amis peut prendre. Deux pour l'instant : le duel tel qu'on
+// le connait, et le tirage au sort des Ordres -- la meme partie, mais personne ne
+// choisit sa main, ce qui fait de chaque duel une surprise. La Confluence en ligne
+// demanderait de synchroniser un draft entier : elle viendra dans sa propre etape.
+const DEFI_MODES = [
+  { cle: "classique", nom: "Duel classique", detail: "Chacun choisit ses 2 Ordres" },
+  { cle: "aleatoire", nom: "Ordres tirés au sort", detail: "Le jeu compose la main des deux camps" },
+];
+function defiModeNom(cle) {
+  const m = DEFI_MODES.find((x) => x.cle === cle);
+  return m ? m.nom : DEFI_MODES[0].nom;
+}
+// L'etiquette complete d'un defi, la meme partout : bandeau, encart des Amis, ecran
+// d'attente. Une seule fonction, pour que trois ecrans ne racontent pas trois choses.
+function defiEtiquette(mode, herauts) {
+  return defiModeNom(mode) + (herauts ? " · Capacités supérieures" : "");
+}
 
 const DIFFICULTIES = [
   { key: "debutant", label: "Novice", desc: "Coups aléatoires" },
@@ -4286,6 +4311,36 @@ const APP_STYLES = `
            bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
+        /* ---------- La composition d'un defi ---------- */
+        .defi-config { max-width: 330px; }
+        .defi-config-libelle {
+          font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+          color: #6d6480; margin: 10px 0 0; width: 100%; text-align: left;
+        }
+        .defi-config-mode {
+          display: flex; flex-direction: column; gap: 2px; width: 100%;
+          padding: 9px 12px; margin-top: 7px; border-radius: 11px; cursor: pointer;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.22);
+          font: inherit; color: inherit; text-align: left;
+        }
+        /* Le choix se dit par la bordure ET par aria-pressed : jamais par la couleur
+           seule. */
+        .defi-config-mode.choisi {
+          border-color: var(--gold-bright);
+          box-shadow: 0 0 0 1px var(--gold-bright);
+          background: rgba(203,164,86,0.10);
+        }
+        .defi-config-mode b { font-family: 'Cinzel', serif; font-size: 13px; }
+        .defi-config-mode span { font-size: 11px; color: var(--muted); line-height: 1.35; }
+        .defi-config-herauts {
+          display: flex; align-items: center; justify-content: space-between; gap: 10px;
+          width: 100%; margin: 12px 0 14px; padding: 9px 12px; border-radius: 11px;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.22);
+          font: inherit; color: inherit; cursor: pointer; text-align: left;
+        }
+        .defi-config-herauts b { font-family: 'Cinzel', serif; font-size: 13px; display: block; }
+        .defi-config-herauts-texte span { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
         .defi-bandeau {
           position: absolute; left: 0; right: 0; bottom: 100%; z-index: 46;
           box-sizing: border-box;
@@ -4378,6 +4433,8 @@ const APP_STYLES = `
         /* 11,5 px et non 12,5 : mesure faite, un pseudo de quinze caracteres deborde a
            12,5 px sur un ecran de 375 px, et le nom se coupait justement la ou il compte.
            L'ellipse reste en dernier recours, elle ne doit jamais servir. */
+        .defi-bandeau-mode { font-size: 10px; color: var(--muted); margin-top: 1px; }
+        .amis-defi-mode { display: block; font-size: 10.5px; color: var(--muted); margin-top: 1px; }
         .defi-bandeau-titre {
           font-size: 11.5px; color: var(--bone);
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -8834,7 +8891,16 @@ export default function Emprise() {
   const [avisAmis, setAvisAmis] = useState(null);               // { texte, bon }
   const [amiARetirer, setAmiARetirer] = useState(null);
   const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
-  const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t }
+  const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t, mode, herauts }
+  // La fenetre de composition d'un defi : a qui, dans quel mode, avec ou sans Herauts.
+  const [defiConfig, setDefiConfig] = useState(null);           // { uid, nom, mode, herauts }
+  // Les options de la partie EN COURS, relues du document a chaque instantane : une
+  // partie sans options (Classe, tournoi, ancien defi) retombe sur les valeurs par
+  // defaut, l'etat se nettoie donc tout seul d'une partie a l'autre.
+  const [partieDefi, setPartieDefi] = useState({ mode: "classique", herauts: false });
+  // Les options du defi RECU, lues dans le document de la partie qui nous attend :
+  // l'invitation ne porte que le code, la liste fermee des regles l'exige.
+  const [defiRecuInfos, setDefiRecuInfos] = useState(null);     // { code, mode, herauts }
   // Cette partie a-t-elle ete ouverte depuis l'ecran des Amis ? On revient d'ou l'on
   // venait : celui qui defie un ami, ou qui releve son defi, n'a jamais vu l'ecran des
   // codes de partie. L'y deposer en quittant lui montrait une page ou il n'avait rien a
@@ -8926,6 +8992,21 @@ export default function Emprise() {
     .sort((a, b) => b.t - a.t);
   // On n'en montre qu'UN, le plus recent : deux bandeaux empiles ne se lisent pas.
   const defiRecu = defisValides[0] || null;
+  // Ses options se lisent dans le document de la partie qui nous attend. Le garde
+  // « vivant » ecarte une reponse arrivee apres qu'un autre defi a pris la place.
+  useEffect(() => {
+    if (!defiRecu) { setDefiRecuInfos(null); return; }
+    let vivant = true;
+    getDoc(doc(db, "games", defiRecu.code))
+      .then((snap) => {
+        if (!vivant) return;
+        const d = snap.exists() ? snap.data() : {};
+        setDefiRecuInfos({ code: defiRecu.code, mode: d.defiMode || "classique", herauts: !!d.defiHerauts });
+      })
+      .catch(() => { if (vivant) setDefiRecuInfos({ code: defiRecu.code, mode: "classique", herauts: false }); });
+    return () => { vivant = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defiRecu && defiRecu.code]);
   // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
   const demandesVisibles = demandesRecues.filter((d) => !bloques.some((b) => b.uid === d.uid));
   // La pastille ne compte QUE les demandes d'ami. Un defi n'y figure plus : il s'annonce
@@ -9069,15 +9150,16 @@ export default function Emprise() {
   // Defier : on cree la partie comme pour « Jouer avec un ami », puis on depose le code
   // chez l'ami. Une seule invitation par inviteur (le document porte son uid) : une
   // nouvelle partie remplace la precedente.
-  async function defierAmi(uidAmi) {
+  async function defierAmi(uidAmi, options) {
     // Le defi s'annonce AVANT la creation. L'ecran d'attente choisit sur ce seul indice
     // entre « voici le code a partager » et « defi envoye a X » — et depuis qu'il
     // s'affiche des la creation de la partie, au lieu d'apres le choix des Ordres, le
     // poser seulement une fois l'invitation ecrite laissait passer une image du code.
     // Un code que l'ami defie n'aura jamais a taper : le montrer, meme un instant, c'est
     // lui demander de faire un travail qui ne le concerne pas.
-    setDefiEnvoye({ uid: uidAmi, t: Date.now() });
-    const code = await creerPartieEnLigne();
+    const opts = { mode: (options && options.mode) || "classique", herauts: !!(options && options.herauts) };
+    setDefiEnvoye({ uid: uidAmi, t: Date.now(), mode: opts.mode, herauts: opts.herauts });
+    const code = await creerPartieEnLigne(opts);
     // Sans ce message, un echec de creation laissait le bouton « Defier » sans le moindre
     // effet visible : le joueur appuyait dans le vide.
     if (!code) {
@@ -9184,7 +9266,7 @@ export default function Emprise() {
             )}
           </span>
         </div>
-        <button className="amis-btn principal" onClick={() => defierAmi(a.uid)}>Défier</button>
+        <button className="amis-btn principal" onClick={() => setDefiConfig({ uid: a.uid, nom, mode: "classique", herauts: false })}>Défier</button>
         {!compact && (
           <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: a.uid, nom, contexte: "ami" })}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
@@ -9286,6 +9368,9 @@ export default function Emprise() {
       <div className="amis-defi" role="status">
         <span className="amis-defi-texte">
           <b>{nom}</b> vous défie
+          {defiRecuInfos && defiRecuInfos.code === defiRecu.code && (
+            <span className="amis-defi-mode">{defiEtiquette(defiRecuInfos.mode, defiRecuInfos.herauts)}</span>
+          )}
           <span className="amis-defi-temps" aria-label={`Il reste ${Math.ceil(s / 60)} minutes`}>{minuterie}</span>
         </span>
         <div className="amis-defi-boutons">
@@ -10776,7 +10861,7 @@ export default function Emprise() {
   // code, et deux appelants.
   function createOnlineGame() { setDefiEnvoye(null); return creerPartieEnLigne(); }
 
-  async function creerPartieEnLigne() {
+  async function creerPartieEnLigne(optionsDefi) {
     statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return null; }
     setOnlineError("");
@@ -10796,6 +10881,12 @@ export default function Emprise() {
       turn: premierEnLigne, firstPlayer: premierEnLigne, // tiré une seule fois par l'hôte : l'autre client lira cette valeur
       gameOver: false,
       bluePseudo: pseudo || "", redPseudo: "",
+      // Les options d'un defi entre amis. Dans le DOCUMENT, jamais dans un etat local :
+      // les deux appareils les lisent au meme endroit, et une reprise les retrouve.
+      // « Jouer avec un ami » sans options ecrit les valeurs par defaut : memes parties
+      // qu'avant, rien ne change pour qui ne compose pas son defi.
+      defiMode: (optionsDefi && optionsDefi.mode) || "classique",
+      defiHerauts: !!(optionsDefi && optionsDefi.herauts),
     };
     // Un code tiré au hasard peut retomber sur une partie déjà existante : on crée dans
     // une transaction qui échoue si le document existe, et on retire un autre code —
@@ -11069,6 +11160,9 @@ export default function Emprise() {
         }
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
         setAdvPresent(!!(data.blueUid && data.redUid));
+        // Le mode du defi et les Herauts, relus du document : valables pour les deux
+        // roles, et apres une reprise aussi.
+        setPartieDefi({ mode: data.defiMode || "classique", herauts: !!data.defiHerauts });
         setAdvPret(onlineRole === "blue" ? !!data.redOrderKeys : !!data.blueOrderKeys);
         // Reprise alors que la partie n'avait pas encore démarré : si mes Ordres
         // n'étaient pas choisis, il faut revenir à l'écran de choix. Sans ça le joueur
@@ -11467,6 +11561,16 @@ export default function Emprise() {
   // lettres dans une conversation est plus pénible que sur un clavier. L'API n'existe
   // qu'en contexte sécurisé (https ou localhost) : en cas d'échec on ne dit rien, le
   // code reste affiché en grand juste au-dessus.
+  // Meme geste que pour l'identifiant d'ami : la feuille de partage du telephone si elle
+  // existe, la copie sinon. Un code se TAPE moins qu'il ne s'envoie.
+  async function partagerCodeTournoi() {
+    if (!tournoiOnlineId) return;
+    const texte = `Rejoins mon tournoi EMPRISE, huit Commandants : code ${tournoiOnlineId}`;
+    if (navigator.share) {
+      try { await navigator.share({ text: texte }); return; } catch (e) { /* annule : on copie */ }
+    }
+    copierCodeTournoi();
+  }
   async function copierCodeTournoi() {
     if (!tournoiOnlineId) return;
     try {
@@ -11935,13 +12039,21 @@ export default function Emprise() {
   function commencerReserveEnLigne(picked) {
     const chosen = picked && picked.length === 2 ? picked : null;
     if (!chosen || !onlineGameId || !onlineRole) return;
-    const hand = makeHand(chosen[0], chosen[1]);
-    // Pas de Heraut en ligne : les capacites superieures ne se jouent qu'hors classement.
+    // Les capacites superieures ne s'invitent en ligne QUE si le defi les a demandees --
+    // jamais en Classe ni en tournoi, dont les documents ne portent pas l'option. TOUS
+    // les Herauts, pour les DEUX camps : la version « chacun ses Herauts gagnes » aurait
+    // avantage le plus assidu, et un defi est une fete, pas un examen.
+    const brute = makeHand(chosen[0], chosen[1]);
+    const hand = partieDefi.herauts ? applyAllHeroesToHand(brute) : brute;
     if (onlineRole === "blue") { setBlueOrders(chosen); setBlueHand(hand); }
     else { setRedOrders(chosen); setRedHand(hand); }
     setPickerChoice([]);
     setReserveChoix([]);
-    setReserveSource(cartesPourReserve(chosen));
+    // La Reserve recoit le MEME habillage que la main : sans cela, mesure sur une vraie
+    // partie, les mains etaient a 8 Herauts sur 8 et la Reserve a 0 -- en Mort Subite la
+    // carte posee aurait perdu sa capacite superieure.
+    const sourceReserve = cartesPourReserve(chosen);
+    setReserveSource(partieDefi.herauts ? applyAllHeroesToHand(sourceReserve) : sourceReserve);
     setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
   }
 
@@ -12996,6 +13108,19 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteurOrdresActif, tempsOrdres]);
 
+  // Mode « Ordres tirés au sort » : le jeu compose la main, le Commandant ne garde que
+  // le choix de sa Reserve. Le tirage ne part qu'une fois par partie et par role -- la
+  // cle du garde le jure, meme si l'effet se rejoue.
+  const ordresTiresRef = useRef(null);
+  useEffect(() => {
+    if (mode !== "online" || phase !== "select-blue" || partieDefi.mode !== "aleatoire") return;
+    const cle = onlineGameId + "/" + onlineRole;
+    if (ordresTiresRef.current === cle) return;
+    ordresTiresRef.current = cle;
+    chooseRandomOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, phase, partieDefi, onlineGameId, onlineRole]);
+
   // Minuteur du choix de la Reserve, meme regle que celui des Ordres : en ligne
   // seulement, puisque hors ligne personne n'attend en face.
   const minuteurReserveActif = mode === "online" && !gameOver
@@ -13013,8 +13138,14 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteurReserveActif, tempsReserve]);
 
+  // Le tour d'en face, en ligne : le minuteur tourne aussi, pour l'AFFICHER. Aucun coup
+  // automatique, aucun forfait ne part de cette branche-la. L'horloge d'en face est
+  // MESUREE ICI, depuis l'instant ou notre ecran a vu le tour changer -- la meme base que
+  // le garde-fou de forfait. Une estimation honnete, pas une verite d'horloge.
+  const tourEnLigneAdverse = mode === "online" && phase === "play" && !gameOver
+    && !!onlineRole && turn !== onlineRole;
   useEffect(() => {
-    if (!isHumanTurn || testMode) return; // pas de minuteur en mode test
+    if ((!isHumanTurn && !tourEnLigneAdverse) || testMode) return; // pas de minuteur en mode test
     if (timeLeft <= 0 && mode !== "online") {
       // Hors ligne : temps écoulé, un coup aléatoire est joué automatiquement — les
       // joueurs sont dans la même pièce, la partie ne doit jamais rester figée.
@@ -13029,7 +13160,7 @@ export default function Emprise() {
     // joueur ; au bout de 2 tours complets sans jouer, son propre client constate le
     // forfait (transaction, seulement si c'est toujours son tour). Le garde-fou de
     // l'adversaire reste en secours si cet appareil a disparu.
-    if (mode === "online" && timeLeft <= -TURN_SECONDS) {
+    if (mode === "online" && turn === onlineRole && timeLeft <= -TURN_SECONDS) {
       if (!autoForfaitRef.current) {
         autoForfaitRef.current = true;
         deposerAbandon(onlineGameId, onlineRole, "forfait", (d) => d.turn === onlineRole)
@@ -13040,7 +13171,7 @@ export default function Emprise() {
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHumanTurn, timeLeft, turn, board, blueHand, redHand]);
+  }, [isHumanTurn, tourEnLigneAdverse, timeLeft, turn, board, blueHand, redHand]);
 
   // Minuteur du draft (15s) : ne tourne que pour un choix HUMAIN — jamais pendant le tour du
   // bot en Confluence contre bot, qui pioche lui-même via l'effet dédié ci-dessus.
@@ -13470,6 +13601,10 @@ export default function Emprise() {
                   <img className="defi-bandeau-medaillon" src="/icones/amis.webp" alt="" width="34" height="34" />
                   <div className="defi-bandeau-corps">
                     <div className="defi-bandeau-titre"><b>{nom}</b> vous défie</div>
+                    {/* Le mode du duel : on sait ou l'on met les pieds AVANT de relever. */}
+                    {defiRecuInfos && defiRecuInfos.code === defiRecu.code && (
+                      <div className="defi-bandeau-mode">{defiEtiquette(defiRecuInfos.mode, defiRecuInfos.herauts)}</div>
+                    )}
                     {/* Pas de decompte ici : le bandeau ne vit que dix secondes, annoncer
                         un temps qui court neuf minutes au-dessus d'une barre qui s'en va
                         tout de suite melangeait deux horloges. Le temps qui reste se lit
@@ -14315,7 +14450,7 @@ export default function Emprise() {
               <h2>{TUTORIAL_STEPS[tut.stepIdx].title}</h2>
               <div className="rules-p tut-text">{TUTORIAL_STEPS[tut.stepIdx].text}</div>
               <button className="reset-btn" onClick={nextTutorialStep}>
-                {tut.stepIdx === 0 ? "Commencer" : "Terminer"}
+                {tut.stepIdx === 0 ? "Commencer" : tut.stepIdx === TUTORIAL_STEPS.length - 1 ? "Terminer" : "Continuer"}
               </button>
               {tut.stepIdx === 0 && (
                 <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
@@ -14829,6 +14964,11 @@ export default function Emprise() {
                       <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                     </svg>
                   </button>
+                  <button className="bouton-copier" onClick={partagerCodeTournoi} aria-label="Envoyer le code" title="Envoyer le code">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
                 <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
@@ -15140,8 +15280,13 @@ export default function Emprise() {
                 return (
                   <>
                     <div className="sub">Défi envoyé à <b>{nom}</b></div>
+                    {/* Ce qu'on a compose : le defieur relit son propre choix. */}
+                    <div className="sub" style={{ marginTop: 2, opacity: 0.8 }}>
+                      {defiEtiquette(defiEnvoye.mode || "classique", !!defiEnvoye.herauts)}
+                    </div>
                     <div className="sub" style={{ marginTop: 4 }}>
-                      {longtemps ? `${nom} n'a pas répondu.`
+                      {advPresent ? `${nom} a relevé le défi ! Il compose sa main...`
+                        : longtemps ? `${nom} n'a pas répondu.`
                         : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour.`
                         : "En attente de sa réponse..."}
                     </div>
@@ -15658,7 +15803,9 @@ export default function Emprise() {
             {mainCamp(campHaut)}
           </div>
 
-          {isHumanTurn && turn === campHaut && !testMode && <TimerBar timeLeft={timeLeft} />}
+          {/* En ligne, campHaut est TOUJOURS l'adversaire : sa barre s'affiche pendant
+              son tour, mesuree depuis notre ecran. En local, la regle d'origine. */}
+          {((isHumanTurn && turn === campHaut) || tourEnLigneAdverse) && !testMode && <TimerBar timeLeft={timeLeft} />}
 
           {/* ═══ TEMPORAIRE — sélecteur d'arène, à retirer avant publication ═══ */}
           {testMode && (
@@ -16096,6 +16243,44 @@ export default function Emprise() {
 
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
+      {/* La composition d'un defi : le mode, puis les Herauts, puis l'envoi. Par-dessus
+          l'ecran des Amis, d'ou l'on vient. */}
+      {defiConfig && (
+        <div className="info-overlay" onClick={() => setDefiConfig(null)}>
+          <div className="info-panel defi-config" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Défier {defiConfig.nom}</div>
+            <div className="defi-config-libelle">Le mode du duel</div>
+            {DEFI_MODES.map((m) => (
+              <button
+                key={m.cle}
+                className={`defi-config-mode ${defiConfig.mode === m.cle ? "choisi" : ""}`}
+                aria-pressed={defiConfig.mode === m.cle}
+                onClick={() => setDefiConfig((d) => ({ ...d, mode: m.cle }))}
+              >
+                <b>{m.nom}</b>
+                <span>{m.detail}</span>
+              </button>
+            ))}
+            <button
+              className="defi-config-herauts"
+              aria-pressed={defiConfig.herauts}
+              onClick={() => setDefiConfig((d) => ({ ...d, herauts: !d.herauts }))}
+            >
+              <span className="defi-config-herauts-texte">
+                <b>Capacités supérieures</b>
+                <span>Les Hérauts des dix Ordres, pour les deux camps</span>
+              </span>
+              <div className={`settings-bascule ${defiConfig.herauts ? "on" : ""}`} aria-hidden="true"><span /></div>
+            </button>
+            <button
+              className="reset-btn"
+              onClick={() => { const d = defiConfig; setDefiConfig(null); defierAmi(d.uid, { mode: d.mode, herauts: d.herauts }); }}
+            >Envoyer le défi</button>
+            <button className="landing-link" onClick={() => setDefiConfig(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
       {profilAdverse && !signalement && !blocageAConfirmer && (() => {
         // Le document de PARTIE passe avant la fiche publique : il arrive toujours, la ou
         // la fiche attend que les regles de /users soient publiees.
