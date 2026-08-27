@@ -5518,13 +5518,22 @@ const APP_STYLES = `
         }
         .cer-rouleau-bande {
           display: flex; flex-direction: column;
-          transform: translateY(0);
-          /* La courbe freine longuement en fin de course : les derniers crans se lisent
-             un a un, comme les rouleaux d'une machine qui se calent. */
-          transition: transform 0.9s cubic-bezier(0.12, 0.68, 0.22, 1);
+          /* Une ANIMATION et non une transition : une transition ne joue jamais sur un
+             premier rendu, or le badge ne se monte qu'apres la ceremonie de victoire --
+             les rouleaux naissaient poses. Une animation part au montage, ou qu'il ait
+             lieu. La courbe freine longuement en fin de course : les derniers crans se
+             lisent un a un, comme les rouleaux d'une machine qui se calent.
+             both : avant le delai la bande attend a zero, apres la course elle reste
+             posee sur son chiffre. */
+          animation: cer-rouleau-defile 0.9s cubic-bezier(0.12, 0.68, 0.22, 1) both;
+        }
+        @keyframes cer-rouleau-defile {
+          from { transform: translateY(0); }
+          to { transform: translateY(var(--rouleau-fin, 0)); }
         }
         .cer-rouleau-chiffre { display: block; height: 1em; line-height: 1; text-align: center; }
-        .reduced-motion .cer-rouleau-bande { transition: none; }
+        /* Mouvement reduit : le style en ligne pose deja la bande sur son chiffre. */
+        .reduced-motion .cer-rouleau-bande { animation: none; }
         .cer-trophees.gain { color: var(--gold-bright); border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.1); }
         .cer-trophees.perte { color: var(--red-bright); border-color: rgba(224,101,90,0.5); background: rgba(224,101,90,0.1); }
         @keyframes cer-trophees-entree {
@@ -12364,24 +12373,6 @@ export default function Emprise() {
     return () => window.removeEventListener("popstate", surRetour);
   }, []);
 
-  // La machine a sous du bilan. bilanRoule passe a vrai apres un court silence : les
-  // rouleaux, montes a zero, recoivent alors leur transformation finale et la transition
-  // CSS fait tout le voyage -- aucun setState par image, rien qui se repeigne.
-  // Le double requestAnimationFrame n'est pas un ornement : il garantit que la position
-  // de DEPART des rouleaux a ete peinte avant qu'on demande l'arrivee. Sans lui, le
-  // navigateur fusionnait les deux etats et les rouleaux apparaissaient deja poses --
-  // exactement le "je ne vois pas l'animation" qu'on corrige.
-  const [bilanRoule, setBilanRoule] = useState(false);
-  useEffect(() => {
-    if (!partieClassee || !onlineRole || !gameOver) { setBilanRoule(false); return; }
-    if (reducedMotion) { setBilanRoule(true); return; }
-    let image = 0;
-    const lancer = setTimeout(() => {
-      image = requestAnimationFrame(() => { image = requestAnimationFrame(() => setBilanRoule(true)); });
-    }, BILAN_DECOMPTE_DELAI_MS);
-    return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
-  }, [partieClassee, onlineRole, gameOver, reducedMotion]);
-
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
@@ -12401,11 +12392,15 @@ export default function Emprise() {
             const duree = BILAN_ROULEAU_MS + i * BILAN_ROULEAU_ECART_MS;
             return (
               <span key={i} className="cer-rouleau">
+                {/* L'animation part au MONTAGE du badge : c'est ce qui la met sous les
+                    yeux, quel que soit le temps que la ceremonie a pris avant lui. Le
+                    point d'arrivee voyage en variable CSS, lue par les keyframes element
+                    par element. Mouvement reduit : la bande nait posee, sans rouler. */}
                 <span
                   className="cer-rouleau-bande"
-                  style={bilanRoule
-                    ? { transform: `translateY(${-pas}em)`, transitionDuration: reducedMotion ? "0s" : duree + "ms" }
-                    : undefined}
+                  style={reducedMotion
+                    ? { transform: `translateY(${-pas}em)` }
+                    : { "--rouleau-fin": `${-pas}em`, animationDuration: duree + "ms", animationDelay: BILAN_DECOMPTE_DELAI_MS + "ms" }}
                 >
                   {bande.map((n, k) => <span key={k} className="cer-rouleau-chiffre">{n}</span>)}
                 </span>
