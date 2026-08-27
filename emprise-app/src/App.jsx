@@ -3325,20 +3325,16 @@ const APP_STYLES = `
         }
         .landing-emblem { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
         .landing-line-single { width: 110px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
-        /* Un halo sombre sous le titre, et SOUS LUI SEUL. Il faisait d'abord 350 par 200
-           et couvrait a lui seul toute la bande de nuages : un voile large deguise en
-           halo. Resserre a 260 par 110, il epouse le mot et son sous-titre, et le ciel
-           reprend autour. Les trois arrets suivent la courbe mesuree : plein au centre,
-           a moitie a 42 %, eteint a 72 %. Il ne coute qu'un pseudo-element, ne s'anime
-           pas, et se regle en changeant ces trois nombres. */
-        .landing-title::before {
-          content: ""; position: absolute; z-index: -1; pointer-events: none;
-          left: 50%; top: 50%; width: 260px; height: 110px; margin: -38px 0 0 -130px;
-          background: radial-gradient(ellipse,
-            rgba(4, 3, 10, 0.85) 0%,
-            rgba(4, 3, 10, 0.57) 42%,
-            rgba(4, 3, 10, 0) 72%);
-        }
+        /* AUCUN halo sous le titre : le mot ne pose plus sa tache sombre sur le ciel.
+           Il en portait un tant qu'il etait sombre et n'avait rien d'autre pour se
+           detacher. L'aura qui epouse les lettres l'a rendu inutile -- a condition que
+           le mot soit assez clair. Mesure au pixel, entre l'interieur des lettres et
+           leur pourtour immediat, pire decile du mot :
+             halo + aura, rampe #b89a68 .... 4,32
+             aura seule,  rampe #b89a68 .... 3,26   sous le seuil de 4,5
+             aura epaissie, rampe #b89a68 .. 3,71   plafonne, et redevient un fond sombre
+             aura seule,  rampe #e8c877 .... 4,93   retenu
+           Le levier n'etait pas l'ombre, c'etait la couleur du mot. */
         /* Le titre est un empilement de deux spans qui portent le MEME mot : l'aura
            sombre dessous, l'or dessus. Il a fallu en passer par la. Une ombre posee sur
            un texte rempli par background-clip: text se peint PAR-DESSUS le remplissage ;
@@ -3362,7 +3358,7 @@ const APP_STYLES = `
         }
         .landing-title-or {
           position: relative;
-          background: linear-gradient(115deg, #b89a68 30%, #e6d7ae 45%, #fff8e0 50%, #e6d7ae 55%, #b89a68 70%);
+          background: linear-gradient(115deg, #e8c877 30%, #f7edcc 45%, #fff8e0 50%, #f7edcc 55%, #e8c877 70%);
           background-size: 250% 100%;
           -webkit-background-clip: text; background-clip: text; color: transparent;
           animation: title-shine 9s ease-in-out infinite;
