@@ -1259,6 +1259,34 @@ function variablesPlateau(cle) {
   };
 }
 
+// Copier un texte, partout -- y compris hors HTTPS. navigator.clipboard n'existe que sur
+// origine securisee (https ou localhost) : sur un telephone qui ouvre http://192.168.x.x
+// il vaut undefined, et l'appeler levait une TypeError avalee par le try/catch appelant.
+// D'ou le repli sur document.execCommand("copy"), deprecie mais seul chemin praticable
+// sur un reseau local. Rend true si le texte est bien parti.
+async function copierTexte(texte) {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(texte);
+      return true;
+    }
+  } catch (e) { /* refuse ou indisponible : on tente le repli */ }
+  try {
+    const zone = document.createElement("textarea");
+    zone.value = texte;
+    // Hors ecran mais SELECTIONNABLE : display:none ou visibility:hidden empechent la
+    // selection, donc la copie. readOnly evite au clavier du telephone de surgir.
+    zone.setAttribute("readonly", "");
+    zone.style.cssText = "position:fixed;top:0;left:-9999px;opacity:0";
+    document.body.appendChild(zone);
+    zone.select();
+    zone.setSelectionRange(0, texte.length); // iOS ignore select() seul
+    const ok = document.execCommand("copy");
+    document.body.removeChild(zone);
+    return !!ok;
+  } catch (e) { return false; }
+}
+
 // ---------- Ligues & Héros ----------
 // Barème compétitif : +30 trophées par victoire, -15 par défaite, jamais en dessous de 0.
 // Conséquence à connaître : le point d'équilibre est à 33 % de victoires. En dessous, le
@@ -6953,6 +6981,46 @@ const APP_STYLES = `
         }
         .reserve-pile.revisible:active { transform: translateY(-50%) scale(0.94); }
         .reserve-pile.revisible:hover .reserve-dos { border-color: var(--gold-bright); }
+        /* ---------- Le face-a-face d'avant-partie, en ligne ---------- */
+        .vs-bandeau {
+          display: flex; align-items: center; justify-content: center; gap: 14px;
+          margin: 2px 0 10px;
+        }
+        .vs-plaque {
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
+          min-width: 100px; max-width: 132px;
+          padding: 8px 10px 7px; border-radius: 12px;
+          background: linear-gradient(180deg, rgba(36,28,52,0.85), rgba(20,15,30,0.85));
+          border: 1px solid rgba(203,164,86,0.25);
+        }
+        /* Le camp se dit par le filet du haut ET par la couleur du nom : la banniere,
+           elle, appartient au joueur, pas au camp. */
+        .vs-plaque.blue { box-shadow: inset 0 2px 0 rgba(94,158,214,0.4); }
+        .vs-plaque.red { box-shadow: inset 0 2px 0 rgba(224,101,90,0.4); }
+        .vs-banniere {
+          width: 44px; height: 44px; border-radius: 50%;
+          background-color: #241c32; background-size: cover; background-position: center;
+          border: 1.5px solid var(--gold); box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+        }
+        /* Sans Ordre favori connu, un degrade sombre -- jamais un trou. */
+        .vs-banniere.neutre { background-image: linear-gradient(160deg, #2a2138 0%, #14101d 100%); }
+        .vs-nom {
+          font-family: 'Cinzel', serif; font-size: 11.5px; font-weight: 700;
+          max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .vs-plaque.blue .vs-nom { color: var(--blue-bright); }
+        .vs-plaque.red .vs-nom { color: var(--red-bright); }
+        .vs-trophees {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: var(--gold-bright);
+          font-variant-numeric: tabular-nums;
+        }
+        .vs-trophees img { width: 11px; height: 15px; object-fit: contain; display: block; }
+        .vs-contre {
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: var(--gold);
+          text-shadow: 0 0 10px rgba(203,164,86,0.45);
+        }
+
         .reserve-panel { max-width: 330px; }
         .reserve-panel-sous { text-align: center; line-height: 1.5; margin-top: -2px; }
         .reserve-panel-cartes { display: flex; justify-content: center; gap: 14px; margin: 14px 0 6px; }
@@ -7608,10 +7676,12 @@ const APP_STYLES = `
         .bouton-copier:active { transform: scale(0.93); }
         .bouton-copier svg { width: 19px; height: 19px; fill: var(--gold-bright); }
         .code-tournoi {
-          font-family: 'Cinzel', serif; font-size: clamp(24px, 7vw, 38px); font-weight: 700;
+          /* Reduit a la demande du Commandant : l'arbre au-dessous est la vraie vedette,
+             le code n'a besoin que d'etre lisible et copiable. */
+          font-family: 'Cinzel', serif; font-size: clamp(17px, 4.6vw, 24px); font-weight: 700;
           letter-spacing: 0.18em; text-indent: 0.18em; color: var(--gold-bright);
-          background: var(--panel); border: 1px solid rgba(203,164,86,0.45); border-radius: 10px;
-          padding: 8px 18px; margin: 4px 0; text-align: center;
+          background: var(--panel); border: 1px solid rgba(203,164,86,0.45); border-radius: 9px;
+          padding: 6px 13px; margin: 4px 0; text-align: center;
         }
         /* Siège encore vide dans l'arbre du tournoi en ligne. */
         .tb-plaque.tb-attente { opacity: 0.55; border-style: dashed; }
@@ -9132,7 +9202,7 @@ export default function Emprise() {
   async function copierCodeAmi() {
     if (!monCodeAmi) return;
     try {
-      await navigator.clipboard.writeText("#" + monCodeAmi);
+      if (!(await copierTexte("#" + monCodeAmi))) return;
       setCodeAmiCopie(true);
       setTimeout(() => setCodeAmiCopie(false), 2000);
     } catch (e) { /* le joueur lira le code a l'ecran */ }
@@ -10946,6 +11016,10 @@ export default function Emprise() {
         // trop tard entrerait sinon dans une partie morte.
         if (data.abandonPar) throw new Error("perime");
         if (data.redUid && data.redUid !== myUid) throw new Error("complet");
+        // SEULEMENT redUid et redPseudo : la regle qui laisse un tiers prendre ce siege
+        // exige hasOnly(['redUid','redPseudo']). Un troisieme champ, et toute l'ecriture
+        // est refusee -- « Impossible de rejoindre ». Les trophees partent plus tard,
+        // quand on est participant et que tout est permis.
         if (!data.redUid) tx.update(ref, { redUid: myUid, redPseudo: pseudo || "" });
       });
       setBoardSize(STANDARD_ROWS, STANDARD_COLS);
@@ -11080,14 +11154,16 @@ export default function Emprise() {
         setGameOver(!!data.gameOver || finForcee);
         setOnlineError("");
         setOnlineStatus("");
-        // Apercu des mains avant le premier coup, dans les parties ENTRE AMIS seulement.
+        // Apercu des mains avant le premier coup, dans TOUTES les parties en ligne.
         // Il ne revele rien que la partie ne montre deja — les deux mains sont visibles
         // tout du long, seuls les Scribes gardent leurs rangs caches. Il offre un temps
-        // d'arret avant que l'horloge parte. Jamais en Classe ni en tournoi : on n'y fait
-        // pas patienter un adversaire apparie. Jamais non plus sur une reprise en cours
-        // de partie (lastMove present) : il n'y aurait plus rien a decouvrir.
-        const entreAmis = !data.appariement && !tournoiOnlineId;
-        if (entreAmis && apercuFaitRef.current !== onlineGameId && !data.lastMove && !data.gameOver) {
+        // d'arret avant que l'horloge parte, et porte le face-a-face : bannieres, noms,
+        // trophees. Il fut un temps reserve aux parties entre amis pour ne pas faire
+        // patienter un adversaire apparie — mais les deux clients y arrivent au MEME
+        // instant, quand les deux mains sont posees : personne n'y attend l'autre, et le
+        // delai le referme de toute facon. Jamais sur une reprise en cours de partie
+        // (lastMove present) : il n'y aurait plus rien a decouvrir.
+        if (apercuFaitRef.current !== onlineGameId && !data.lastMove && !data.gameOver) {
           apercuFaitRef.current = onlineGameId;
           setPhase("preview");
         } else {
@@ -11574,7 +11650,7 @@ export default function Emprise() {
   async function copierCodeTournoi() {
     if (!tournoiOnlineId) return;
     try {
-      await navigator.clipboard.writeText(tournoiOnlineId);
+      if (!(await copierTexte(tournoiOnlineId))) return;
       setCodeCopie(true);
       setTimeout(() => setCodeCopie(false), 2000);
     } catch (e) { /* le joueur lira le code a l'ecran */ }
@@ -11583,7 +11659,7 @@ export default function Emprise() {
   async function copierCode() {
     if (!onlineGameId) return;
     try {
-      await navigator.clipboard.writeText(onlineGameId);
+      if (!(await copierTexte(onlineGameId))) return;
       setCodeCopie(true);
       setTimeout(() => setCodeCopie(false), 2000);
     } catch (e) { /* le joueur lira le code à l'écran */ }
@@ -12073,11 +12149,16 @@ export default function Emprise() {
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
           blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos,
           blueOrdreFavori: moi.ordreFavori, blueCombosParties: moi.combosParties,
-          blueTournois: tournoisPublics() }
+          blueTournois: tournoisPublics(),
+          // Les trophees pour le face-a-face d'avant-partie. ICI et pas a la prise du
+          // siege : a cet instant on est participant, donc tout champ est permis. En
+          // Classe l'appariement les a deja ecrits, on repose la meme valeur.
+          blueTrophees: tropheesPublics() }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
           redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties,
-          redTournois: tournoisPublics() };
+          redTournois: tournoisPublics(),
+          redTrophees: tropheesPublics() };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
@@ -15738,9 +15819,42 @@ export default function Emprise() {
                   const nomAdverse = enLigne ? pseudosPartie[campAdverse] : "";
                   return (
                     <>
+                      {/* Le face-a-face : la banniere de chacun -- l'Ordre qu'il joue le
+                          plus -- son nom et ses trophees. Tout vient du document de la
+                          partie : les deux ecrans montrent la meme scene. Une donnee
+                          absente (tournoi sans trophees, profil pas encore lu) efface sa
+                          ligne, jamais un zero invente. */}
+                      {enLigne && (() => {
+                        const plaque = (camp) => {
+                          const p = (profilPartie && profilPartie[camp]) || {};
+                          const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
+                          const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
+                          const nomPlaque = camp === monCamp ? (pseudo || "Vous") : (nomAdverse || "Votre adversaire");
+                          return (
+                            <div className={`vs-plaque ${camp}`}>
+                              <span
+                                className={`vs-banniere ${ordre ? "" : "neutre"}`}
+                                style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+                                aria-hidden="true"
+                              />
+                              <span className="vs-nom">{nomPlaque}</span>
+                              {trophees !== null && (
+                                <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
+                              )}
+                            </div>
+                          );
+                        };
+                        return (
+                          <div className="vs-bandeau">
+                            {plaque(monCamp)}
+                            <span className="vs-contre" aria-hidden="true">VS</span>
+                            {plaque(campAdverse)}
+                          </div>
+                        );
+                      })()}
                       <div className="sub">
                         {enLigne
-                          ? (nomAdverse || "Votre adversaire")
+                          ? "Sa main"
                           : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}
                       </div>
                       {/* La Reserve figure des l'apercu, a cote de la main : le joueur
