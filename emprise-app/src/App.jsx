@@ -9270,7 +9270,7 @@ export default function Emprise() {
   // pose tout de suite, les chiffres sont deja la.
   useEffect(() => {
     if (!pseudoEnAttente) return;
-    const finir = () => { poserPseudo(pseudoEnAttente, true); setPseudoEnAttente(null); };
+    const finir = () => poserPseudo(pseudoEnAttente, true);
     if (reducedMotion) { finir(); return; }
     const t = setTimeout(finir, ID_ANIM_TOTAL);
     const passer = () => { clearTimeout(t); finir(); };
@@ -9287,6 +9287,9 @@ export default function Emprise() {
   // Ce qui se passe une fois le nom accepte. Sorti de validerPseudo parce que la premiere
   // ouverture le repousse : l'ecran doit d'abord montrer l'identifiant se composer.
   function poserPseudo(nom, premierNom) {
+    // Toujours levee, quel que soit le chemin : minuteur echu, sortie anticipee, ou second
+    // appui sur Entrer. Sans cela le minuteur reposerait le nom une seconde fois.
+    setPseudoEnAttente(null);
     ecrirePseudo(nom);
     setPseudo(nom);
     // Le nom que voient les amis est celui du profil public : on l'y pousse aussitot.
@@ -12749,7 +12752,7 @@ export default function Emprise() {
           {/* Le bouton n'est pas grisé tant qu'il n'y a rien à valider : il est absent.
               Sa place reste réservée pour que son arrivée ne déplace rien, et la touche
               Entrée fonctionne de bout en bout. */}
-          <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi) || !!pseudoEnAttente} onClick={validerPseudo}>Entrer</button>
+          <button className="reset-btn" disabled={!nettoyerPseudo(pseudoSaisi)} onClick={validerPseudo}>Entrer</button>
           {/* Le nom n'est pas unique : deux joueurs peuvent porter le meme. On le dit ici,
               au moment ou le choix se fait, en montrant le numero qui les distingue.
               Il n'apparaît qu'une fois le nom commencé : d'abord on se nomme, ensuite le
