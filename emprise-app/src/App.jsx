@@ -4027,8 +4027,49 @@ const APP_STYLES = `
           background: linear-gradient(180deg, #241c32 0%, #150f1f 100%);
           box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.55);
           animation: defi-bandeau-entre .25s cubic-bezier(.22, 1, .36, 1) both;
+          /* Les coins hauts sont arrondis : sans ce rognage, la piste de la barre y
+             depasserait en carre. */
+          overflow: hidden;
         }
         .defi-bandeau.sort { animation: defi-bandeau-sort .25s ease-in both; }
+        /* La vie du bandeau, tracee sur son bord haut. Elle recouvre le filet dore et se
+           retire vers la gauche en decouvrant : le filet reste donc visible derriere, et
+           la barre n'est qu'une avance de lumiere qui reflue.
+           scaleX et RIEN d'autre : c'est, avec opacity, la seule propriete que le
+           navigateur compose sans repeindre. Une barre qui se vide en animant sa largeur
+           declencherait une remise en page soixante fois par seconde -- ce projet est
+           deja tombe de 52 a 14 images par seconde pour avoir anime une ombre. */
+        /* La piste, sombre, tient toute la largeur ; l'or se retire dessus. Sans elle la
+           barre ne se lisait pas : posee sur le filet dore, la part deja ecoulee restait
+           doree et le vide ne se voyait nulle part. Meme principe que le minuteur de tour,
+           dont la gouttiere claire donne sa mesure au remplissage. */
+        .defi-bandeau-vie {
+          position: absolute; left: 0; right: 0; top: 0; height: 3px;
+          overflow: hidden; pointer-events: none;
+          background: rgba(0, 0, 0, 0.55);
+        }
+        /* scaleX et RIEN d'autre : c'est, avec opacity, la seule propriete que le
+           navigateur compose sans repeindre. Animer une largeur remettrait la page en
+           page soixante fois par seconde -- ce projet est deja tombe de 52 a 14 images
+           par seconde pour avoir anime une ombre.
+           La duree est heritee du style en ligne pose sur le parent, lui-meme tire de
+           DEFI_BANDEAU_MS : la barre et le minuteur qui replie le bandeau ne peuvent
+           donc pas diverger. */
+        .defi-bandeau-vie::after {
+          content: ""; position: absolute; inset: 0;
+          transform-origin: left center;
+          background: linear-gradient(90deg, var(--gold-bright), var(--gold));
+          box-shadow: 0 0 6px rgba(232, 200, 119, 0.5);
+          animation: defi-bandeau-vie linear both;
+          animation-duration: inherit;
+        }
+        @keyframes defi-bandeau-vie {
+          from { transform: scaleX(1); }
+          to { transform: scaleX(0); }
+        }
+        /* Le bandeau s'en va : la barre part avec lui, elle n'a plus rien a compter. */
+        .defi-bandeau.sort .defi-bandeau-vie { opacity: 0; }
+        .defi-bandeau.sort .defi-bandeau-vie::after { animation: none; }
         /* transform et opacity seulement : ce sont les deux proprietes que le navigateur
            compose sans repeindre. Ce projet est deja tombe de 52 a 14 images par seconde
            pour avoir anime une ombre. */
@@ -4045,6 +4086,11 @@ const APP_STYLES = `
            mouvement, pas moins de temps. */
         @media (prefers-reduced-motion: reduce) {
           .defi-bandeau, .defi-bandeau.sort { animation: none; }
+          /* La barre disparait plutot que de se vider d'un coup : la regle globale du
+             mouvement reduit ramene toutes les durees a 0,001 s par un !important, et
+             une barre vide en permanence dirait qu'il ne reste rien alors qu'il reste
+             dix secondes. Mieux vaut ne rien dire que dire faux. */
+          .defi-bandeau-vie { display: none; }
         }
         .defi-bandeau-medaillon {
           flex: none; width: 34px; height: 34px; border-radius: 50%;
@@ -13045,6 +13091,16 @@ export default function Emprise() {
               const autres = defisValides.length - 1;
               return (
                 <div className={`defi-bandeau ${bandeauDefi.etat === "sort" ? "sort" : ""}`} role="status">
+                  {/* Ce qu'il reste des dix secondes, dessine sur le bord. La duree vient de
+                      la constante, jamais d'un nombre recopie dans la feuille de style : la
+                      barre et le minuteur qui replie le bandeau ne peuvent pas diverger.
+                      Muette pour le lecteur d'ecran -- une barre qui se vide ne s'annonce
+                      pas, et le bandeau lui-meme est deja un role status. */}
+                  <span
+                    className="defi-bandeau-vie"
+                    style={{ animationDuration: DEFI_BANDEAU_MS + "ms" }}
+                    aria-hidden="true"
+                  />
                   {/* Le medaillon : un blason, faute de connaitre l'Ordre favori de
                       l'adversaire. Le jour ou la fiche le portera, seul le src change. */}
                   <img className="defi-bandeau-medaillon" src="/icones/amis.webp" alt="" width="34" height="34" />
