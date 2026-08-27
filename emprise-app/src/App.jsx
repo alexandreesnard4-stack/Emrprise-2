@@ -14731,8 +14731,13 @@ export default function Emprise() {
 
       {phase === "online-waiting" && (
         <div className="order-picker">
-          <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
+          {/* Ce retour ANNULE le defi : l'invitation est effacee chez l'ami. Le dire, sans
+              quoi l'on croit revenir en arriere sans rien defaire. */}
+          <button className="back-btn" onClick={goBack}>← {defiEnvoye ? "Annuler le défi" : "Retour"}</button>
+          {/* Le titre dit ou l'on est. Apres un defi envoye on n'est PAS en partie : on
+              attend une reponse qui peut ne jamais venir. L'appeler « Partie en ligne »
+              a fait croire trois fois de suite que le duel s'etait lance tout seul. */}
+          <h2>{fileAttente ? "Recherche d'un adversaire" : defiEnvoye ? "Défi envoyé" : "Partie en ligne"}</h2>
           {/* Pendant la recherche, l'illustration porte tout : les textes d'Histoire et
               d'astuces s'incrustent en bas du portrait, sur un voile sombre. La consigne
               et la ligne d'etat ont ete retirees, le titre de l'ecran les disait deja. */}
@@ -14804,11 +14809,14 @@ export default function Emprise() {
               <div className="attente-voile" />
             </div>
           )}
-          {!fileAttente && <div className="sub attente-sur-image" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
+          {/* « Connexion... » sous un defi envoye n'a aucun sens : rien ne se connecte, on
+              attend une personne. Et c'est precisement ce mot qui faisait croire a un
+              chargement de partie. Le bloc du dessus dit deja ce qu'on attend, et de qui. */}
+          {!fileAttente && !defiEnvoye && <div className="sub attente-sur-image" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
               detourner l'attention d'une information qui, elle, demande une decision. */}
-          {!fileAttente && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} pleinEcran />}
+          {!fileAttente && !defiEnvoye && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} pleinEcran />}
           {attentePreMatch > TURN_SECONDS && (
             <div className="sub attente-sur-image">{
               // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
