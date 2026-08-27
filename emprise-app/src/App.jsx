@@ -494,7 +494,7 @@ const TUTORIAL_STEPS = [
 // demanderait de synchroniser un draft entier : elle viendra dans sa propre etape.
 const DEFI_MODES = [
   { cle: "classique", nom: "Duel classique", detail: "Chacun choisit ses 2 Ordres" },
-  { cle: "aleatoire", nom: "Ordres tirés au sort", detail: "Le jeu compose la main des deux camps" },
+  { cle: "confluence", nom: "Confluence", detail: "Deux Ordres tirés au sort, la même main pour les deux camps" },
 ];
 function defiModeNom(cle) {
   const m = DEFI_MODES.find((x) => x.cle === cle);
@@ -1159,7 +1159,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "28 août · 23h";
+const VERSION_AFFICHEE = "29 août · 2h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -4378,6 +4378,9 @@ const APP_STYLES = `
           font: inherit; color: inherit; cursor: pointer; text-align: left;
         }
         .defi-config-herauts b { font-family: 'Cinzel', serif; font-size: 13px; display: block; }
+        /* Eteinte, pas disparue : une option qui s'evapore selon le mode semble un bug.
+           L'opacite ET le texte disent pourquoi elle dort. */
+        .defi-config-herauts.eteint { opacity: 0.45; cursor: default; }
         .defi-config-herauts-texte span { font-size: 11px; color: var(--muted); line-height: 1.35; }
 
         .defi-bandeau {
@@ -5740,7 +5743,11 @@ const APP_STYLES = `
           background-size: auto, auto, cover, auto;
           background-position: center, center, center, center;
           background-repeat: no-repeat, no-repeat, no-repeat, repeat;
-          background-attachment: fixed, fixed, fixed, scroll;
+          /* SURTOUT PAS de background-attachment: fixed ici. Safari iOS l ignore et
+             refuse alors de peindre l image : le damas etait invisible sur iPhone alors
+             que l ordinateur le montrait -- c est la capture du Commandant qui l a
+             revele, version en main. L ecran de jeu ne defile pas : fixed ne servait de
+             toute facon a rien. */
         }
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
@@ -10953,6 +10960,15 @@ export default function Emprise() {
     setOnlineError("");
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     const premierEnLigne = tirerPremierJoueur();
+    // Confluence : la main commune se fabrique ICI, une seule fois, chez l'hote. makeHand
+    // rebat les orientations a chaque appel -- generee sur chaque appareil, la "meme"
+    // main aurait ete deux mains. Elle voyage dans le document, comme les options.
+    const modeDefi = (optionsDefi && optionsDefi.mode) || "classique";
+    let confluenceCommune = null;
+    if (modeDefi === "confluence") {
+      const [oa, ob] = pickRandomTwoOrders();
+      confluenceCommune = { ordres: [oa.key, ob.key], main: makeHand(oa, ob).map(stripForSave) };
+    }
     const nouvellePartie = {
       status: "waiting-orders",
       createdAt: serverTimestamp(),
@@ -10971,8 +10987,12 @@ export default function Emprise() {
       // les deux appareils les lisent au meme endroit, et une reprise les retrouve.
       // « Jouer avec un ami » sans options ecrit les valeurs par defaut : memes parties
       // qu'avant, rien ne change pour qui ne compose pas son defi.
-      defiMode: (optionsDefi && optionsDefi.mode) || "classique",
-      defiHerauts: !!(optionsDefi && optionsDefi.herauts),
+      defiMode: modeDefi,
+      // Les Herauts n'existent qu'en Duel classique : dans un miroir ils s'annulent, et
+      // la fenetre ne les propose pas. La garde tient meme si un client modifie insiste.
+      defiHerauts: modeDefi === "classique" && !!(optionsDefi && optionsDefi.herauts),
+      defiOrdres: confluenceCommune ? confluenceCommune.ordres : null,
+      defiMainCommune: confluenceCommune ? confluenceCommune.main : null,
     };
     // Un code tiré au hasard peut retomber sur une partie déjà existante : on crée dans
     // une transaction qui échoue si le document existe, et on retire un autre code —
@@ -11253,8 +11273,21 @@ export default function Emprise() {
         const iAmReady = onlineRole === "blue" ? !!data.blueOrderKeys : !!data.redOrderKeys;
         setAdvPresent(!!(data.blueUid && data.redUid));
         // Le mode du defi et les Herauts, relus du document : valables pour les deux
-        // roles, et apres une reprise aussi.
-        setPartieDefi({ mode: data.defiMode || "classique", herauts: !!data.defiHerauts });
+        // roles, et apres une reprise aussi. La main commune de la Confluence est
+        // verifiee comme tout ce qui vient d'en face : huit cartes, des cles d'Ordre que
+        // le jeu connait -- sinon on retombe sur le duel classique plutot que de monter
+        // une partie difforme.
+        const ordresCommuns = (Array.isArray(data.defiOrdres) ? data.defiOrdres : [])
+          .filter((k) => ORDERS.some((o) => o.key === k));
+        const mainCommune = Array.isArray(data.defiMainCommune) && data.defiMainCommune.length === 8
+          ? data.defiMainCommune : null;
+        const confluenceValide = data.defiMode === "confluence" && ordresCommuns.length === 2 && mainCommune;
+        setPartieDefi({
+          mode: confluenceValide ? "confluence" : (data.defiMode === "confluence" ? "classique" : (data.defiMode || "classique")),
+          herauts: !!data.defiHerauts,
+          ordres: confluenceValide ? ordresCommuns : null,
+          mainCommune: confluenceValide ? mainCommune : null,
+        });
         setAdvPret(onlineRole === "blue" ? !!data.redOrderKeys : !!data.blueOrderKeys);
         // Reprise alors que la partie n'avait pas encore démarré : si mes Ordres
         // n'étaient pas choisis, il faut revenir à l'écran de choix. Sans ça le joueur
@@ -13196,16 +13229,26 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteurOrdresActif, tempsOrdres]);
 
-  // Mode « Ordres tirés au sort » : le jeu compose la main, le Commandant ne garde que
-  // le choix de sa Reserve. Le tirage ne part qu'une fois par partie et par role -- la
-  // cle du garde le jure, meme si l'effet se rejoue.
+  // Confluence : pas de choix d'Ordres, la main commune vient du DOCUMENT -- jamais d'un
+  // makeHand local, qui rebattrait les orientations et briserait le miroir. Chaque camp
+  // suffixe les identifiants de SES cartes : les deux mains portent les memes cartes, et
+  // le plateau a pourtant besoin de cles uniques. L'entree ne se fait qu'une fois par
+  // partie et par role, meme si l'effet se rejoue.
   const ordresTiresRef = useRef(null);
   useEffect(() => {
-    if (mode !== "online" || phase !== "select-blue" || partieDefi.mode !== "aleatoire") return;
+    if (mode !== "online" || phase !== "select-blue" || partieDefi.mode !== "confluence") return;
+    if (!partieDefi.mainCommune || !partieDefi.ordres || !onlineRole) return;
     const cle = onlineGameId + "/" + onlineRole;
     if (ordresTiresRef.current === cle) return;
     ordresTiresRef.current = cle;
-    chooseRandomOrders();
+    const ordres = partieDefi.ordres.map((k) => ORDERS.find((o) => o.key === k)).filter(Boolean);
+    const main = partieDefi.mainCommune.map((c) => ({ ...hydrateFromSave(c), id: c.id + "-" + onlineRole }));
+    if (onlineRole === "blue") { setBlueOrders(ordres); setBlueHand(main); }
+    else { setRedOrders(ordres); setRedHand(main); }
+    setPickerChoice([]);
+    setReserveChoix([]);
+    setReserveSource(cartesPourReserve(ordres));
+    setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, phase, partieDefi, onlineGameId, onlineRole]);
 
@@ -16386,20 +16429,26 @@ export default function Emprise() {
                 <span>{m.detail}</span>
               </button>
             ))}
+            {/* Les Herauts ne s'offrent qu'en Duel classique : en Confluence les deux
+                camps ont la meme main, les memes Herauts s'annuleraient. La ligne reste
+                visible mais eteinte, pour que l'option ne semble pas disparue. */}
             <button
-              className="defi-config-herauts"
-              aria-pressed={defiConfig.herauts}
-              onClick={() => setDefiConfig((d) => ({ ...d, herauts: !d.herauts }))}
+              className={`defi-config-herauts ${defiConfig.mode !== "classique" ? "eteint" : ""}`}
+              aria-pressed={defiConfig.mode === "classique" && defiConfig.herauts}
+              aria-disabled={defiConfig.mode !== "classique"}
+              onClick={() => setDefiConfig((d) => (d.mode === "classique" ? { ...d, herauts: !d.herauts } : d))}
             >
               <span className="defi-config-herauts-texte">
                 <b>Capacités supérieures</b>
-                <span>Les Hérauts des dix Ordres, pour les deux camps</span>
+                <span>{defiConfig.mode === "classique"
+                  ? "Les Hérauts des dix Ordres, pour les deux camps"
+                  : "Réservées au Duel classique"}</span>
               </span>
-              <div className={`settings-bascule ${defiConfig.herauts ? "on" : ""}`} aria-hidden="true"><span /></div>
+              <div className={`settings-bascule ${defiConfig.mode === "classique" && defiConfig.herauts ? "on" : ""}`} aria-hidden="true"><span /></div>
             </button>
             <button
               className="reset-btn"
-              onClick={() => { const d = defiConfig; setDefiConfig(null); defierAmi(d.uid, { mode: d.mode, herauts: d.herauts }); }}
+              onClick={() => { const d = defiConfig; setDefiConfig(null); defierAmi(d.uid, { mode: d.mode, herauts: d.mode === "classique" && d.herauts }); }}
             >Envoyer le défi</button>
             <button className="landing-link" onClick={() => setDefiConfig(null)}>Annuler</button>
           </div>
