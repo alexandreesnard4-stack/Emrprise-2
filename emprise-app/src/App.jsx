@@ -1156,6 +1156,11 @@ function ordreLePlusJoue(stats) {
 // vides, et l'on recompte. Rien n'est tire au sort au moment le plus tendu du duel.
 const RESERVE_TAILLE = 2;
 const MORT_SUBITE_RONDES_MAX = 2;
+// La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
+// elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
+// a travers trois messages. Le format dit la date et l'heure de la livraison.
+const VERSION_AFFICHEE = "28 août · 21h";
+
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
 // Mort Subite ne pouvait jamais s'ouvrir. C'est justement cette egalite qu'on veut --
@@ -1302,7 +1307,13 @@ async function copierTexte(texte) {
 const BILAN_ROULEAU_MS = 900;
 const BILAN_ROULEAU_ECART_MS = 350;
 const BILAN_ROULEAU_TOURS = 2;
-const BILAN_DECOMPTE_DELAI_MS = 500;
+// Le DEPART des rouleaux, compte depuis l'ouverture de la ceremonie : il doit tomber
+// APRES l'entree de la recap, qui est invisible avant. Victoire : cer-monte finit a
+// 1,75 + 0,65 s. Defaite : buttonFadeUp finit a 1,5 + 0,6 s. Un souffle de plus, et les
+// rouleaux partent sous les yeux -- avant ce reglage ils finissaient a 1,75 s, PILE quand
+// le rideau se levait, et personne ne les a jamais vus.
+const BILAN_DEPART_VICTOIRE_MS = 2550;
+const BILAN_DEPART_DEFAITE_MS = 2250;
 const TROPHEES_VICTOIRE = 30;
 const TROPHEES_DEFAITE = -15;
 
@@ -3503,6 +3514,10 @@ const APP_STYLES = `
            interieure de chaque cote. Au-dela, sur un ecran de 390 px, il toucherait les
            bords. C'est une limite mesuree, pas un choix esthetique. */
         .settings-panel { max-width: 420px; }
+        .settings-version {
+          font-size: 10px; letter-spacing: 0.08em; color: #6d6480;
+          text-align: center; margin-top: 10px;
+        }
         .info-panel.settings-panel { max-width: 380px; }
         /* Mesure : ce n'est pas max-width qui bridait la largeur, c'est le voile qui
            entoure le panneau, avec ses 24 px de marge interieure de chaque cote. Sur un
@@ -5527,9 +5542,14 @@ const APP_STYLES = `
              posee sur son chiffre. */
           animation: cer-rouleau-defile 0.9s cubic-bezier(0.12, 0.68, 0.22, 1) both;
         }
+        /* PAS de var() ici : pendant des annees WebKit ne resolvait pas les variables
+           dans les keyframes -- la regle d'arrivee devenait invalide et les rouleaux
+           restaient a zero, badge fige sur +00. L'arrivee n'a pas besoin d'etre dite par
+           element : une bande de N crans s'arrete TOUJOURS a -100 % de sa hauteur plus
+           un cran, quel que soit N. */
         @keyframes cer-rouleau-defile {
           from { transform: translateY(0); }
-          to { transform: translateY(var(--rouleau-fin, 0)); }
+          to { transform: translateY(calc(-100% + 1em)); }
         }
         .cer-rouleau-chiffre { display: block; height: 1em; line-height: 1; text-align: center; }
         /* Mouvement reduit : le style en ligne pose deja la bande sur son chiffre. */
@@ -12373,7 +12393,7 @@ export default function Emprise() {
     return () => window.removeEventListener("popstate", surRetour);
   }, []);
 
-  function bilanTrophees() {
+  function bilanTrophees(depart) {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
     const chiffres = String(Math.abs(gain)).split("");
@@ -12393,14 +12413,16 @@ export default function Emprise() {
             return (
               <span key={i} className="cer-rouleau">
                 {/* L'animation part au MONTAGE du badge : c'est ce qui la met sous les
-                    yeux, quel que soit le temps que la ceremonie a pris avant lui. Le
-                    point d'arrivee voyage en variable CSS, lue par les keyframes element
-                    par element. Mouvement reduit : la bande nait posee, sans rouler. */}
+                    yeux, quel que soit le temps que la ceremonie a pris avant lui. Son
+                    point d'arrivee est dans les keyframes memes -- moins 100 % de la
+                    bande plus un cran -- jamais dans une variable : les vieux Safari ne
+                    resolvent pas var() dans les keyframes, et les rouleaux y restaient
+                    figes sur +00. Mouvement reduit : la bande nait posee, sans rouler. */}
                 <span
                   className="cer-rouleau-bande"
                   style={reducedMotion
                     ? { transform: `translateY(${-pas}em)` }
-                    : { "--rouleau-fin": `${-pas}em`, animationDuration: duree + "ms", animationDelay: BILAN_DECOMPTE_DELAI_MS + "ms" }}
+                    : { animationDuration: duree + "ms", animationDelay: depart + "ms" }}
                 >
                   {bande.map((n, k) => <span key={k} className="cer-rouleau-chiffre">{n}</span>)}
                 </span>
@@ -14394,6 +14416,10 @@ export default function Emprise() {
                   <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
                 </div>
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+                {/* La version de l'application. C'est elle qu'on se lit a voix haute pour
+                    savoir si un telephone est a jour : si cette ligne manque ou differe de
+                    celle de l'ordinateur, l'appareil sert une vieille copie. */}
+                <div className="settings-version">EMPRISE · version du {VERSION_AFFICHEE}</div>
               </div>
             </div>
           )}
@@ -16316,7 +16342,7 @@ export default function Emprise() {
                 <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
-              {bilanTrophees()}
+              {bilanTrophees(BILAN_DEPART_VICTOIRE_MS)}
               {boutonRevanche()}
               {boutonAmitie()}
               {lienSignalerAdversaire()}
@@ -16351,7 +16377,7 @@ export default function Emprise() {
               <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
-            {bilanTrophees()}
+            {bilanTrophees(BILAN_DEPART_DEFAITE_MS)}
             {boutonRevanche()}
             {boutonAmitie()}
             {lienSignalerAdversaire()}
