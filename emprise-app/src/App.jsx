@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 4h15";
+const VERSION_AFFICHEE = "29 août · 5h30";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1863,7 +1863,7 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -1880,7 +1880,55 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
   // Plancher à 0 : une série de défaites ne peut jamais faire passer le total en négatif.
   stats.trophies = Math.max(0, (stats.trophies || 0) + trophyGain);
   await writeStatsRaw(JSON.stringify(stats));
+  // ---------- L'XP de la partie ----------
+  // La MEME porte que le profil (compteAuProfil et monCamp), plus l'Histoire par son
+  // signal dedie : le bac a sable, le mode test, les duels locaux et le bot-contre-bot
+  // ne donnent rien sans qu'on ait rien a ajouter. La Confluence suit la porte du
+  // profil : exclue aujourd'hui, comme des combos. L'egalite n'arrive jamais (elle donne
+  // la victoire au second joueur) ; son bareme attend le jour ou elle existera.
+  if (monCamp && (compteAuProfil || partieHistoire)) {
+    const victoire = winner === monCamp;
+    const classee = trophyGain !== 0;
+    let montant;
+    if (victoire && classee) {
+      // La ligue APRES la partie : celle ou le joueur vient d'arriver.
+      const indexLigue = Math.max(0, LEAGUES.indexOf(getLeague(stats.trophies)));
+      montant = XP_PARTIES.victoireClasseBase + XP_PARTIES.victoireClasseParLigue * indexLigue;
+    } else if (victoire) {
+      // L'Histoire est un combat de bot comme un autre : meme table, plus sa prime.
+      const table = XP_PARTIES.victoireEcho;
+      const duBot = table[difficulteEcho] != null ? table[difficulteEcho] : table.intermediaire;
+      montant = duBot + (partieHistoire ? XP_PARTIES.bonusHistoire : 0);
+    }
+    else if (classee) montant = XP_PARTIES.defaiteClassee;
+    else montant = XP_PARTIES.defaite;
+    const bilan = await gagnerXp(montant);
+    // Pose APRES l'ecriture des stats : ce champ voyage vers l'ecran de fin par le
+    // setStats de l'appelant, mais ne se sauvegarde jamais.
+    stats.xpDePartie = bilan;
+  }
   return stats;
+}
+
+// L'unique porte d'entree de l'XP : les parties aujourd'hui, les quetes demain. Relit la
+// progression, ajoute, verse les gemmes de chaque palier de 5 franchi -- le double
+// versement est impossible par construction, dernierPalierVerse est la seule source de
+// verite -- puis sauvegarde. Rend tout ce que l'ecran de fin veut dire : l'avant,
+// l'apres, et les gemmes versees.
+async function gagnerXp(montant) {
+  const p = await loadProgression();
+  const gain = Math.max(0, Math.floor(montant || 0));
+  const avant = niveauDepuisXp(p.xpTotal);
+  p.xpTotal = Math.min(1000000, p.xpTotal + gain);
+  const apres = niveauDepuisXp(p.xpTotal);
+  let gemmesVersees = 0;
+  for (let palier = p.dernierPalierVerse + 5; palier <= apres.niveauJoueur; palier += 5) {
+    gemmesVersees += palier === NIVEAU_MAX ? GEMMES_PALIERS.dernierPalier : GEMMES_PALIERS.parPalier;
+    p.dernierPalierVerse = palier;
+  }
+  if (gemmesVersees > 0) await crediterGemmes(gemmesVersees);
+  await writeProgressionRaw(JSON.stringify(p));
+  return { progression: p, avant, apres, gain, gemmesVersees };
 }
 
 // Un tournoi en ligne remporte. Le verrou est ICI, dans le stockage, et non dans l'appel :
@@ -1894,6 +1942,9 @@ async function recordTournoiGagne(tournoiId) {
   stats.tournoisCredites = [...vus, tournoiId].slice(-12);
   stats.tournoisGagnes = (stats.tournoisGagnes || 0) + 1;
   await writeStatsRaw(JSON.stringify(stats));
+  // L'XP du tournoi s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
+  // tournoi n'avait jamais ete compte, elle jure donc aussi pour ces 150 XP.
+  stats.xpDePartie = await gagnerXp(XP_PARTIES.tournoiRemporte);
   return stats;
 }
 
@@ -1902,6 +1953,104 @@ async function resetStats() {
   memoryStats = null;
   await writeStatsRaw(JSON.stringify(DEFAULT_STATS));
   return { ...DEFAULT_STATS };
+}
+
+// ---------- Niveaux de Commandant ----------
+// Progression d'ESSAI avant la sortie : comme le solde d'essai de la bourse,
+// elle sera remise a zero au lancement.
+const NIVEAU_MAX = 50;
+// XP demandee pour passer CHAQUE niveau de la tranche (du niveau 2 au 10 : 100
+// par niveau, etc.). Total pour le niveau 50 : environ 20 000 XP.
+const NIVEAUX_XP = [
+  { jusqua: 10, cout: 100 },
+  { jusqua: 25, cout: 250 },
+  { jusqua: 40, cout: 500 },
+  { jusqua: 50, cout: 800 },
+];
+// XP par partie comptee. La cle "classe" est une base, completee par la ligue.
+// NB verifie dans le code : l'egalite n'arrive JAMAIS ici -- une egalite persistante
+// donne la victoire au second joueur (voir le calcul de winner). Son bareme est fixe
+// d'avance pour le jour ou une vraie egalite existerait.
+const XP_PARTIES = {
+  // Contre un Echo, l'XP suit sa difficulte : un bot faible rapporte peu,
+  // farmer le Novice ne vaut pas le coup. Les cles sont celles de
+  // DIFFICULTIES. Une partie d'Histoire est aussi un combat de bot : meme
+  // table, plus une prime fixe. Difficulte absente (partie amicale en ligne) :
+  // intermediaire, on ne plante jamais.
+  victoireEcho: { debutant: 8, intermediaire: 12, avance: 16, expert: 20 },
+  bonusHistoire: 10,
+  victoireClasseBase: 30,
+  victoireClasseParLigue: 10, // x index de ligue : Bronze 0 -> Legende 4
+  defaite: 5,
+  defaiteClassee: 8,
+  egalite: 10,
+  tournoiRemporte: 150,  // en plus des parties qui le composent
+};
+// Gemmes versees a chaque palier de 5 niveaux.
+const GEMMES_PALIERS = { parPalier: 50, dernierPalier: 150 }; // niveau 50 : 150
+
+// Le cout du passage VERS ce niveau : la premiere tranche qui l'atteint.
+function coutDuNiveauXp(n) {
+  const tranche = NIVEAUX_XP.find((t) => n <= t.jusqua);
+  return tranche ? tranche.cout : null;
+}
+
+// Pure, sans etat : le niveau n'est JAMAIS stocke, il se recalcule du total. Relever le
+// plafond plus tard fera rattraper tout le monde sans migration.
+function niveauDepuisXp(xpTotal) {
+  let reste = Math.max(0, Math.floor(xpTotal || 0));
+  let niveauJoueur = 1;
+  for (let n = 2; n <= NIVEAU_MAX; n++) {
+    const cout = coutDuNiveauXp(n);
+    if (reste < cout) break;
+    reste -= cout;
+    niveauJoueur = n;
+  }
+  const xpPourSuivant = niveauJoueur >= NIVEAU_MAX ? null : coutDuNiveauXp(niveauJoueur + 1);
+  return { niveauJoueur, xpDansNiveau: reste, xpPourSuivant };
+}
+
+// ---------- 2. Le stockage, meme mecanisme hybride que la bourse ----------
+const DEFAUT_PROGRESSION = { xpTotal: 0, dernierPalierVerse: 0 };
+let memoryProgression = null;
+
+async function readProgressionRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-progression");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { return null; }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-progression");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryProgression;
+}
+
+async function writeProgressionRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-progression", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-progression", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryProgression = str;
+}
+
+// La lecture repare : totaux bornes, sauvegarde abimee ramenee aux valeurs par defaut.
+async function loadProgression() {
+  const brut = await readProgressionRaw();
+  if (!brut) return { ...DEFAUT_PROGRESSION };
+  try {
+    const lu = JSON.parse(brut);
+    return {
+      xpTotal: Number.isFinite(lu.xpTotal) ? Math.max(0, Math.min(1000000, Math.floor(lu.xpTotal))) : 0,
+      dernierPalierVerse: Number.isFinite(lu.dernierPalierVerse) ? Math.max(0, Math.min(NIVEAU_MAX, Math.floor(lu.dernierPalierVerse))) : 0,
+    };
+  } catch (e) { return { ...DEFAUT_PROGRESSION }; }
 }
 
 // ---------- La bourse : gemmes et possessions (meme stockage hybride) ----------
@@ -1979,6 +2128,18 @@ async function loadBourse() {
 
 function possedeCosmetique(bourse, famille, cle) {
   return !!(bourse.possessions[famille] && bourse.possessions[famille].includes(cle));
+}
+
+// Crediter des gemmes -- les paliers de niveau, et demain les quetes. Meme modele que
+// l'achat : relire, ajouter, borner, ecrire. Ne touche ni au solde d'essai ni a
+// essaiVerse : un versement de palier n'est pas un versement d'essai.
+async function crediterGemmes(montant) {
+  const b = await loadBourse();
+  const somme = Math.max(0, Math.floor(montant || 0));
+  if (somme === 0) return b;
+  b.gemmes = Math.min(1000000, b.gemmes + somme);
+  await writeBourseRaw(JSON.stringify(b));
+  return b;
 }
 
 // L'achat relit la bourse avant de decider, comme le compteur de tournois : un double
@@ -4504,6 +4665,53 @@ const APP_STYLES = `
            bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
+        /* ---------- Niveaux de Commandant ---------- */
+        /* La vignette de carte du hub : une silhouette de carte a jouer dessinee en CSS
+           (cadre dore, lisere interieur comme les cartes du jeu), le niveau au centre. */
+        .hub-niveau {
+          width: 22px; height: 29px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          border: 1px solid rgba(203,164,86,0.55); border-radius: 5px;
+          background: linear-gradient(180deg, rgba(203,164,86,0.16), rgba(20,14,30,0.55));
+          box-shadow: inset 0 0 0 2px rgba(10,8,16,0.55), inset 0 0 0 3px rgba(203,164,86,0.22);
+        }
+        .hub-niveau-nombre {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          color: var(--gold-bright); line-height: 1;
+        }
+        .profil-xp { width: 100%; display: flex; flex-direction: column; gap: 4px; margin: 2px 0 4px; }
+        .profil-xp-ligne { display: flex; align-items: baseline; justify-content: space-between; }
+        .profil-xp-niveau { font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #f0eaf8; }
+        .profil-xp-essai { font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 10px; color: var(--muted); }
+        /* La jauge ne s'anime jamais en continu : elle est un etat, pas un spectacle. */
+        .profil-xp-jauge {
+          width: 100%; height: 6px; border-radius: 999px; overflow: hidden;
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(146,86,207,0.3);
+        }
+        .profil-xp-rempli {
+          height: 100%; border-radius: 999px;
+          background: linear-gradient(90deg, #9256cf, #c9a0f0);
+        }
+        .profil-xp-detail { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .cer-xp { display: flex; align-items: center; gap: 10px; }
+        .cer-xp-gain {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #d9c2f5;
+          font-variant-numeric: tabular-nums;
+        }
+        /* Le niveau franchi parait en fondu : opacity seule, rien qui repeigne. */
+        .cer-xp-niveau {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: var(--gold-bright);
+          animation: cer-xp-parait 0.5s ease-out 0.4s both;
+        }
+        @keyframes cer-xp-parait { from { opacity: 0; } to { opacity: 1; } }
+        .cer-xp-gemmes {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: #d9c2f5;
+          animation: cer-xp-parait 0.5s ease-out 0.6s both;
+        }
+        .cer-xp-gemmes .gemme-icone { width: 12px; height: 12px; }
+        .reduced-motion .cer-xp-niveau, .reduced-motion .cer-xp-gemmes { animation: none; }
+
         /* ---------- La bourse ---------- */
         /* La gemme est desormais une IMAGE : le cristal taille dans la poignee
            d'amethystes du Commandant. Ni rotation, ni bordure, ni ombre -- elles
@@ -9941,6 +10149,17 @@ export default function Emprise() {
   // qui verse le solde d'essai s'il ne l'a jamais ete.
   const [bourse, setBourse] = useState(DEFAUT_BOURSE);
   useEffect(() => { loadBourse().then(setBourse); }, []);
+  // La progression : l'XP totale, dont le niveau se recalcule toujours. Le bilan de la
+  // DERNIERE partie voyage a part : l'ecran de fin le lit, et la partie suivante le
+  // remplace ou l'efface d'elle-meme.
+  const [progression, setProgression] = useState(DEFAUT_PROGRESSION);
+  useEffect(() => { loadProgression().then(setProgression); }, []);
+  const [xpDernierePartie, setXpDernierePartie] = useState(null);
+  // Apres chaque partie comptee ou tournoi gagne : l'XP a bouge, les gemmes peut-etre.
+  function rafraichirProgression() {
+    loadProgression().then(setProgression);
+    loadBourse().then(setBourse);
+  }
   // L'achat qu'on est en train de confirmer : { famille, cle, nom, prix }.
   const [achatEnCours, setAchatEnCours] = useState(null);
   // Le pack qu'on regarde. JAMAIS un debit : le paiement passera par les achats
@@ -10754,7 +10973,13 @@ export default function Emprise() {
         });
       }
       const comboKeys = compteAuProfil ? [...suivi.reussis] : [];
-      recordGameStats(winner, orderKeys, trophyGain, comboKeys, compteAuProfil, monCampCombos).then(setStats);
+      recordGameStats(
+        winner, orderKeys, trophyGain, comboKeys, compteAuProfil, monCampCombos,
+        // L'Histoire par son signal dedie (la porte du profil l'exclut), et la
+        // difficulte du bot -- celle du chapitre en Histoire, du choix ailleurs.
+        !!storyChapterKey && !testMode,
+        mode === "bot" ? botDifficulty : null
+      ).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
       // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
@@ -11167,7 +11392,7 @@ export default function Emprise() {
     if (tournoiCrediteRef.current === tournoiOnlineId) return;
     if ((stats.tournoisCredites || []).includes(tournoiOnlineId)) return;
     tournoiCrediteRef.current = tournoiOnlineId;
-    recordTournoiGagne(tournoiOnlineId).then(setStats);
+    recordTournoiGagne(tournoiOnlineId).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiData, tournoiOnlineId, myUid]);
 
@@ -11733,7 +11958,7 @@ export default function Emprise() {
         statsRecordedRef.current = true;
         // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
         const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
-        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then(setStats);
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
       }
     }
     // Match de tournoi : abandonner la partie ne fait pas quitter le TOURNOI — on
@@ -12657,6 +12882,24 @@ export default function Emprise() {
     return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ceremonieFin, cerPose, partieClassee, onlineRole, winner, reducedMotion]);
+
+  // L'XP de la partie qui vient de finir : le gain, le niveau franchi s'il y en a un,
+  // les gemmes de palier s'il y en a. Rien de plus -- pas de nouvel ecran.
+  function bilanXpDePartie() {
+    if (!xpDernierePartie || !gameOver) return null;
+    const b = xpDernierePartie;
+    return (
+      <div className="cer-xp">
+        <span className="cer-xp-gain">+{b.gain} XP</span>
+        {b.apres.niveauJoueur > b.avant.niveauJoueur && (
+          <span className="cer-xp-niveau">Niveau {b.apres.niveauJoueur}</span>
+        )}
+        {b.gemmesVersees > 0 && (
+          <span className="cer-xp-gemmes"><span className="gemme-icone" aria-hidden="true" />+{b.gemmesVersees}<span className="lecteur-seul"> gemmes</span></span>
+        )}
+      </div>
+    );
+  }
 
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
@@ -13674,6 +13917,18 @@ export default function Emprise() {
                 {pseudo}
                 {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
               </button>
+              {/* Le niveau de Commandant : pure fonction du total d'XP, jamais stocke.
+                  Une vignette en forme de carte, le nombre au centre -- demande du
+                  Commandant. Le lecteur d'ecran, lui, entend « Niveau N » en toutes
+                  lettres. */}
+              <span
+                className="hub-niveau"
+                role="img"
+                aria-label={`Niveau ${niveauDepuisXp(progression.xpTotal).niveauJoueur}`}
+                title={`Niveau ${niveauDepuisXp(progression.xpTotal).niveauJoueur}`}
+              >
+                <span className="hub-niveau-nombre" aria-hidden="true">{niveauDepuisXp(progression.xpTotal).niveauJoueur}</span>
+              </span>
               <button
                 className="hub-trophees"
                 onClick={() => setActiveModal("pantheon")}
@@ -14332,6 +14587,29 @@ export default function Emprise() {
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
 
+                  {/* Le niveau de Commandant, et sa jauge vers le suivant. Au plafond, le
+                      total a vie remplace la jauge -- il continue de compter. */}
+                  {(() => {
+                    const nx = niveauDepuisXp(progression.xpTotal);
+                    return (
+                      <div className="profil-xp">
+                        <div className="profil-xp-ligne">
+                          <span className="profil-xp-niveau">{nx.xpPourSuivant === null ? "Niveau maximum" : `Niveau ${nx.niveauJoueur}`}</span>
+                          <span className="profil-xp-essai">progression d&apos;essai</span>
+                        </div>
+                        {nx.xpPourSuivant !== null ? (
+                          <>
+                            <div className="profil-xp-jauge" role="img" aria-label={`${nx.xpDansNiveau} XP sur ${nx.xpPourSuivant} vers le niveau ${nx.niveauJoueur + 1}`}>
+                              <div className="profil-xp-rempli" style={{ width: `${Math.min(100, (nx.xpDansNiveau / nx.xpPourSuivant) * 100)}%` }} />
+                            </div>
+                            <div className="profil-xp-detail" aria-hidden="true">{nx.xpDansNiveau} / {nx.xpPourSuivant} XP</div>
+                          </>
+                        ) : (
+                          <div className="profil-xp-detail">{progression.xpTotal} XP à vie</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/* Trois colonnes, jamais quatre : les trophees se lisent deja dans la
                       ligne d'appartenance, juste au-dessus. */}
                   <div className="profil-fiche-chiffres">
@@ -16645,6 +16923,7 @@ export default function Emprise() {
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
               {bilanTrophees()}
+              {bilanXpDePartie()}
               {boutonRevanche()}
               {boutonAmitie()}
               {lienSignalerAdversaire()}
@@ -16680,6 +16959,7 @@ export default function Emprise() {
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
             {bilanTrophees()}
+            {bilanXpDePartie()}
             {boutonRevanche()}
             {boutonAmitie()}
             {lienSignalerAdversaire()}
