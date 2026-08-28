@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 11h30";
+const VERSION_AFFICHEE = "29 août · 12h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -4515,7 +4515,9 @@ const APP_STYLES = `
         /* La rangee du tresor : pieces a gauche, gemmes a droite, meme largeur
            totale que les boutons de la colonne. Chaque pastille garde sa couleur,
            jamais les deux melangees. */
-        .hub-tresor { display: flex; gap: 6px; align-self: stretch; }
+        /* La meme bande de hauteur que la rangee du joueur en face (54 px, la
+           carte de niveau) : pseudo et pastilles se centrent sur la meme ligne. */
+        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 54px; }
         .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
@@ -4524,10 +4526,10 @@ const APP_STYLES = `
         .hub-pieces:active { transform: none; }
         /* 17 px face aux 20 du cristal : la piece est pleine jusqu'au bord, le
            cristal a ses marges -- a taille egale elle paraitrait plus grosse. */
-        .hub-pieces .piece-icone { width: 17px; height: 17px; flex: none; }
+        .hub-pieces .piece-icone { width: 20px; height: 20px; flex: none; }
         /* 20 px (10 puis 16 avant lui) : le cristal se lisait encore trop petit.
            Agrandi a la demande du Commandant, deux fois. */
-        .hub-gemmes .gemme-icone { width: 20px; height: 20px; flex: none; }
+        .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
@@ -5389,7 +5391,7 @@ const APP_STYLES = `
         /* 38 px, comme l'icone des Amis juste au-dessus : a 30 le parchemin
            flottait dans son bouton. Agrandi a la demande du Commandant. */
         .hub-icone-quetes {
-          width: 38px; height: 38px; display: block; object-fit: contain;
+          width: 44px; height: 44px; display: block; object-fit: contain;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         /* ---------- Niveaux de Commandant ---------- */
@@ -5397,12 +5399,12 @@ const APP_STYLES = `
            TEXTE par-dessus -- jamais dans l'image. L'ombre portee du texte le garde
            lisible sur le panneau central de la carte. */
         .hub-niveau {
-          width: 34px; height: 46px; flex: none;
+          width: 40px; height: 54px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
         .hub-niveau-nombre {
-          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
+          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
           color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
           text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
@@ -15010,7 +15012,7 @@ export default function Emprise() {
                 : "Quêtes"}
               title="Quêtes"
             >
-              <img className="hub-icone-quetes" src="/quetes/parchemin.png" alt="" aria-hidden="true" width="38" height="38" />
+              <img className="hub-icone-quetes" src="/quetes/parchemin.png" alt="" aria-hidden="true" width="44" height="44" />
               {quetes && quetes.nonVus > 0 && (
                 <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
               )}
