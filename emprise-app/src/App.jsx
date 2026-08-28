@@ -2095,8 +2095,10 @@ function conditionDeQuete(def, quete) {
 const DEFAUT_QUETES = {
   jour: "", quetesJour: [], rerollJour: false,
   semaine: "", quetesSemaine: [], rerollSemaine: false,
-  // Le compteur de la pastille du hub : quetes accomplies pas encore vues.
+  // Le compteur de la pastille du hub : quetes accomplies pas encore vues --
+  // et LEURS cles, pour que la page sache quels medaillons retourner.
   nonVus: 0,
+  nonVusCles: [],
 };
 let memoryQuetes = null;
 
@@ -2180,6 +2182,9 @@ async function loadQuetes() {
       quetesSemaine: uneListe(lu.quetesSemaine, QUETES_SEMAINE, QUETES_SEMAINE_ACTIVES),
       rerollSemaine: lu.rerollSemaine === true,
       nonVus: Number.isFinite(lu.nonVus) ? Math.max(0, Math.min(99, Math.floor(lu.nonVus))) : 0,
+      nonVusCles: Array.isArray(lu.nonVusCles)
+        ? [...new Set(lu.nonVusCles.filter((k) => typeof k === "string"))].slice(-12)
+        : [],
     };
   } catch (e) { return JSON.parse(JSON.stringify(DEFAUT_QUETES)); }
 }
@@ -2314,7 +2319,10 @@ async function avancerQuetes(releve) {
       }
     }
   }
-  if (accomplies.length) q.nonVus = Math.min(99, (q.nonVus || 0) + accomplies.length);
+  if (accomplies.length) {
+    q.nonVus = Math.min(99, (q.nonVus || 0) + accomplies.length);
+    q.nonVusCles = [...new Set([...(q.nonVusCles || []), ...accomplies.map((a) => a.cle)])].slice(-12);
+  }
   await writeQuetesRaw(JSON.stringify(q));
   return { quetes: q, accomplies };
 }
@@ -3358,6 +3366,8 @@ const ICONES_QUETES = {
   victoires2: "/quetes/icone-double-victoire.png",
   captures20: "/quetes/icone-nul-ne-s-echappe.png",
   ondes3: "/quetes/icone-la-cascade.png",
+  victoire1: "/quetes/icone-triomphe.png",
+  parties3: "/quetes/icone-le-commandant-a-l-oeuvre.png",
 };
 const GLYPHES_QUETES = {
   ordres: "/quetes/glyphe-ordres.png",
@@ -5387,6 +5397,30 @@ const APP_STYLES = `
           background: linear-gradient(180deg, #e6cf8f, #cba456);
           border-color: transparent; color: #241a0a;
         }
+        /* Le retournement d'une quete fraichement accomplie : le medaillon pivote
+           de la face icone (avers) a la face coche doree (revers). transform
+           seul, une seule fois, des l'ouverture de la page. Les fonds vivent sur
+           les FACES : le conteneur, lui, ne fait que tourner. */
+        .quete-glyphe.plein.quete-glyphe-retourne {
+          background: none; border: none;
+          transform-style: preserve-3d;
+          animation: glyphe-retourne 0.7s ease 0.25s both;
+          position: relative;
+        }
+        .glyphe-face {
+          position: absolute; inset: 0; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          backface-visibility: hidden; -webkit-backface-visibility: hidden;
+        }
+        .glyphe-face-avers { border: 1px solid rgba(203,164,86,0.5); color: var(--gold-bright); }
+        .glyphe-face-revers {
+          transform: rotateY(180deg);
+          background: linear-gradient(180deg, #e6cf8f, #cba456);
+          color: #241a0a;
+        }
+        @keyframes glyphe-retourne { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+        /* Mouvement reduit : pas de pivot, la face coche directement. */
+        .reduced-motion .quete-glyphe-retourne { animation: none; transform: rotateY(180deg); }
         .quete-glyphe.pointille {
           border-style: dashed; color: var(--muted);
           font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
@@ -11070,11 +11104,19 @@ export default function Emprise() {
     capsuleTimerRef.current = null;
     setCapsuleQuete(null);
   }
+  // Les quetes accomplies depuis la DERNIERE visite : leurs medaillons se
+  // retournent a l'ouverture (face icone vers face coche), une seule fois.
+  const [quetesFraiches, setQuetesFraiches] = useState(null);
   // L ouverture retire la pastille : les quetes accomplies sont desormais vues.
   async function ouvrirPageQuetes() {
     setPageQuetes(true);
     const q = await chargerQuetesDuMoment();
-    if (q.nonVus > 0) { q.nonVus = 0; await writeQuetesRaw(JSON.stringify(q)); }
+    setQuetesFraiches(new Set(q.nonVusCles || []));
+    if (q.nonVus > 0 || (q.nonVusCles || []).length) {
+      q.nonVus = 0;
+      q.nonVusCles = [];
+      await writeQuetesRaw(JSON.stringify(q));
+    }
     setQuetes(q);
   }
   async function relancerLaQuete(periode, cle) {
@@ -15241,7 +15283,14 @@ export default function Emprise() {
                             title="Relancer"
                           >↻</button>
                         )}
-                        <span className={`quete-glyphe ${a.faite ? "plein" : ""}`} aria-hidden="true">{glypheDeQuete(def, a.faite)}</span>
+                        {a.faite && quetesFraiches && quetesFraiches.has(a.cle) ? (
+                          <span className="quete-glyphe plein quete-glyphe-retourne" aria-hidden="true">
+                            <span className="glyphe-face glyphe-face-avers">{glypheDeQuete(def, false)}</span>
+                            <span className="glyphe-face glyphe-face-revers">{glypheDeQuete(def, true)}</span>
+                          </span>
+                        ) : (
+                          <span className={`quete-glyphe ${a.faite ? "plein" : ""}`} aria-hidden="true">{glypheDeQuete(def, a.faite)}</span>
+                        )}
                         <span className="quete-nom">{libelleDeQuete(def, a)}</span>
                         <span className="quete-condition">{conditionDeQuete(def, a)}</span>
                         <span className="quete-jauge">
