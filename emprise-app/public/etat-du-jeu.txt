@@ -48,7 +48,7 @@ Le médaillon d'une quête fraîchement accomplie se retourne à l'ouverture de 
 Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
-Hub : carte de niveau près du pseudo, trésor pièces et gemmes, bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
+Hub : carte de niveau près du pseudo, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.

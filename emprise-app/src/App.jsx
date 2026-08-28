@@ -4534,9 +4534,13 @@ const APP_STYLES = `
         .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
-          color: var(--gold-bright); cursor: default;
+          color: var(--gold-bright);
         }
-        .hub-pieces:active { transform: none; }
+        /* Son +, dore comme elle : il mene au comptoir Transformer de la Boutique. */
+        .hub-pieces .hub-gemmes-plus {
+          background: linear-gradient(180deg, #f0dcae, #cfa452);
+          color: #2a1c08;
+        }
         /* 24 px, comme le cristal : le Commandant prefere les deux au meme pas. */
         .hub-pieces .piece-icone { width: 24px; height: 24px; flex: none; }
         /* 24 px (10, 16 puis 20 avant lui). Une seule image de gemme partout
@@ -11300,15 +11304,17 @@ export default function Emprise() {
   useEffect(() => () => { clearTimeout(cadenasTimerRef.current); clearTimeout(ouvertureTimerRef.current); }, []);
   const [hubSens, setHubSens] = useState("droite");
   const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
-  // Le tresor du hub demande a voir le rayon des gemmes : l'onglet s'ouvre d'abord, le
-  // defilement suit une fois la page montee. Le drapeau se consomme -- ouvrir la
-  // Boutique par l'onglet du bas, ensuite, repart du haut comme toujours.
-  const versGemmesRef = useRef(false);
+  // Le tresor du hub demande a voir un rayon precis de la Boutique : l'onglet
+  // s'ouvre d'abord, le defilement suit une fois la page montee, vers le titre
+  // que porte le drapeau ("Gemmes" ou "Transformer"). Le drapeau se consomme --
+  // ouvrir la Boutique par l'onglet du bas, ensuite, repart du haut comme toujours.
+  const versBoutiqueRef = useRef(null);
   useEffect(() => {
-    if (hubPage !== "boutique" || !versGemmesRef.current) return;
-    versGemmesRef.current = false;
+    if (hubPage !== "boutique" || !versBoutiqueRef.current) return;
+    const cible = versBoutiqueRef.current;
+    versBoutiqueRef.current = null;
     const t = setTimeout(() => {
-      const titre = [...document.querySelectorAll(".boutique-titre")].find((x) => x.textContent === "Gemmes");
+      const titre = [...document.querySelectorAll(".boutique-titre")].find((x) => x.textContent === cible);
       if (titre) titre.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
     }, 80);
     return () => clearTimeout(t);
@@ -15159,17 +15165,23 @@ export default function Emprise() {
             </div>
             {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
-            {/* Le tresor, en deux pastilles cote a cote : les pieces a gauche (dorees,
-                gagnees en jouant -- un solde qui se constate), les gemmes a droite (un
-                solde qui s'achete : le + reste chez elles, et le toucher mene aux etals). */}
+            {/* Le tresor, en deux pastilles cote a cote et chacune son + : les pieces
+                a gauche menent au comptoir Transformer (le seul chemin vers des pieces
+                hors du jeu), les gemmes a droite menent a leurs etals. */}
             <span className="hub-tresor">
-            <span className="hub-gemmes hub-pieces" role="img" aria-label={`${bourse.pieces} pièces`} title="Pièces">
+            <button
+              className="hub-gemmes hub-pieces"
+              onClick={() => { versBoutiqueRef.current = "Transformer"; allerPageHub("boutique"); }}
+              aria-label={`${bourse.pieces} pièces, transformer des gemmes en pièces`}
+              title="Transformer des gemmes en pièces"
+            >
               <span className="piece-icone" aria-hidden="true" />
               <span className="hub-gemmes-nombre">{bourse.pieces}</span>
-            </span>
+              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
+            </button>
             <button
               className="hub-gemmes"
-              onClick={() => { versGemmesRef.current = true; allerPageHub("boutique"); }}
+              onClick={() => { versBoutiqueRef.current = "Gemmes"; allerPageHub("boutique"); }}
               aria-label={`${bourse.gemmes} gemmes, acheter des gemmes`}
               title="Acheter des gemmes"
             >
