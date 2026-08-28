@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 13h";
+const VERSION_AFFICHEE = "29 août · 13h15";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -4545,12 +4545,9 @@ const APP_STYLES = `
         .hub-pieces:active { transform: none; }
         /* 24 px, comme le cristal : le Commandant prefere les deux au meme pas. */
         .hub-pieces .piece-icone { width: 24px; height: 24px; flex: none; }
-        /* 24 px (10, 16 puis 20 avant lui), et l'image du Commandant : le hub porte
-           SA gemme (diamant grave d'or), les autres ecrans gardent le cristal. */
-        .hub-gemmes .gemme-icone {
-          width: 24px; height: 24px; flex: none;
-          background-image: url("/boutique/gemme-hub.png");
-        }
+        /* 24 px (10, 16 puis 20 avant lui). Le diamant grave d'or est desormais
+           LA gemme partout (gemme-icone.png) : plus d'exception d'image ici. */
+        .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
