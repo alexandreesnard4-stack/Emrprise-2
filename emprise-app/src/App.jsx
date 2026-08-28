@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 8h";
+const VERSION_AFFICHEE = "29 août · 8h45";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -4798,6 +4798,17 @@ const APP_STYLES = `
           font-size: 11px; color: var(--gold);
         }
         .amis-trophees img { width: 11px; height: 14px; object-fit: contain; }
+        /* Le niveau de l'ami, a cote de ses trophees : la meme voix discrete. */
+        .amis-niveau {
+          display: inline-flex; align-items: center; margin-left: 7px; flex: none;
+          font-size: 11px; color: var(--gold-bright); white-space: nowrap;
+        }
+        /* Le nom est devenu une porte vers le profil : un bouton qui garde
+           exactement l'habit du texte qu'il remplace. */
+        button.amis-ligne-texte {
+          background: none; border: none; padding: 0; margin: 0;
+          font: inherit; color: inherit; cursor: pointer;
+        }
         .amis-ligne.bloque { opacity: 0.7; }
         .amis-signaler-lien { margin-top: 2px; font-size: 10.5px; }
         /* Le menu d'un joueur : trois actions, chacune avec sa consequence en clair. */
@@ -10012,10 +10023,13 @@ export default function Emprise() {
         // Une cle d'Ordre venue d'ailleurs se verifie comme le reste : seule une cle que
         // le jeu connait passe.
         const ordreFavori = ORDERS.some((o) => o.key === d.ordreFavori) ? d.ordreFavori : "";
+        // Le niveau de Commandant, borne aux niveaux du jeu ; undefined quand il
+        // manque -- l'affichage se tait plutot que d'annoncer un niveau 0.
+        const niveau = Number.isFinite(d.niveau) && d.niveau >= 1 && d.niveau <= NIVEAU_MAX ? Math.floor(d.niveau) : undefined;
         return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
           parties: entier(d.parties), victoires: entier(d.victoires), combos,
-          ordreFavori, combosParties: entier(d.combosParties), tournois: entier(d.tournois),
+          ordreFavori, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
           lu: Date.now() }];
       } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
@@ -10291,11 +10305,22 @@ export default function Emprise() {
     const enLigne = estEnLigne(f);
     return (
       <div key={a.uid} className="amis-ligne">
-        <div className="amis-ligne-texte">
+        {/* Le nom ouvre la fiche de l'ami -- demande du Commandant. Le meme panneau
+            que pour un adversaire de partie : il sait deja tout dire d'un joueur. */}
+        <button
+          type="button"
+          className="amis-ligne-texte"
+          onClick={() => setProfilAdverse({ uid: a.uid, nom })}
+          aria-haspopup="dialog"
+          aria-label={`Voir le profil de ${nom}`}
+        >
           <span className="amis-nom">
             {nom}
             {f && f.trophees > 0 && (
               <span className="amis-trophees" title="Trophées"><img src="/nav/trophee.webp" alt="" />{f.trophees}</span>
+            )}
+            {f && typeof f.niveau === "number" && (
+              <span className="amis-niveau" title="Niveau de Commandant">Niv. {f.niveau}</span>
             )}
           </span>
           <span className="amis-code">
@@ -10310,7 +10335,7 @@ export default function Emprise() {
               </>
             )}
           </span>
-        </div>
+        </button>
         <button className="amis-btn principal" onClick={() => setDefiConfig({ uid: a.uid, nom, mode: "classique", herauts: false })}>Défier</button>
         {!compact && (
           <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: a.uid, nom, contexte: "ami" })}>
@@ -11061,7 +11086,10 @@ export default function Emprise() {
     // titre : un tournoi gagne n'en rapporte aucun et ne change pas de titre, si bien
     // que son compteur restait a quai jusqu'a la prochaine partie classee.
     const cle = [stats.trophies || 0, titrePrincipal(stats) || "", stats.gamesPlayed || 0,
-                 stats.mesVictoires || 0, stats.combosParties || 0, stats.tournoisGagnes || 0].join("/");
+                 stats.mesVictoires || 0, stats.combosParties || 0, stats.tournoisGagnes || 0,
+                 // Le niveau : l'XP d'une quete peut le faire monter sans qu'aucune
+                 // statistique ne bouge -- il a donc sa place dans la cle.
+                 niveauDepuisXp(progression.xpTotal).niveauJoueur].join("/");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
     const moi = profilPublic();
@@ -11076,8 +11104,12 @@ export default function Emprise() {
     updateDoc(doc(db, "users", myUid), { parties: moi.parties, victoires: moi.victoires, combos: moi.combos }).catch(() => {});
     // Ce qui attend la publication des regles, et qui a le droit d'echouer seul :
     updateDoc(doc(db, "users", myUid), { ordreFavori: moi.ordreFavori, combosParties: moi.combosParties,
-                                         tournois: tournoisPublics() }).catch(() => {});
-  }, [myUid, monCodeAmi, stats]);
+                                         tournois: tournoisPublics(),
+                                         // Le niveau rejoint le meme convoi : un champ hors
+                                         // liste fait refuser TOUTE l'ecriture qui le porte,
+                                         // il voyage donc avec ceux qui attendent deja.
+                                         niveau: Math.max(1, Math.min(NIVEAU_MAX, niveauDepuisXp(progression.xpTotal).niveauJoueur)) }).catch(() => {});
+  }, [myUid, monCodeAmi, stats, progression]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
   // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
@@ -17913,7 +17945,7 @@ export default function Emprise() {
                 <div className="profil-fiche-qui">
                   <div className="profil-fiche-pseudo">{profilAdverse.nom}</div>
                   {f.codeAmi && <div className="profil-fiche-code">{codeAmiLisible(f.codeAmi)}</div>}
-                  <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées</div>
+                  <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées{typeof f.niveau === "number" ? ` · Niveau ${f.niveau}` : ""}</div>
                 </div>
               </div>
 
