@@ -2854,8 +2854,17 @@ async function acheterCosmetique(famille, cle) {
 // n'ajoute jamais deux fois ; une bourse sans equipee prend celle-ci d'office.
 async function possederBanniere(cle, equiperAussi) {
   const b = await loadBourse();
-  if (!BANNIERES.some((x) => x.cle === cle)) return { bourse: b, ajoutee: false };
+  const item = banniereDeCle(cle);
+  if (!item) return { bourse: b, ajoutee: false };
   const deja = b.possessions.bannieres.includes(cle);
+  // Le choix de depart est UNIQUE et sa garde vit ICI, dans les donnees : deux
+  // onglets ouverts ou deux taps rapides sur deux cartes ne peuvent pas offrir
+  // une deuxieme banniere de depart -- le panneau promet que les deux autres
+  // restent dans l'ombre, les donnees le jurent.
+  if (!deja && item.source === "depart"
+      && b.possessions.bannieres.some((k) => { const x = banniereDeCle(k); return x && x.source === "depart"; })) {
+    return { bourse: b, ajoutee: false };
+  }
   const equipeeAvant = b.banniereEquipee;
   if (!deja) b.possessions.bannieres = [...b.possessions.bannieres, cle];
   if (equiperAussi || !b.banniereEquipee) b.banniereEquipee = cle;
@@ -4881,17 +4890,31 @@ const APP_STYLES = `
           border: 1px solid rgba(203,164,86,0.28);
           background: linear-gradient(160deg, #241c32, #14101d);
         }
-        .profil-banniere > *:not(.profil-banniere-fond) { position: relative; z-index: 1; }
+        /* Les rangees posees sur le bandeau passent au-dessus du fond MAIS
+           laissent filer le toucher vers lui : seules leurs commandes le
+           retiennent. Sans cela, la zone touchable du bandeau se reduisait a
+           l'anneau de padding. */
+        .profil-banniere > *:not(.profil-banniere-fond) { position: relative; z-index: 1; pointer-events: none; }
+        .profil-banniere button, .profil-banniere input { pointer-events: auto; }
         .profil-banniere-fond {
           position: absolute; inset: 0; z-index: 0; border: none; padding: 0;
           cursor: pointer; background-size: cover; background-position: center;
         }
         /* Le voile sombre COTE GAUCHE, statique : pseudo, blason et carte de
-           niveau restent lisibles sur chacune des 24 images. */
+           niveau restent lisibles sur chacune des 24 images. A droite, un fond
+           moins clair et une ombre portee sur les petits textes de la jauge. */
         .profil-banniere-fond::after {
           content: ""; position: absolute; inset: 0; pointer-events: none;
-          background: linear-gradient(90deg, rgba(8,6,12,0.82), rgba(8,6,12,0.5) 55%, rgba(8,6,12,0.18));
+          background: linear-gradient(90deg, rgba(8,6,12,0.82), rgba(8,6,12,0.5) 55%, rgba(8,6,12,0.32));
         }
+        .profil-banniere .profil-xp-ligne span, .profil-banniere .profil-xp-detail {
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+        }
+        /* La croix du profil repasse AU-DESSUS du bandeau qui la chevauche. */
+        .profil-fiche .profil-fiche-croix { z-index: 2; }
+        /* Pas de zoom herite de .boutique-carte : une banniere ne s'anime pas. */
+        .boutique-carte.banniere-carte { transition: none; }
+        .boutique-carte.banniere-carte:active { transform: none; }
         /* Le face-a-face d'avant-partie : la banniere DERRIERE le nom. */
         .vs-plaque { position: relative; overflow: hidden; }
         .vs-plaque > *:not(.vs-plaque-fond) { position: relative; z-index: 1; }
@@ -11361,9 +11384,6 @@ export default function Emprise() {
     };
   }, []);
   const [gameOver, setGameOver] = useState(false);
-  // La banniere annoncee ne survit pas a l'ecran de fin : une nouvelle partie
-  // la retire d'elle-meme.
-  useEffect(() => { if (!gameOver) setBanniereAnnonce(null); }, [gameOver]);
   const [infoAbility, setInfoAbility] = useState(null);
   // null : rien a reprendre. Sinon, le resume de la partie interrompue (mode, score) :
   // la carte de reprise doit dire OU le Commandant en etait, pas seulement qu'il y est.
@@ -11475,6 +11495,9 @@ export default function Emprise() {
   // choix parmi les possedees ouvert depuis le profil.
   const [achatBanniere, setAchatBanniere] = useState(null);
   const [selectionBanniere, setSelectionBanniere] = useState(false);
+  // Un seul choix de depart EN VOL : le meme patron que siegeEnCoursRef des
+  // tournois -- deux taps rapides sur deux cartes ne partent pas tous les deux.
+  const choixDepartRef = useRef(false);
   // La Flamme quotidienne : chargee une fois au demarrage (la lecture evalue
   // l'extinction d'elle-meme), puis rafraichie apres chaque partie comptee.
   const [flamme, setFlamme] = useState(null);
@@ -12148,6 +12171,9 @@ export default function Emprise() {
   const [storyChapterKey, setStoryChapterKey] = useState(null); // clé d'Ordre du chapitre en cours (null hors mode Histoire)
   const [storySecondPick, setStorySecondPick] = useState(null); // clé du 2e Ordre choisi pour la partie de chapitre en cours
   const [storyChapterJustCompleted, setStoryChapterJustCompleted] = useState(null); // clé d'Ordre si le Seigneur de Guerre vient d'être battu
+  // La banniere annoncee ne survit ni a l'ecran de fin ni a celui du chapitre
+  // termine (qui l'affiche aussi) : la partie suivante la retire d'elle-meme.
+  useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setBanniereAnnonce(null); }, [gameOver, storyChapterJustCompleted]);
   const [storyCeremonyDone, setStoryCeremonyDone] = useState(false); // la cérémonie de déblocage du Héraut a été vue (ou passée)
   const [tourneyBanPick, setTourneyBanPick] = useState(null); // clé d'Ordre sélectionné à bannir, avant confirmation
   // Premier clic : demande confirmation. Second clic (sur "Confirmer") : efface pour de bon.
@@ -12445,8 +12471,9 @@ export default function Emprise() {
         // d une quete avale par le +8 de la partie).
         const histoireQuetes = !!storyChapterKey && !testMode;
         const confluenceQuetes = confluenceActive && !testMode && !suivi.disqualifie;
+        let quetesFaites = Promise.resolve();
         if (monCampCombos && (compteAuProfil || histoireQuetes || confluenceQuetes)) {
-          avancerQuetes({
+          quetesFaites = avancerQuetes({
             ...quetesReleveRef.current,
             victoire: winner === monCampCombos,
             partieHistoire: histoireQuetes,
@@ -12462,6 +12489,33 @@ export default function Emprise() {
         } else {
           setQuetesDernierePartie(null);
         }
+        // Mode Histoire : une victoire fait avancer la progression du chapitre.
+        // ENCHAINE apres l'XP ET les quetes, jamais en parallele : completeChapter
+        // ecrit la bourse (l'Etendard du chapitre), gagnerXp et les quetes aussi
+        // (pieces, gemmes de palier) -- deux lire-modifier-ecrire simultanes
+        // s'ecraseraient, comme le +20 de quete avale jadis par le +8 de partie.
+        // Un rate des quetes ne prive pas le chapitre de sa conclusion.
+        quetesFaites.catch(() => {}).then(() => {
+          if (storyChapterKey && winner === "blue") {
+            const chapterMeta = STORY_CHAPTERS.find((c) => c.orderKey === storyChapterKey);
+            const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
+            if (chapterMeta && gameIndex >= chapterMeta.numGames) {
+              setStoryChapterJustCompleted(storyChapterKey);
+              completeChapter(storyChapterKey).then((p) => {
+                setStoryProgress(p);
+                // L'Etendard du chapitre vient d'etre possede : la bourse a
+                // change, et l'ecran de fin de chapitre annonce le deblocage.
+                if (p.banniereDebloquee) {
+                  const bn = banniereDeCle(p.banniereDebloquee);
+                  if (bn) setBanniereAnnonce(bn.nom);
+                  loadBourse().then(setBourse);
+                }
+              });
+            } else {
+              recordChapterWin(storyChapterKey).then(setStoryProgress);
+            }
+          }
+        });
       });
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
@@ -12477,28 +12531,9 @@ export default function Emprise() {
           motif: finMotif || null,
         }));
       }
-      // Mode Histoire : une victoire fait avancer la progression du chapitre en cours.
-      // Si c'était la dernière partie (Seigneur de Guerre), le chapitre est marqué
-      // terminé et le Héraut débloqué, plutôt qu'une simple victoire de plus.
-      if (storyChapterKey && winner === "blue") {
-        const chapterMeta = STORY_CHAPTERS.find((c) => c.orderKey === storyChapterKey);
-        const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
-        if (chapterMeta && gameIndex >= chapterMeta.numGames) {
-          setStoryChapterJustCompleted(storyChapterKey);
-          completeChapter(storyChapterKey).then((p) => {
-            setStoryProgress(p);
-            // L'Etendard du chapitre vient d'etre possede : la bourse a change,
-            // et l'ecran de fin annonce le deblocage.
-            if (p.banniereDebloquee) {
-              const bn = banniereDeCle(p.banniereDebloquee);
-              if (bn) setBanniereAnnonce(bn.nom);
-              loadBourse().then(setBourse);
-            }
-          });
-        } else {
-          recordChapterWin(storyChapterKey).then(setStoryProgress);
-        }
-      }
+      // La progression d'Histoire vit desormais DANS la chaine de fin de partie
+      // ci-dessus (apres l'XP et les quetes) : les trois ecrivent la bourse, et
+      // seule la file unique empeche les ecrasements lire-modifier-ecrire.
     }
     if (!gameOver) statsRecordedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -16787,8 +16822,10 @@ export default function Emprise() {
           {/* Une seule fois : tant qu'aucune banniere de DEPART n'est possedee
               (les Etendards retroactifs d'Histoire ne volent pas ce choix).
               Sobre, plein ecran, pas de croix : on choisit, il disparait pour
-              toujours. Il attend la fin de la ceremonie d'entree. */}
-          {bourseChargee && introEtape >= 2
+              toujours. Il attend le nom du Commandant, la fin de l'Adoubement
+              ET la fin de l'intro : sans ces gardes, son voile (z 220)
+              recouvrait l'ecran du nom (z 200) et la ceremonie (z 210). */}
+          {bourseChargee && pseudo && !adoubement && introEtape >= 2
             && !bourse.possessions.bannieres.some((k) => { const x = banniereDeCle(k); return x && x.source === "depart"; })
             && (
             <div className="info-overlay choix-banniere-voile">
@@ -16797,7 +16834,12 @@ export default function Emprise() {
                 <p className="choix-banniere-sous">Elle habillera votre profil et précédera vos duels. Un seul choix : les deux autres resteront dans l&apos;ombre.</p>
                 {BANNIERES.filter((x) => x.source === "depart").map((bn) => (
                   <button key={bn.cle} className="choix-banniere-carte"
-                          onClick={() => possederBanniere(bn.cle, true).then(({ bourse: b }) => setBourse(b))}
+                          onClick={() => {
+                            if (choixDepartRef.current) return;
+                            choixDepartRef.current = true;
+                            possederBanniere(bn.cle, true).then(({ bourse: b }) => setBourse(b))
+                              .finally(() => { choixDepartRef.current = false; });
+                          }}
                           aria-label={`Choisir ${bn.nom}`}>
                     <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" />
                     <span className="choix-banniere-nom">{bn.nom}</span>
@@ -17532,6 +17574,11 @@ export default function Emprise() {
                 <div className="imposed-order-desc">{chapterMeta.hero?.desc}</div>
               </div>
             </div>
+            {/* L'Etendard du chapitre, fraichement possede : l'Histoire n'a pas
+                de ceremonie de fin de partie, l'annonce vit donc ICI. */}
+            {banniereAnnonce && (
+              <div className="cer-banniere">Bannière débloquée — {banniereAnnonce}</div>
+            )}
             <button
               className="reset-btn"
               onClick={() => { setStoryChapterJustCompleted(null); setStoryChapterKey(null); setStorySecondPick(null); setPhase("chapters"); }}
@@ -18498,6 +18545,14 @@ export default function Emprise() {
             {mode !== "online" && <button className="back-btn" onClick={goBack}>← Retour</button>}
             {isConfluence ? (
               <>
+                {/* L'Echo de la Confluence porte aussi l'Etendard de sa
+                    difficulte (la Confluence locale ne passe jamais par cet
+                    apercu : select-red va droit au jeu). */}
+                {botDifficulty && (
+                  <div className="vs-etendard" style={{ backgroundImage: `url("${banniereDeDifficulte(botDifficulty).image}")` }}>
+                    <span>{DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}</span>
+                  </div>
+                )}
                 <h2>Votre main</h2>
                 <div className="sub">
                   Confluence ({new Set(redHand.map((c) => c.ability)).size} Ordres) · niveau {DIFFICULTIES.find((d) => d.key === botDifficulty)?.label} · même main pour les deux camps
@@ -18507,6 +18562,15 @@ export default function Emprise() {
                     <Card key={card.id} card={card} owner="blue" extraClass="hand" />
                   ))}
                 </div>
+                {/* Ma banniere en bas, comme partout ailleurs en avant-partie. */}
+                {(() => {
+                  const mienne = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
+                  return mienne && (
+                    <div className="vs-etendard mienne" style={{ backgroundImage: `url("${mienne.image}")`, marginTop: 12 }}>
+                      <span>{pseudo || "Vous"}</span>
+                    </div>
+                  );
+                })()}
               </>
             ) : (
               <>
