@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 4h";
+const VERSION_AFFICHEE = "29 août · 4h15";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -3804,6 +3804,16 @@ const APP_STYLES = `
         }
         .hub-gemmes:active { transition-duration: .1s; transform: scale(0.94); }
         .hub-gemmes .gemme-icone { width: 10px; height: 10px; flex: none; }
+        /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
+        .hub-gemmes-plus {
+          width: 13px; height: 13px; flex: none; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: linear-gradient(180deg, #d9c2f5, #b183e8);
+          color: #1d1030; font-size: 11px; font-weight: 700; line-height: 1;
+        }
+        /* Un defilement commande vers un titre s'arrete SOUS la lisiere fondue par le
+           masque de la page : sans cette marge, le titre arrivait pile dans l'estompe. */
+        .boutique-titre { scroll-margin-top: 34px; }
         /* ---------- Le Pantheon ---------- */
         /* Cent lignes PLATES : ni ombre ni animation par ligne — cent lignes decorees
            ruinent le defilement sur mobile. Le podium se distingue par une pastille en
@@ -10109,6 +10119,21 @@ export default function Emprise() {
   useEffect(() => () => { clearTimeout(cadenasTimerRef.current); clearTimeout(ouvertureTimerRef.current); }, []);
   const [hubSens, setHubSens] = useState("droite");
   const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
+  // Le tresor du hub demande a voir le rayon des gemmes : l'onglet s'ouvre d'abord, le
+  // defilement suit une fois la page montee. Le drapeau se consomme -- ouvrir la
+  // Boutique par l'onglet du bas, ensuite, repart du haut comme toujours.
+  const versGemmesRef = useRef(false);
+  useEffect(() => {
+    if (hubPage !== "boutique" || !versGemmesRef.current) return;
+    versGemmesRef.current = false;
+    const t = setTimeout(() => {
+      const titre = [...document.querySelectorAll(".boutique-titre")].find((x) => x.textContent === "Gemmes");
+      if (titre) titre.scrollIntoView({ block: "start", behavior: reducedMotion ? "auto" : "smooth" });
+    }, 80);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubPage]);
+
   function allerPageHub(page) {
     if (page === hubPage) return;
     setHubSens(HUB_ORDRE_PAGES.indexOf(page) > HUB_ORDRE_PAGES.indexOf(hubPage) ? "droite" : "gauche");
@@ -13664,12 +13689,13 @@ export default function Emprise() {
                 qu'on veut depenser. */}
             <button
               className="hub-gemmes"
-              onClick={() => allerPageHub("boutique")}
-              aria-label={`${bourse.gemmes} gemmes, ouvrir la Boutique`}
-              title="Boutique"
+              onClick={() => { versGemmesRef.current = true; allerPageHub("boutique"); }}
+              aria-label={`${bourse.gemmes} gemmes, acheter des gemmes`}
+              title="Acheter des gemmes"
             >
               <span className="gemme-icone" aria-hidden="true" />
               <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
+              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
             </button>
             <span className="hub-haut-rang">
             <button
