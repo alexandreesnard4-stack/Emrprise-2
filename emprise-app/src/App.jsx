@@ -4545,8 +4545,8 @@ const APP_STYLES = `
         .hub-pieces:active { transform: none; }
         /* 24 px, comme le cristal : le Commandant prefere les deux au meme pas. */
         .hub-pieces .piece-icone { width: 24px; height: 24px; flex: none; }
-        /* 24 px (10, 16 puis 20 avant lui). Le diamant grave d'or est desormais
-           LA gemme partout (gemme-icone.png) : plus d'exception d'image ici. */
+        /* 24 px (10, 16 puis 20 avant lui). Une seule image de gemme partout
+           (gemme-icone.png, le cristal d'amethyste) : pas d'exception ici. */
         .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
