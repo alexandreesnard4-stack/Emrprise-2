@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 13h30";
+const VERSION_AFFICHEE = "29 août · 13h45";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -4534,9 +4534,9 @@ const APP_STYLES = `
         /* La rangee du tresor : pieces a gauche, gemmes a droite, meme largeur
            totale que les boutons de la colonne. Chaque pastille garde sa couleur,
            jamais les deux melangees. */
-        /* La meme bande de hauteur que la rangee du joueur en face (62 px, la
+        /* La meme bande de hauteur que la rangee du joueur en face (70 px, la
            carte de niveau) : pseudo et pastilles se centrent sur la meme ligne. */
-        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 62px; }
+        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 70px; }
         .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
@@ -5421,13 +5421,17 @@ const APP_STYLES = `
            TEXTE par-dessus -- jamais dans l'image. L'ombre portee du texte le garde
            lisible sur le panneau central de la carte. */
         .hub-niveau {
-          width: 46px; height: 62px; flex: none;
+          width: 52px; height: 70px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
+        /* La fenetre du nombre reserve DEUX chiffres d'office (min-width en ch,
+           chiffres tabulaires) : « 9 » est centre dans la meme place que « 50 »,
+           rien ne bouge au passage du niveau 10. */
         .hub-niveau-nombre {
-          font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700;
+          font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
           color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          min-width: 2ch; text-align: center;
           text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
         /* La meme carte, en grand, au profil -- a gauche de la ligne de niveau. */
@@ -5439,6 +5443,7 @@ const APP_STYLES = `
         .profil-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 21px; font-weight: 700;
           color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          min-width: 2ch; text-align: center;
           text-shadow: 0 1px 4px rgba(0,0,0,0.9);
         }
         .quetes-titre-parchemin { width: 22px; height: 22px; flex: none; object-fit: contain; }
