@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 3h45";
+const VERSION_AFFICHEE = "29 août · 4h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -3794,7 +3794,7 @@ const APP_STYLES = `
            au-dessus : la colonne reste une colonne. Teinte amethyste, comme tout ce qui
            touche aux gemmes -- le dore reste aux pieces et aux trophees. */
         .hub-gemmes {
-          width: 48px; padding: 4px 0 5px; flex: none;
+          align-self: stretch; padding: 4px 0 5px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
           background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
           border-radius: 10px; cursor: pointer;
@@ -4534,6 +4534,13 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums;
         }
         .pack-prix { font-size: 11.5px; color: var(--muted); }
+        /* La promesse du premier achat, en ROUGE a la demande du Commandant. C'est du
+           TEXTE qui informe, le rouge ne fait qu'appuyer -- la couleur seule ne porte
+           jamais l'information dans cette maison. */
+        .pack-double {
+          font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+          font-weight: 700; color: var(--red-bright);
+        }
 
         .achat-panneau { max-width: 300px; }
         .achat-prix {
@@ -13653,6 +13660,17 @@ export default function Emprise() {
             </div>
             {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
+            {/* Le tresor. Toucher mene aux etals : un solde qu'on regarde est un solde
+                qu'on veut depenser. */}
+            <button
+              className="hub-gemmes"
+              onClick={() => allerPageHub("boutique")}
+              aria-label={`${bourse.gemmes} gemmes, ouvrir la Boutique`}
+              title="Boutique"
+            >
+              <span className="gemme-icone" aria-hidden="true" />
+              <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
+            </button>
             <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
@@ -13692,17 +13710,6 @@ export default function Emprise() {
               {pastilleAmis > 0 && (
                 <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
               )}
-            </button>
-            {/* Le tresor. Toucher mene aux etals : un solde qu'on regarde est un solde
-                qu'on veut depenser. */}
-            <button
-              className="hub-gemmes"
-              onClick={() => allerPageHub("boutique")}
-              aria-label={`${bourse.gemmes} gemmes, ouvrir la Boutique`}
-              title="Boutique"
-            >
-              <span className="gemme-icone" aria-hidden="true" />
-              <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
             </button>
             </span>
             )}
@@ -13801,13 +13808,14 @@ export default function Emprise() {
                         key={p.cle}
                         className="boutique-carte"
                         onClick={() => setPackRegarde(p)}
-                        aria-label={`${p.nom}, ${p.gemmes} gemmes, ${p.prixDit}`}
+                        aria-label={`${p.nom}, ${p.gemmes} gemmes, doublées au premier achat, ${p.prixDit}`}
                       >
                         {p.mention && <span className="pack-mention">{p.mention}</span>}
                         {/* Decorative : le texte de la carte dit deja tout. width et
                             height, pour que son arrivee ne fasse pas sauter la grille. */}
                         <img className="pack-image" src={p.image} alt="" aria-hidden="true" width="512" height="512" loading="lazy" />
                         <span className="pack-quantite"><span className="gemme-icone" aria-hidden="true" />{p.gemmes}</span>
+                        <span className="pack-double">Premier achat : gemmes ×2</span>
                         <span className="boutique-nom">{p.nom}</span>
                         <span className="pack-prix">{p.prix}</span>
                       </button>
@@ -16667,6 +16675,7 @@ export default function Emprise() {
           <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
             <div className="info-panel-title">{packRegarde.nom}</div>
             <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{packRegarde.gemmes}<span className="lecteur-seul"> gemmes</span></div>
+            <div className="pack-double">Au premier achat de ce pack, les gemmes sont doublées.</div>
             <div className="achat-solde">Les acquisitions de gemmes ouvriront à la sortie du jeu. Les prix affichés sont définitifs.</div>
             <button className="landing-link" onClick={() => setPackRegarde(null)}>Fermer</button>
           </div>
