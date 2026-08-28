@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 10h30";
+const VERSION_AFFICHEE = "29 août · 11h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -5389,20 +5389,35 @@ const APP_STYLES = `
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
         /* ---------- Niveaux de Commandant ---------- */
-        /* La vignette de carte du hub : une silhouette de carte a jouer dessinee en CSS
-           (cadre dore, lisere interieur comme les cartes du jeu), le niveau au centre. */
+        /* La carte d'apparat du niveau : l'image definitive en fond, le nombre en
+           TEXTE par-dessus -- jamais dans l'image. L'ombre portee du texte le garde
+           lisible sur le panneau central de la carte. */
         .hub-niveau {
-          width: 22px; height: 29px; flex: none;
+          width: 29px; height: 36px; flex: none;
           display: flex; align-items: center; justify-content: center;
-          border: 1px solid rgba(203,164,86,0.55); border-radius: 5px;
-          background: linear-gradient(180deg, rgba(203,164,86,0.16), rgba(20,14,30,0.55));
-          box-shadow: inset 0 0 0 2px rgba(10,8,16,0.55), inset 0 0 0 3px rgba(203,164,86,0.22);
+          background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
         .hub-niveau-nombre {
-          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
-          color: var(--gold-bright); line-height: 1;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
-        .profil-xp { width: 100%; display: flex; flex-direction: column; gap: 4px; margin: 2px 0 4px; }
+        /* La meme carte, en grand, au profil -- a gauche de la ligne de niveau. */
+        .profil-niveau-carte {
+          width: 53px; height: 72px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
+        }
+        .profil-niveau-nombre {
+          font-family: 'Cinzel', serif; font-size: 21px; font-weight: 700;
+          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+        }
+        .quetes-titre-parchemin { width: 22px; height: 22px; flex: none; object-fit: contain; }
+        /* La carte a gauche, le corps (ligne, jauge, compte) a droite : le corps
+           reprend l'ancienne colonne, la barre et ses textes n'ont pas bouge. */
+        .profil-xp { width: 100%; display: flex; align-items: center; gap: 10px; margin: 2px 0 4px; }
+        .profil-xp-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
         .profil-xp-ligne { display: flex; align-items: baseline; justify-content: space-between; }
         .profil-xp-niveau { font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #f0eaf8; }
         .profil-xp-essai { font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 10px; color: var(--muted); }
@@ -5444,12 +5459,11 @@ const APP_STYLES = `
           display: inline-block; width: 11px; height: 11px;
           background: url("/boutique/gemme-icone.png") center / contain no-repeat;
         }
-        /* La piece : un disque dore en CSS, sans image pour l'instant. Le jour ou
-           une image arrivera, seule cette classe changera. Jamais animee. */
+        /* La piece : l'image definitive. Le jour est venu -- seule cette classe a
+           change, comme promis quand elle n'etait qu'un disque en CSS. Jamais animee. */
         .piece-icone {
-          width: 11px; height: 11px; flex: none; border-radius: 50%; box-sizing: border-box;
-          background: radial-gradient(circle at 35% 32%, #e8c877 0%, #b8933f 55%, #8a6a2c 100%);
-          border: 1px solid rgba(232,200,119,0.8);
+          display: inline-block; width: 11px; height: 11px; flex: none;
+          background: url("/boutique/piece.png") center / contain no-repeat;
         }
         .achat-prix .piece-icone { width: 14px; height: 14px; }
         .boutique-soldes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
@@ -14992,11 +15006,7 @@ export default function Emprise() {
                 : "Quêtes"}
               title="Quêtes"
             >
-              <svg className="hub-icone-quetes" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M7.2 4.6h10.2c1.2 0 2.1 1 2.1 2.1 0 1.2-1 2.1-2.1 2.1" />
-                <path d="M7.2 4.6c-1.2 0-2.1 1-2.1 2.1v10.6c0 1.2 1 2.1 2.1 2.1h9.2c1.2 0 2.1-1 2.1-2.1V8.8" />
-                <path d="M8.6 9.4h6.4M8.6 12.2h6.4M8.6 15h4.2" />
-              </svg>
+              <img className="hub-icone-quetes" src="/quetes/parchemin.png" alt="" aria-hidden="true" width="30" height="30" />
               {quetes && quetes.nonVus > 0 && (
                 <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
               )}
@@ -15072,6 +15082,7 @@ export default function Emprise() {
                 <button className="quetes-retour" onClick={() => setPageQuetes(false)} aria-label="Retour au hub">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
                 </button>
+                <img className="quetes-titre-parchemin" src="/quetes/parchemin.png" alt="" aria-hidden="true" width="22" height="22" />
                 <h2 className="quetes-titre">QUÊTES</h2>
               </header>
               <div className="quetes-corps">
@@ -15799,6 +15810,12 @@ export default function Emprise() {
                     const nx = niveauDepuisXp(progression.xpTotal);
                     return (
                       <div className="profil-xp">
+                        {/* La carte d'apparat, en grand : l'image en fond, le nombre en
+                            texte par-dessus. */}
+                        <span className="profil-niveau-carte" role="img" aria-label={`Niveau ${nx.niveauJoueur}`}>
+                          <span className="profil-niveau-nombre" aria-hidden="true">{nx.niveauJoueur}</span>
+                        </span>
+                        <div className="profil-xp-corps">
                         <div className="profil-xp-ligne">
                           <span className="profil-xp-niveau">{nx.xpPourSuivant === null ? "Niveau maximum" : `Niveau ${nx.niveauJoueur}`}</span>
                           <span className="profil-xp-essai">progression d&apos;essai</span>
@@ -15813,6 +15830,7 @@ export default function Emprise() {
                         ) : (
                           <div className="profil-xp-detail">{progression.xpTotal} XP à vie</div>
                         )}
+                        </div>
                       </div>
                     );
                   })()}
