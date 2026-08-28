@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 5h30";
+const VERSION_AFFICHEE = "29 août · 7h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1953,6 +1953,301 @@ async function resetStats() {
   memoryStats = null;
   await writeStatsRaw(JSON.stringify(DEFAULT_STATS));
   return { ...DEFAULT_STATS };
+}
+
+// ---------- Quetes ----------
+// Chaque quete : cle unique, famille (deux quetes de la meme famille ne
+// sont jamais tirees ensemble), libelle affiche, type de condition,
+// objectif, XP. Le type "ordreImpose" tire un Ordre disponible au moment
+// du tirage (jamais un Ordre verrouille ou "prochainement").
+// Recompense : de l XP, versee par gagnerXp, et rien d autre.
+const QUETES_JOUR = [
+  { cle: "captures10",  famille: "captures", libelle: "Que vos rangs parlent",      type: "captures",       objectif: 10, xp: 25 },
+  { cle: "captures20",  famille: "captures", libelle: "Nul ne s'échappe",     type: "captures",       objectif: 20, xp: 35 },
+  { cle: "ondes3",      famille: "ondes",    libelle: "La cascade",                 type: "ondes",          objectif: 3,  xp: 30 },
+  { cle: "grosseOnde",  famille: "ondes",    libelle: "Déferlante",           type: "ondeDe3",        objectif: 1,  xp: 30 },
+  { cle: "parties3",    famille: "jouer",    libelle: "Le Commandant à l'oeuvre", type: "partiesJouees", objectif: 3, xp: 20 },
+  { cle: "victoire1",   famille: "gagner",   libelle: "Triomphe",                   type: "victoires",      objectif: 1,  xp: 20 },
+  { cle: "victoires2",  famille: "gagner",   libelle: "Double victoire",            type: "victoires",      objectif: 2,  xp: 30 },
+  { cle: "ordres3",     famille: "ordres",   libelle: "L'appel des bannières", type: "ordresDistincts", objectif: 3, xp: 25 },
+  { cle: "ordreImpose", famille: "ordres",   libelle: "Sous la bannière",     type: "ordreImpose",    objectif: 1,  xp: 25 },
+  { cle: "histoire1",   famille: "modes",    libelle: "Chroniques",                 type: "partiesHistoire", objectif: 1, xp: 25 },
+  { cle: "veteran1",    famille: "gagner",   libelle: "L'épreuve du Vétéran", type: "victoiresVeteranPlus", objectif: 1, xp: 35 },
+  { cle: "confluence1", famille: "modes",    libelle: "Draft d'Ordres",             type: "partiesConfluence", objectif: 1, xp: 25 },
+];
+const QUETES_SEMAINE = [
+  { cle: "captures100", famille: "captures", libelle: "Moisson de la semaine",      type: "captures",       objectif: 100, xp: 120 },
+  { cle: "resonances3", famille: "resonances", libelle: "L'écho des rangs",   type: "resonances",     objectif: 3,   xp: 150 },
+  { cle: "ondes15",     famille: "ondes",    libelle: "Le grand raz-de-marée", type: "ondes",         objectif: 15,  xp: 130 },
+  { cle: "victoires10", famille: "gagner",   libelle: "Campagne victorieuse",       type: "victoires",      objectif: 10,  xp: 150 },
+  { cle: "ordres8",     famille: "ordres",   libelle: "Les onze bannières",   type: "ordresDistincts", objectif: 8,  xp: 140 },
+  { cle: "histoire5",   famille: "modes",    libelle: "Chronique achevée",    type: "partiesHistoire", objectif: 5,  xp: 130 },
+  { cle: "seigneur3",   famille: "gagner",   libelle: "L'ascension du Seigneur",    type: "victoiresSeigneur", objectif: 3, xp: 200 },
+];
+const QUETES_JOUR_ACTIVES = 3;
+const QUETES_SEMAINE_ACTIVES = 3;
+
+function defQuete(cle) {
+  return QUETES_JOUR.find((q) => q.cle === cle) || QUETES_SEMAINE.find((q) => q.cle === cle) || null;
+}
+
+// Le libelle affiche : "Sous la banniere" porte le nom de l Ordre tire.
+function libelleDeQuete(def, quete) {
+  if (def.type === "ordreImpose" && quete && quete.ordre) {
+    const o = ORDERS.find((x) => x.key === quete.ordre);
+    if (o) return def.libelle + " des " + o.name;
+  }
+  return def.libelle;
+}
+
+// La condition, derivee du type : le catalogue reste une table de donnees.
+function conditionDeQuete(def, quete) {
+  const n = def.objectif;
+  switch (def.type) {
+    case "captures": return "Capturer " + n + " cartes adverses";
+    case "ondes": return n === 1 ? "Déclencher une Onde" : "Déclencher " + n + " Ondes";
+    case "ondeDe3": return "Déclencher une Onde de 3 captures ou plus";
+    case "partiesJouees": return "Jouer " + n + " parties";
+    case "victoires": return n === 1 ? "Remporter une partie" : "Remporter " + n + " parties";
+    case "ordresDistincts": return "Jouer " + n + " Ordres différents";
+    case "ordreImpose": {
+      const o = ORDERS.find((x) => x.key === (quete && quete.ordre));
+      return "Jouer une partie avec les " + (o ? o.name : "?") + " en main";
+    }
+    case "partiesHistoire": return n === 1 ? "Jouer une partie d'Histoire" : "Jouer " + n + " parties d'Histoire";
+    case "victoiresVeteranPlus": return "Vaincre un Écho Vétéran ou Seigneur de Guerre";
+    case "victoiresSeigneur": return n === 1 ? "Vaincre le Seigneur de Guerre" : "Vaincre " + n + " fois le Seigneur de Guerre";
+    case "partiesConfluence": return n === 1 ? "Jouer une partie de Confluence" : "Jouer " + n + " parties de Confluence";
+    default: return "";
+  }
+}
+
+// ---------- Le stockage des quetes, meme trio hybride que la bourse ----------
+const DEFAUT_QUETES = {
+  jour: "", quetesJour: [], rerollJour: false,
+  semaine: "", quetesSemaine: [], rerollSemaine: false,
+  // Le compteur de la pastille du hub : quetes accomplies pas encore vues.
+  nonVus: 0,
+};
+let memoryQuetes = null;
+
+async function readQuetesRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-quetes");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { return null; }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-quetes");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryQuetes;
+}
+
+async function writeQuetesRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-quetes", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-quetes", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryQuetes = str;
+}
+
+// Dates locales, sans bibliotheque : "AAAA-MM-JJ", et le lundi de la semaine.
+function dateLocaleJour(d) {
+  const x = d || new Date();
+  const mois = String(x.getMonth() + 1).padStart(2, "0");
+  const jour = String(x.getDate()).padStart(2, "0");
+  return x.getFullYear() + "-" + mois + "-" + jour;
+}
+function lundiLocal(d) {
+  const x = d ? new Date(d.getTime()) : new Date();
+  // getDay : dimanche 0 ... samedi 6. Ramene au lundi de la meme semaine.
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return dateLocaleJour(x);
+}
+
+// Une quete active relue depuis la sauvegarde : cle inconnue jetee, progression
+// bornee, un ordreImpose sans Ordre valide est jete (le tirage completera).
+function repareQueteActive(brute, catalogue) {
+  if (!brute || typeof brute !== "object") return null;
+  const def = catalogue.find((q) => q.cle === brute.cle);
+  if (!def) return null;
+  const ordre = def.type === "ordreImpose"
+    && typeof brute.ordre === "string" && ORDERS.some((o) => o.key === brute.ordre)
+    ? brute.ordre : null;
+  if (def.type === "ordreImpose" && !ordre) return null;
+  return {
+    cle: def.cle,
+    ordre,
+    progression: Number.isFinite(brute.progression) ? Math.max(0, Math.min(def.objectif, Math.floor(brute.progression))) : 0,
+    objectif: def.objectif,
+    faite: brute.faite === true,
+    vus: Array.isArray(brute.vus) ? brute.vus.filter((v) => typeof v === "string").slice(0, 24) : [],
+  };
+}
+
+async function loadQuetes() {
+  const brute = await readQuetesRaw();
+  if (!brute) return JSON.parse(JSON.stringify(DEFAUT_QUETES));
+  try {
+    const lu = JSON.parse(brute);
+    const uneListe = (liste, catalogue, plafond) => {
+      const vues = new Set();
+      return (Array.isArray(liste) ? liste : [])
+        .map((q) => repareQueteActive(q, catalogue))
+        .filter((q) => q && !vues.has(q.cle) && vues.add(q.cle))
+        .slice(0, plafond);
+    };
+    return {
+      jour: typeof lu.jour === "string" ? lu.jour : "",
+      quetesJour: uneListe(lu.quetesJour, QUETES_JOUR, QUETES_JOUR_ACTIVES),
+      rerollJour: lu.rerollJour === true,
+      semaine: typeof lu.semaine === "string" ? lu.semaine : "",
+      quetesSemaine: uneListe(lu.quetesSemaine, QUETES_SEMAINE, QUETES_SEMAINE_ACTIVES),
+      rerollSemaine: lu.rerollSemaine === true,
+      nonVus: Number.isFinite(lu.nonVus) ? Math.max(0, Math.min(99, Math.floor(lu.nonVus))) : 0,
+    };
+  } catch (e) { return JSON.parse(JSON.stringify(DEFAUT_QUETES)); }
+}
+
+// Tire UNE quete du catalogue : jamais une cle deja active, jamais deux quetes
+// de la meme famille. Pour "ordreImpose", tire aussi l Ordre -- uniquement parmi
+// les disponibles, jamais le "prochainement".
+function tirageQuete(catalogue, actives) {
+  const familles = new Set();
+  const cles = new Set();
+  actives.forEach((a) => {
+    cles.add(a.cle);
+    const d = defQuete(a.cle);
+    if (d) familles.add(d.famille);
+  });
+  const pool = catalogue.filter((q) => !cles.has(q.cle) && !familles.has(q.famille));
+  if (!pool.length) return null;
+  const def = pool[Math.floor(Math.random() * pool.length)];
+  let ordre = null;
+  if (def.type === "ordreImpose") {
+    const dispo = ORDERS.filter(isOrderAvailable);
+    if (!dispo.length) return null;
+    ordre = dispo[Math.floor(Math.random() * dispo.length)].key;
+  }
+  return { cle: def.cle, ordre, progression: 0, objectif: def.objectif, faite: false, vus: [] };
+}
+
+// Les passages de jour et de semaine : les quetes FAITES s en vont, les autres
+// restent avec leur progression, le tirage remplit les places vides, la relance
+// de la periode revient. Rien d autre ne tire jamais.
+function completeTirages(q) {
+  let changea = false;
+  const aujourdhui = dateLocaleJour();
+  if (q.jour !== aujourdhui) {
+    q.quetesJour = q.quetesJour.filter((a) => !a.faite);
+    for (let garde = 0; q.quetesJour.length < QUETES_JOUR_ACTIVES && garde < 20; garde++) {
+      const t = tirageQuete(QUETES_JOUR, q.quetesJour);
+      if (!t) break;
+      q.quetesJour.push(t);
+    }
+    q.rerollJour = false;
+    q.jour = aujourdhui;
+    changea = true;
+  }
+  const lundi = lundiLocal();
+  if (q.semaine !== lundi) {
+    q.quetesSemaine = q.quetesSemaine.filter((a) => !a.faite);
+    for (let garde = 0; q.quetesSemaine.length < QUETES_SEMAINE_ACTIVES && garde < 20; garde++) {
+      const t = tirageQuete(QUETES_SEMAINE, q.quetesSemaine);
+      if (!t) break;
+      q.quetesSemaine.push(t);
+    }
+    q.rerollSemaine = false;
+    q.semaine = lundi;
+    changea = true;
+  }
+  return changea;
+}
+
+// Chargement + tirages du moment, ecrit seulement si quelque chose a change.
+async function chargerQuetesDuMoment() {
+  const q = await loadQuetes();
+  if (completeTirages(q)) await writeQuetesRaw(JSON.stringify(q));
+  return q;
+}
+
+// La relance : une par jour pour les journalieres, une par semaine pour les
+// hebdomadaires. Remplace par une quete d une AUTRE famille (la remplacee est
+// dans la liste d exclusion), progression a zero, et consomme la relance.
+async function relancerQuete(periode, cle) {
+  const q = await loadQuetes();
+  const changea = completeTirages(q);
+  const auJour = periode === "jour";
+  const liste = auJour ? q.quetesJour : q.quetesSemaine;
+  const consommee = auJour ? q.rerollJour : q.rerollSemaine;
+  const i = liste.findIndex((a) => a.cle === cle);
+  if (i === -1 || liste[i].faite || consommee) {
+    if (changea) await writeQuetesRaw(JSON.stringify(q));
+    return q;
+  }
+  const exclusion = [...liste.filter((_, j) => j !== i), { cle }];
+  const t = tirageQuete(auJour ? QUETES_JOUR : QUETES_SEMAINE, exclusion);
+  if (t) {
+    liste[i] = t;
+    if (auJour) q.rerollJour = true; else q.rerollSemaine = true;
+  }
+  await writeQuetesRaw(JSON.stringify(q));
+  return q;
+}
+
+// ---------- La progression, en fin de partie ----------
+// Recoit le releve de la partie et le resultat, avance les quetes actives des
+// deux periodes, verse l XP de chaque quete tout juste accomplie via gagnerXp,
+// et sauvegarde UNE fois. L appelant tient la porte d entree (profil, Histoire,
+// Confluence) : ici on ne fait que compter.
+async function avancerQuetes(releve) {
+  const q = await loadQuetes();
+  completeTirages(q);
+  const accomplies = [];
+  for (const liste of [q.quetesJour, q.quetesSemaine]) {
+    for (const a of liste) {
+      if (a.faite) continue;
+      const def = defQuete(a.cle);
+      if (!def) continue;
+      let progression = a.progression;
+      switch (def.type) {
+        case "captures": progression += Math.max(0, Math.floor(releve.captures || 0)); break;
+        case "ondes": progression += Math.max(0, Math.floor(releve.ondes || 0)); break;
+        case "ondeDe3": if ((releve.plusGrosseOnde || 0) >= 3) progression += 1; break;
+        case "partiesJouees": progression += 1; break;
+        case "victoires": if (releve.victoire) progression += 1; break;
+        case "ordresDistincts": {
+          (releve.ordresJoues || []).forEach((k) => { if (!a.vus.includes(k)) a.vus.push(k); });
+          progression = a.vus.length;
+          break;
+        }
+        case "ordreImpose": if ((releve.ordresJoues || []).includes(a.ordre)) progression = def.objectif; break;
+        case "partiesHistoire": if (releve.partieHistoire) progression += 1; break;
+        case "victoiresVeteranPlus":
+          if (releve.victoire && (releve.difficulteEcho === "avance" || releve.difficulteEcho === "expert")) progression += 1;
+          break;
+        case "victoiresSeigneur": if (releve.victoire && releve.difficulteEcho === "expert") progression += 1; break;
+        case "partiesConfluence": if (releve.partieConfluence) progression += 1; break;
+        case "resonances": progression += Math.max(0, Math.floor(releve.resonances || 0)); break;
+        default: break;
+      }
+      a.progression = Math.max(0, Math.min(def.objectif, progression));
+      if (a.progression >= def.objectif) {
+        a.faite = true;
+        await gagnerXp(def.xp);
+        accomplies.push({ cle: def.cle, libelle: libelleDeQuete(def, a), xp: def.xp });
+      }
+    }
+  }
+  if (accomplies.length) q.nonVus = Math.min(99, (q.nonVus || 0) + accomplies.length);
+  await writeQuetesRaw(JSON.stringify(q));
+  return { quetes: q, accomplies };
 }
 
 // ---------- Niveaux de Commandant ----------
@@ -2853,6 +3148,66 @@ function combosDuCoup(ctx) {
   });
 
   return trouves;
+}
+
+// ---------- Les glyphes des quetes : un trait par famille ----------
+// Du SVG en ligne, sobre : pas d emoji, pas d image externe. Epees croisees pour
+// les captures, banniere pour les Ordres, vague pour les Ondes et Resonances,
+// couronne de laurier pour les victoires, livre pour les modes. La coche
+// remplace le glyphe sur une quete accomplie.
+function glypheDeQuete(def, faite) {
+  const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  if (faite) return (<svg {...props} strokeWidth={2.4}><path d="M6 12.5l4 4L18 8" /></svg>);
+  switch (def.famille) {
+    case "captures":
+      return (<svg {...props}><path d="M5.5 5.5l13 13M18.5 5.5l-13 13" /><path d="M15 18.5l3.5-3.5M5.5 15l3.5 3.5" /></svg>);
+    case "ordres":
+      return (<svg {...props}><path d="M7 3.5v17" /><path d="M7 4.5h10.5l-3 3.5 3 3.5H7" /></svg>);
+    case "ondes":
+    case "resonances":
+      return (<svg {...props}><path d="M4 13.7c2.7 0 2.7-2.7 5.4-2.7s2.6 2.7 5.3 2.7 2.6-2.7 5.3-2.7" /><path d="M4 17.7c2.7 0 2.7-2.7 5.4-2.7s2.6 2.7 5.3 2.7 2.6-2.7 5.3-2.7" /></svg>);
+    case "gagner":
+      return (<svg {...props}><path d="M7.5 19.5c-2.6-3-3.2-8.4-1.2-12.6" /><path d="M16.5 19.5c2.6-3 3.2-8.4 1.2-12.6" /><path d="M6.2 10.2l-2-.9M6.6 13.4l-2.2.1M7.7 16.4l-2 1M17.8 10.2l2-.9M17.4 13.4l2.2.1M16.3 16.4l2 1" /></svg>);
+    default:
+      return (<svg {...props}><path d="M12 6.2c-1.5-1.2-3.4-1.7-5.8-1.7v14.6c2.4 0 4.3.5 5.8 1.7 1.5-1.2 3.4-1.7 5.8-1.7V4.5c-2.4 0-4.3.5-5.8 1.7z" /><path d="M12 6.2v14.6" /></svg>);
+  }
+}
+
+// ---------- Le releve des quetes, coup par coup ----------
+// Meme fenetre de lecture que les combos : le coup une fois reellement joue.
+// L attribution suit le cahier des charges : on compte ce que produisent MES
+// placements, en s appuyant sur les evenements que le moteur emet deja.
+function nouveauReleveQuetes() {
+  return { captures: 0, ondes: 0, plusGrosseOnde: 0, resonances: 0 };
+}
+function quetesDuCoup(ctx) {
+  const { owner, monCamp, events, position, plateauAvant, plateauApres, releve } = ctx;
+  if (!monCamp || owner !== monCamp) return;
+  // Les captures : toute carte passee sous mes couleurs pendant CE coup, suivie
+  // par identifiant -- l Attraction deplace les cartes, les index mentiraient.
+  const campAvant = new Map();
+  plateauAvant.forEach((c) => { if (c) campAvant.set(c.id, c.owner); });
+  let prises = 0;
+  plateauApres.forEach((c) => {
+    if (!c || c.owner !== monCamp) return;
+    const ancien = campAvant.get(c.id);
+    if (ancien !== undefined && ancien !== monCamp) prises += 1;
+  });
+  releve.captures += prises;
+  // La Resonance : le moteur emet "same" sur chaque victime (la carte posee, elle,
+  // recoit "same-self"). Un declenchement par coup, quel que soit le nombre de victimes.
+  if (events.some((e) => e.kind === "same" && e.index !== position)) releve.resonances += 1;
+  // L Onde : la chaine que le moteur deroule a partir d une Resonance -- ses
+  // captures portent "same" au depart puis "combo" en cascade. Au moins deux
+  // captures dans la chaine font une Onde ; la plus longue est retenue.
+  const chaine = new Set();
+  events.forEach((e) => {
+    if ((e.kind === "same" || e.kind === "combo") && e.index !== position) chaine.add(e.index);
+  });
+  if (chaine.size >= 2) {
+    releve.ondes += 1;
+    if (chaine.size > releve.plusGrosseOnde) releve.plusGrosseOnde = chaine.size;
+  }
 }
 
 // Le Rempart Vicie ne se lit qu'a la fin : c'est une facon de gagner, pas un coup.
@@ -4665,6 +5020,121 @@ const APP_STYLES = `
            bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
+        /* ---------- Les quetes ---------- */
+        /* La page : plein ecran par-dessus le hub, fond opaque, seul le corps
+           defile. Un etat booleen l ouvre -- ce n est pas un onglet du hub. */
+        .quetes-page {
+          position: fixed; inset: 0; z-index: 80;
+          background: var(--bg);
+          display: flex; flex-direction: column;
+          overflow: hidden;
+        }
+        .quetes-entete { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 16px 8px; }
+        .quetes-retour {
+          width: 34px; height: 34px; flex: none; border-radius: 10px;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12);
+          color: var(--gold-bright); display: flex; align-items: center; justify-content: center;
+          cursor: pointer; transition: transform .12s ease; padding: 0;
+        }
+        .quetes-retour:active { transform: scale(0.92); }
+        .quetes-retour svg { width: 20px; height: 20px; }
+        .quetes-titre {
+          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700;
+          letter-spacing: 0.3em; color: var(--gold-bright); margin: 0;
+        }
+        .quetes-corps {
+          flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain;
+          -webkit-overflow-scrolling: touch;
+          padding: 4px 16px 28px;
+          display: flex; flex-direction: column; align-items: center;
+        }
+        .quetes-soustitre {
+          font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 11px;
+          color: var(--muted); margin: 2px 0 12px; text-align: center;
+        }
+        .quetes-grille { width: 100%; }
+        .quete-carte {
+          position: relative; display: flex; flex-direction: column; align-items: center;
+          gap: 6px; text-align: center;
+        }
+        /* Le glyphe : cercle au trait dore, disque plein avec coche sombre une
+           fois la quete accomplie, pointilles pour la case decorative Demain. */
+        .quete-glyphe {
+          width: 40px; height: 40px; flex: none; border-radius: 50%;
+          border: 1px solid rgba(203,164,86,0.5);
+          display: flex; align-items: center; justify-content: center;
+          color: var(--gold-bright);
+        }
+        .quete-glyphe svg { width: 22px; height: 22px; }
+        .quete-glyphe.plein {
+          background: linear-gradient(180deg, #e6cf8f, #cba456);
+          border-color: transparent; color: #241a0a;
+        }
+        .quete-glyphe.pointille {
+          border-style: dashed; color: var(--muted);
+          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
+        }
+        .quete-nom { font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: #f0eaf8; }
+        .quete-condition { font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 10.5px; color: var(--muted); }
+        /* La jauge est un etat, pas un spectacle : aucune animation en boucle. */
+        .quete-jauge {
+          width: 100%; height: 6px; border-radius: 3px; overflow: hidden;
+          background: rgba(255,255,255,0.08); margin-top: 2px;
+        }
+        .quete-jauge-rempli { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #cba456, #e6cf8f); }
+        /* L amethyste distingue le rythme hebdomadaire du dore journalier. */
+        .quete-jauge-rempli.semaine { background: linear-gradient(90deg, #8a63c9, #c9a0f0); }
+        .quete-pied { width: 100%; display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+        .quete-compte { font-family: 'Spectral', Georgia, serif; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .quete-xp {
+          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700; color: var(--gold-bright);
+          border: 1px solid rgba(203,164,86,0.45); border-radius: 999px; padding: 2px 7px;
+          white-space: nowrap; flex: none;
+        }
+        .quete-accomplie {
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          color: var(--gold-bright); letter-spacing: 0.08em;
+        }
+        .quete-carte .quete-accomplie { text-transform: uppercase; }
+        .quete-relance {
+          position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+          border-radius: 50%; border: 1px solid rgba(255,255,255,0.15);
+          background: rgba(255,255,255,0.05); color: var(--muted);
+          font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+          display: flex; align-items: center; justify-content: center;
+          transition: transform .12s ease;
+        }
+        .quete-relance:active { transform: rotate(-40deg) scale(0.92); }
+        .quete-demain { opacity: 0.45; }
+        .quetes-lignes { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 8px; }
+        .quete-ligne {
+          border: 1px solid rgba(138,99,201,0.35); border-radius: 12px;
+          background: rgba(8,6,12,0.5); padding: 10px 12px;
+          display: flex; flex-direction: column; gap: 6px;
+        }
+        .quete-ligne-haut { position: relative; display: flex; align-items: baseline; gap: 8px; padding-right: 24px; }
+        .quete-ligne-haut .quete-nom { white-space: nowrap; flex: none; }
+        .quete-ligne-haut .quete-condition { flex: 1; min-width: 0; text-align: left; }
+        .quete-relance.en-ligne { top: -3px; right: -5px; }
+        .quete-ligne-bas { display: flex; align-items: center; gap: 10px; }
+        .quete-ligne-bas .quete-jauge { flex: 1; margin-top: 0; }
+        /* Les lignes de fin de partie : fondu en opacity seul, apres celui de l XP. */
+        .cer-quetes { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+        .cer-quete-ligne {
+          font-family: 'Spectral', Georgia, serif; font-size: 11.5px; color: var(--gold-bright);
+          animation: cer-xp-parait 0.5s ease-out 0.8s both;
+        }
+        .reduced-motion .cer-quete-ligne { animation: none; }
+        /* Le bouton du hub : le parchemin au trait, la pastille par-dessus.
+           Il vit sous le pseudo, dans la colonne de gauche du bandeau --
+           demande du Commandant, apres qu il eut trop charge la colonne de
+           droite et ecrase la pastille des modes. */
+        .hub-joueur-colonne { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+        .hub-quetes { position: relative; overflow: visible; }
+        .hub-icone-quetes {
+          width: 30px; height: 30px; display: block; color: var(--gold-bright);
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* ---------- Niveaux de Commandant ---------- */
         /* La vignette de carte du hub : une silhouette de carte a jouer dessinee en CSS
            (cadre dore, lisere interieur comme les cartes du jeu), le niveau au centre. */
@@ -10155,6 +10625,24 @@ export default function Emprise() {
   const [progression, setProgression] = useState(DEFAUT_PROGRESSION);
   useEffect(() => { loadProgression().then(setProgression); }, []);
   const [xpDernierePartie, setXpDernierePartie] = useState(null);
+  // Les quetes : la liste du moment (tiree au chargement), la page ouverte ou
+  // non, le releve de la partie en cours (une ref : lu a chaque coup, jamais
+  // rendu), et les quetes accomplies a la DERNIERE partie pour l ecran de fin.
+  const [quetes, setQuetes] = useState(null);
+  useEffect(() => { chargerQuetesDuMoment().then(setQuetes); }, []);
+  const [pageQuetes, setPageQuetes] = useState(false);
+  const [quetesDernierePartie, setQuetesDernierePartie] = useState(null);
+  const quetesReleveRef = useRef(nouveauReleveQuetes());
+  // L ouverture retire la pastille : les quetes accomplies sont desormais vues.
+  async function ouvrirPageQuetes() {
+    setPageQuetes(true);
+    const q = await chargerQuetesDuMoment();
+    if (q.nonVus > 0) { q.nonVus = 0; await writeQuetesRaw(JSON.stringify(q)); }
+    setQuetes(q);
+  }
+  async function relancerLaQuete(periode, cle) {
+    setQuetes(await relancerQuete(periode, cle));
+  }
   // Apres chaque partie comptee ou tournoi gagne : l'XP a bouge, les gemmes peut-etre.
   function rafraichirProgression() {
     loadProgression().then(setProgression);
@@ -10979,7 +11467,35 @@ export default function Emprise() {
         // difficulte du bot -- celle du chapitre en Histoire, du choix ailleurs.
         !!storyChapterKey && !testMode,
         mode === "bot" ? botDifficulty : null
-      ).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
+      ).then((st) => {
+        setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
+        // Les quetes avancent sur les memes parties que l XP -- la porte du profil
+        // et l Histoire -- plus la Confluence pour sa quete dediee. Le bac a sable,
+        // les duels locaux (monCamp nul) et les parties disqualifiees restent dehors.
+        // ENCHAINE apres l ecriture de l XP de partie, jamais en parallele : les deux
+        // passent par lire-ajouter-ecrire sur la meme sauvegarde, et deux lectures
+        // simultanees se seraient ecrase l une l autre (constate en direct : le +20
+        // d une quete avale par le +8 de la partie).
+        const histoireQuetes = !!storyChapterKey && !testMode;
+        const confluenceQuetes = confluenceActive && !testMode && !suivi.disqualifie;
+        if (monCampCombos && (compteAuProfil || histoireQuetes || confluenceQuetes)) {
+          avancerQuetes({
+            ...quetesReleveRef.current,
+            victoire: winner === monCampCombos,
+            partieHistoire: histoireQuetes,
+            partieConfluence: confluenceActive,
+            difficulteEcho: mode === "bot" ? botDifficulty : null,
+            ordresJoues: orderKeys,
+          }).then((res) => {
+            setQuetes(res.quetes);
+            setQuetesDernierePartie(res.accomplies.length ? res.accomplies : null);
+            // De l XP de quete vient peut-etre de tomber : le profil doit la voir.
+            if (res.accomplies.length) rafraichirProgression();
+          });
+        } else {
+          setQuetesDernierePartie(null);
+        }
+      });
       // Historique : reserve aux parties CLASSEES pour l'instant. Ce sont les seules
       // dont le resultat engage quelque chose (des trophees) et vaut d'etre relu ; les
       // parties d'entrainement rempliraient la liste sans rien apprendre au joueur.
@@ -11959,6 +12475,9 @@ export default function Emprise() {
         // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
         const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
         recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
+        // Une partie abandonnee ne fait avancer aucune quete, et l ecran de fin
+        // ne doit pas rejouer les accomplissements de la partie d avant.
+        setQuetesDernierePartie(null);
       }
     }
     // Match de tournoi : abandonner la partie ne fait pas quitter le TOURNOI — on
@@ -12117,6 +12636,7 @@ export default function Emprise() {
     statsRecordedRef.current = false;
     setHistory([]);
     combosRef.current = nouveauSuiviCombos();
+    quetesReleveRef.current = nouveauReleveQuetes();
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
     chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
@@ -12901,6 +13421,21 @@ export default function Emprise() {
     );
   }
 
+  // Les quetes accomplies a CETTE partie, sous la ligne d XP. Fondu en opacity
+  // seulement, comme le reste de l ecran de fin.
+  function bilanQuetesDePartie() {
+    if (!quetesDernierePartie || !gameOver) return null;
+    return (
+      <div className="cer-quetes">
+        {quetesDernierePartie.map((a) => (
+          <div key={a.cle} className="cer-quete-ligne">
+            Quête accomplie — {a.libelle} : +{a.xp} XP
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
@@ -13038,13 +13573,26 @@ export default function Emprise() {
     // Combos : on lit le coup ICI, une fois qu'il est reellement joue. resolvePlacement
     // tourne aussi sur chaque survol et pour chaque coup imagine par l'Echo ; y brancher
     // la detection crediterait des combos que personne n'a joues.
-    if (history.length === 0) combosRef.current = nouveauSuiviCombos();
+    if (history.length === 0) {
+      combosRef.current = nouveauSuiviCombos();
+      quetesReleveRef.current = nouveauReleveQuetes();
+    }
     if (partieCompteAuProfil && !combosRef.current.disqualifie) {
       combosDuCoup({
         card, position, owner, monCamp: monCampCombos, mesOrdres: mesOrdresDuJeu(), events,
         plateauAvant: board, plateauApres: resolvedBoard,
         poisonAvant: poisonedCells, poisonApres: nextPoison,
         suivi: combosRef.current,
+      });
+    }
+    // Le releve des quetes lit le meme coup. Plus large que la porte du profil :
+    // l Histoire et la Confluence nourrissent leurs quetes dediees -- c est la
+    // porte de FIN de partie qui decide de ce qui compte vraiment.
+    if (monCampCombos && !testMode) {
+      quetesDuCoup({
+        owner, monCamp: monCampCombos, events, position,
+        plateauAvant: board, plateauApres: resolvedBoard,
+        releve: quetesReleveRef.current,
       });
     }
     if (viaTouch) {
@@ -13910,6 +14458,7 @@ export default function Emprise() {
 
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
+            <div className="hub-joueur-colonne">
             <div className="hub-joueur">
               {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
                   Il reste en dur pour l'instant, faute de comptes nommes. */}
@@ -13939,6 +14488,27 @@ export default function Emprise() {
                 <img className="hub-icone-coupe" src="/nav/trophee.webp" alt="" />
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </button>
+            </div>
+            {/* Les quetes, sous le pseudo -- demande du Commandant. Meme gabarit que
+                les portes du coin (hub-rouage), parchemin au trait dore. La pastille
+                compte les quetes accomplies pas encore vues. */}
+            <button
+              className="hub-rouage hub-quetes"
+              onClick={ouvrirPageQuetes}
+              aria-label={quetes && quetes.nonVus > 0
+                ? `Quêtes, ${quetes.nonVus} accomplie${quetes.nonVus > 1 ? "s" : ""}`
+                : "Quêtes"}
+              title="Quêtes"
+            >
+              <svg className="hub-icone-quetes" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7.2 4.6h10.2c1.2 0 2.1 1 2.1 2.1 0 1.2-1 2.1-2.1 2.1" />
+                <path d="M7.2 4.6c-1.2 0-2.1 1-2.1 2.1v10.6c0 1.2 1 2.1 2.1 2.1h9.2c1.2 0 2.1-1 2.1-2.1V8.8" />
+                <path d="M8.6 9.4h6.4M8.6 12.2h6.4M8.6 15h4.2" />
+              </svg>
+              {quetes && quetes.nonVus > 0 && (
+                <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
+              )}
+            </button>
             </div>
             {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
@@ -13997,6 +14567,94 @@ export default function Emprise() {
             </span>
             )}
           </header>
+
+          {/* ---------- La page des quetes : plein ecran par-dessus le hub.
+              Un etat booleen l ouvre, le chevron la ferme -- ni la barre de
+              navigation ni le glissement des pages n en savent rien. ---------- */}
+          {pageQuetes && quetes && (
+            <div className="quetes-page" role="dialog" aria-modal="true" aria-label="Quêtes">
+              <header className="quetes-entete">
+                <button className="quetes-retour" onClick={() => setPageQuetes(false)} aria-label="Retour au hub">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
+                </button>
+                <h2 className="quetes-titre">QUÊTES</h2>
+              </header>
+              <div className="quetes-corps">
+                <h3 className="boutique-titre">Journalières</h3>
+                <p className="quetes-soustitre">Renouvelées chaque nuit{quetes.rerollJour ? "" : " — une relance disponible"}</p>
+                <div className="boutique-grille quetes-grille">
+                  {quetes.quetesJour.map((a) => {
+                    const def = defQuete(a.cle);
+                    if (!def) return null;
+                    return (
+                      <div key={a.cle} className={`boutique-carte quete-carte ${a.faite ? "choisi faite" : ""}`}>
+                        {!a.faite && !quetes.rerollJour && (
+                          <button
+                            className="quete-relance"
+                            onClick={() => relancerLaQuete("jour", a.cle)}
+                            aria-label={`Relancer la quête ${libelleDeQuete(def, a)}`}
+                            title="Relancer"
+                          >↻</button>
+                        )}
+                        <span className={`quete-glyphe ${a.faite ? "plein" : ""}`} aria-hidden="true">{glypheDeQuete(def, a.faite)}</span>
+                        <span className="quete-nom">{libelleDeQuete(def, a)}</span>
+                        <span className="quete-condition">{conditionDeQuete(def, a)}</span>
+                        <span className="quete-jauge">
+                          <span className="quete-jauge-rempli" style={{ width: `${Math.round((a.progression / a.objectif) * 100)}%` }} />
+                        </span>
+                        <span className="quete-pied">
+                          {a.faite
+                            ? <span className="quete-accomplie">Accomplie</span>
+                            : <span className="quete-compte">{a.progression} / {a.objectif}</span>}
+                          <span className="quete-xp">+{def.xp} XP</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {/* La case Demain : purement decorative, elle rappelle que le
+                      tirage se renouvelle -- jamais cliquable, cachee au lecteur. */}
+                  <div className="boutique-carte quete-carte quete-demain" aria-hidden="true">
+                    <span className="quete-glyphe pointille">?</span>
+                    <span className="quete-nom">Demain</span>
+                    <span className="quete-condition">Une nouvelle quête à l'aube</span>
+                  </div>
+                </div>
+                <h3 className="boutique-titre">Hebdomadaires</h3>
+                <p className="quetes-soustitre">Renouvelées chaque lundi</p>
+                <div className="quetes-lignes">
+                  {quetes.quetesSemaine.map((a) => {
+                    const def = defQuete(a.cle);
+                    if (!def) return null;
+                    return (
+                      <div key={a.cle} className={`quete-ligne ${a.faite ? "faite" : ""}`}>
+                        <span className="quete-ligne-haut">
+                          <span className="quete-nom">{libelleDeQuete(def, a)}</span>
+                          <span className="quete-condition">{conditionDeQuete(def, a)}</span>
+                          {!a.faite && !quetes.rerollSemaine && (
+                            <button
+                              className="quete-relance en-ligne"
+                              onClick={() => relancerLaQuete("semaine", a.cle)}
+                              aria-label={`Relancer la quête ${libelleDeQuete(def, a)}`}
+                              title="Relancer"
+                            >↻</button>
+                          )}
+                        </span>
+                        <span className="quete-ligne-bas">
+                          <span className="quete-jauge semaine">
+                            <span className="quete-jauge-rempli semaine" style={{ width: `${Math.round((a.progression / a.objectif) * 100)}%` }} />
+                          </span>
+                          {a.faite
+                            ? <span className="quete-accomplie">Accomplie</span>
+                            : <span className="quete-compte">{a.progression} / {a.objectif}</span>}
+                          <span className="quete-xp">+{def.xp} XP</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ---------- Pages du hub ---------- */}
           <main
@@ -16924,6 +17582,7 @@ export default function Emprise() {
               </div>
               {bilanTrophees()}
               {bilanXpDePartie()}
+              {bilanQuetesDePartie()}
               {boutonRevanche()}
               {boutonAmitie()}
               {lienSignalerAdversaire()}
@@ -16960,6 +17619,7 @@ export default function Emprise() {
             </div>
             {bilanTrophees()}
             {bilanXpDePartie()}
+            {bilanQuetesDePartie()}
             {boutonRevanche()}
             {boutonAmitie()}
             {lienSignalerAdversaire()}
