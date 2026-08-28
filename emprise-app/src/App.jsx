@@ -5733,27 +5733,20 @@ const APP_STYLES = `
         /* EN PARTIE, rien ne change : le plateau et les cartes ont besoin d'un aplat
            neutre derriere eux, pas d'une texture. L'ecran de jeu reprend donc le fond
            d'origine, celui que la racine portait avant l'arrivee du calque. */
-        /* Le damas heraldique, ICI et nulle part ailleurs : c'est la partie que le
-           Commandant voulait habiller. Trois couches, dans l'ordre de peinture :
-           le voile sombre qui garde le plateau lisible, l'image, puis la couleur unie
-           qui tient l'ecran pendant que l'image arrive -- sans elle, le plateau
-           clignotait au premier affichage.
-           La lueur du haut d'origine est conservee par-dessus le voile : elle donnait sa
-           profondeur a l'ecran, et rien ne justifiait de la perdre. */
+        /* Le fond de l'ecran de partie : l'image du Commandant, telle quelle. Elle est
+           deja sombre -- AUCUN voile, aucun degrade par-dessus ; si un element devenait
+           illisible, c'est lui qu'on corrigerait, pas le fond qu'on assombrirait.
+           La couleur unie tient l'ecran pendant que l'image arrive : sans elle, le ciel
+           du hub (calque fixe derriere la racine) transparaissait au premier affichage.
+           attachment scroll, jamais fixed : Safari iOS ignore fixed et refuse alors de
+           peindre l'image -- constate sur l'appareil du Commandant, version en main. */
         .emprise-root.ecran-jeu {
-          background:
-            radial-gradient(ellipse at 50% -10%, rgba(36,30,51,0.55) 0%, rgba(0,0,0,0) 55%),
-            linear-gradient(rgba(8, 6, 14, 0.34), rgba(8, 6, 14, 0.34)),
-            url("/fonds/damas-nuit.jpg"),
-            var(--bg);
-          background-size: auto, auto, cover, auto;
-          background-position: center, center, center, center;
-          background-repeat: no-repeat, no-repeat, no-repeat, repeat;
-          /* SURTOUT PAS de background-attachment: fixed ici. Safari iOS l ignore et
-             refuse alors de peindre l image : le damas etait invisible sur iPhone alors
-             que l ordinateur le montrait -- c est la capture du Commandant qui l a
-             revele, version en main. L ecran de jeu ne defile pas : fixed ne servait de
-             toute facon a rien. */
+          background-color: var(--bg);
+          background-image: url("/fonds/fond-partie.webp");
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-attachment: scroll;
         }
         .emprise-root.ecran-jeu { padding-top: 4px; }
         .emprise-root.ecran-jeu {
