@@ -2429,11 +2429,14 @@ async function loadProgression() {
 // rend de plus par euro ; la plus grande porte « Meilleure offre ». Les paliers de
 // reserve (5900, 14000) existent dans le plan mais pas ici : pas au lancement.
 // prixDit : « euro » en toutes lettres, pour le lecteur d'ecran qui lit mal le symbole.
+// doublePremierAchat : le drapeau d'AFFICHAGE du bonus x2 -- vrai par defaut
+// tant que rien ne s'achete. La mecanique reelle (consommer le drapeau apres le
+// premier achat) se branchera avec les paiements, pas avant.
 const PACKS_GEMMES = [
-  { cle: "poignee", nom: "Poignée de gemmes", gemmes: 80, prix: "0,99 €", prixDit: "0,99 euro", mention: "", image: "/boutique/pack-poignee.webp" },
-  { cle: "bourse", nom: "Bourse de gemmes", gemmes: 500, prix: "4,99 €", prixDit: "4,99 euros", mention: "+24 %", image: "/boutique/pack-bourse.webp" },
-  { cle: "coffret", nom: "Coffret de gemmes", gemmes: 1200, prix: "9,99 €", prixDit: "9,99 euros", mention: "+48 %", image: "/boutique/pack-coffret.webp" },
-  { cle: "coffre", nom: "Coffre de gemmes", gemmes: 2600, prix: "19,99 €", prixDit: "19,99 euros", mention: "Meilleure offre", image: "/boutique/pack-coffre.webp" },
+  { cle: "poignee", nom: "Poignée de gemmes", gemmes: 80, prix: "0,99 €", prixDit: "0,99 euro", mention: "", image: "/boutique/pack-poignee.webp", doublePremierAchat: true },
+  { cle: "bourse", nom: "Bourse de gemmes", gemmes: 500, prix: "4,99 €", prixDit: "4,99 euros", mention: "+24 %", image: "/boutique/pack-bourse.webp", doublePremierAchat: true },
+  { cle: "coffret", nom: "Coffret de gemmes", gemmes: 1200, prix: "9,99 €", prixDit: "9,99 euros", mention: "+48 %", image: "/boutique/pack-coffret.webp", doublePremierAchat: true },
+  { cle: "coffre", nom: "Coffre de gemmes", gemmes: 2600, prix: "19,99 €", prixDit: "19,99 euros", mention: "Meilleure offre", image: "/boutique/pack-coffre.webp", doublePremierAchat: true },
 ];
 
 // ---------- Pieces ----------
@@ -2445,8 +2448,14 @@ const PIECES_PAR_XP = 2;
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
 // jamais l'inverse. Taux plat, affiche en toutes lettres au joueur.
 const PIECES_PAR_GEMME = 10;
-// Montants predefinis de l'ecran de conversion (en gemmes).
-const CONVERSIONS = [100, 250, 500];
+// Montants predefinis de l'ecran de conversion (en gemmes), chacun avec son
+// visuel -- la pile, la bourse, le coffret. Le chemin des images vit ICI,
+// jamais en dur dans le JSX.
+const CONVERSIONS = [
+  { gemmes: 100, image: "/boutique/pieces-pile.png" },
+  { gemmes: 250, image: "/boutique/pieces-bourse.png" },
+  { gemmes: 500, image: "/boutique/pieces-coffret.png" },
+];
 
 // ---------- Flamme quotidienne ----------
 // Serie classique : +1 par jour ou une partie CLASSEE se livre (victoire ou
@@ -5754,6 +5763,9 @@ const APP_STYLES = `
         /* La rangee de conversion : trois cartes, jamais de nombre en dur. */
         .boutique-grille.conversion-grille { grid-template-columns: repeat(3, 1fr); }
         .conversion-carte { align-items: center; gap: 4px; }
+        /* Le visuel du palier : carre, contain, pas de saut au chargement. Sans
+           l'ombre portee des packs -- ces images portent deja la leur. */
+        .conversion-image { width: 86%; height: auto; aspect-ratio: 1 / 1; object-fit: contain; }
         .conversion-carte.eteinte { opacity: 0.45; cursor: default; }
         .conversion-de, .conversion-vers {
           display: inline-flex; align-items: center; gap: 4px;
@@ -5786,9 +5798,22 @@ const APP_STYLES = `
           font-variant-numeric: tabular-nums;
         }
         .pack-prix { font-size: 11.5px; color: var(--muted); }
-        /* La promesse du premier achat, en ROUGE a la demande du Commandant. C'est du
-           TEXTE qui informe, le rouge ne fait qu'appuyer -- la couleur seule ne porte
-           jamais l'information dans cette maison. */
+        /* Le bonus du premier achat, en maquette validee : l'ancien montant barre
+           et discret, le montant double en heros amethyste, la pilule sous la
+           ligne. Aucune animation ici. */
+        .pack-avant {
+          font-family: 'Spectral', Georgia, serif; font-size: 11px; font-weight: 400;
+          color: var(--muted); text-decoration: line-through; margin-right: 6px;
+        }
+        .pack-quantite-double { font-size: 17px; color: #c9a0f0; }
+        .pack-pilule {
+          font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.12em;
+          text-transform: uppercase; font-weight: 700; color: #f0e6ff;
+          background: rgba(138, 99, 201, 0.28); border: 1px solid rgba(201, 160, 240, 0.5);
+          border-radius: 999px; padding: 2px 8px;
+        }
+        /* La phrase du PANNEAU au clic garde ce style : seule la ligne en
+           capitales de la carte a vecu. */
         .pack-double {
           font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
           font-weight: 700; color: var(--red-bright);
@@ -15391,11 +15416,12 @@ export default function Emprise() {
               )}
             </button>
             </div>
-            {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
             {/* Le tresor, en deux pastilles cote a cote et chacune son + : les pieces
                 a gauche menent au comptoir Transformer (le seul chemin vers des pieces
-                hors du jeu), les gemmes a droite menent a leurs etals. */}
+                hors du jeu), les gemmes a droite menent a leurs etals. Il s'affiche
+                sur TOUTES les pages du hub, Ordres comprise -- demande du Commandant ;
+                les portes du coin, elles, laissent la page Ordres respirer. */}
             <span className="hub-tresor">
             <button
               className="hub-gemmes hub-pieces"
@@ -15418,6 +15444,7 @@ export default function Emprise() {
               <span className="hub-gemmes-plus" aria-hidden="true">+</span>
             </button>
             </span>
+            {hubPage !== "ordres" && (<>
             <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
@@ -15454,8 +15481,8 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
               )}
             </button>
+            </>)}
             </span>
-            )}
           </header>
 
           {/* ---------- La page des quetes : plein ecran par-dessus le hub.
@@ -15642,14 +15669,29 @@ export default function Emprise() {
                         key={p.cle}
                         className="boutique-carte"
                         onClick={() => setPackRegarde(p)}
-                        aria-label={`${p.nom}, ${p.gemmes} gemmes, doublées au premier achat, ${p.prixDit}`}
+                        aria-label={p.doublePremierAchat
+                          ? `${p.nom}, ${p.gemmes * 2} gemmes au lieu de ${p.gemmes} au premier achat, ${p.prixDit}`
+                          : `${p.nom}, ${p.gemmes} gemmes, ${p.prixDit}`}
                       >
                         {p.mention && <span className="pack-mention">{p.mention}</span>}
                         {/* Decorative : le texte de la carte dit deja tout. width et
                             height, pour que son arrivee ne fasse pas sauter la grille. */}
                         <img className="pack-image" src={p.image} alt="" aria-hidden="true" width="512" height="512" loading="lazy" />
-                        <span className="pack-quantite"><span className="gemme-icone" aria-hidden="true" />{p.gemmes}</span>
-                        <span className="pack-double">Premier achat : gemmes ×2</span>
+                        {/* Le bonus du premier achat, en maquette validee : le montant
+                            DOUBLE est le heros de la carte, l'ancien montant barre dit
+                            d'ou l'on vient, la pilule nomme l'offre. Drapeau consomme :
+                            la carte revient d'elle-meme a l'affichage simple. */}
+                        {p.doublePremierAchat ? (
+                          <>
+                            <span className="pack-quantite pack-quantite-double">
+                              <span className="pack-avant" aria-hidden="true">{p.gemmes}</span>
+                              <span className="gemme-icone" aria-hidden="true" />{p.gemmes * 2}
+                            </span>
+                            <span className="pack-pilule">×2 premier achat</span>
+                          </>
+                        ) : (
+                          <span className="pack-quantite"><span className="gemme-icone" aria-hidden="true" />{p.gemmes}</span>
+                        )}
                         <span className="boutique-nom">{p.nom}</span>
                         <span className="pack-prix">{p.prix}</span>
                       </button>
@@ -15662,7 +15704,8 @@ export default function Emprise() {
                   <h2 className="boutique-titre second">Transformer</h2>
                   <p className="boutique-sous">1 gemme devient {PIECES_PAR_GEMME} pièces. L&apos;inverse est impossible : les pièces se gagnent en jouant.</p>
                   <div className="boutique-grille conversion-grille">
-                    {CONVERSIONS.map((g) => {
+                    {CONVERSIONS.map((c) => {
+                      const g = c.gemmes;
                       const assez = bourse.gemmes >= g;
                       return (
                         <button
@@ -15672,6 +15715,9 @@ export default function Emprise() {
                           onClick={assez ? () => setConversionEnCours(g) : undefined}
                           aria-label={`Transformer ${g} gemmes en ${g * PIECES_PAR_GEMME} pièces${assez ? "" : ", solde insuffisant"}`}
                         >
+                          {/* Le visuel du palier, meme traitement que les packs :
+                              decoratif, dimensions posees, le texte dit deja tout. */}
+                          <img className="conversion-image" src={c.image} alt="" aria-hidden="true" width="512" height="512" loading="lazy" />
                           <span className="conversion-de"><span className="gemme-icone" aria-hidden="true" />{g}</span>
                           <span className="conversion-fleche" aria-hidden="true">→</span>
                           <span className="conversion-vers"><span className="piece-icone" aria-hidden="true" />{g * PIECES_PAR_GEMME}</span>

@@ -34,7 +34,7 @@ Niveaux de Commandant de 1 à 50 : chaque partie comptée rapporte de l'XP, et l
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
 Boutique : thèmes de plateau et dos de cartes, payés en pièces.
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
-Transformation des gemmes en pièces, à sens unique.
+Transformation des gemmes en pièces, à sens unique, chaque palier illustré (pile, bourse, coffret).
 Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
 La Flamme du Commandant : livrer un duel classé chaque jour fait grandir une série, avec des pièces à certains paliers ; le record est gardé à vie, et rien ne s'achète pour la protéger.
 Soldes d'essai avant la sortie : gemmes et pièces seront remises à zéro au lancement.
@@ -50,7 +50,7 @@ Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
 Hub : carte de niveau près du pseudo, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
-Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, et le teaser d'un prochain Ordre avec compte à rebours.
+Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
