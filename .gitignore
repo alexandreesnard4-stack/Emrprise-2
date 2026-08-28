@@ -4,3 +4,6 @@
 # Sauvegardes de travail
 *.avant-*
 *.bak
+
+# Sources d'images du Commandant (lourdes, hors application)
+emprise-app/sources-images/
