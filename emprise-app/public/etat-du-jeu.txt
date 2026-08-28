@@ -32,7 +32,8 @@ Tutoriel interactif, Mort Subite comprise.
 Deux monnaies : les pièces se gagnent en jouant, les gemmes sont la monnaie rare.
 Niveaux de Commandant de 1 à 50 : chaque partie comptée rapporte de l'XP, et les pièces suivent l'XP.
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
-Boutique : thèmes de plateau et dos de cartes, payés en pièces.
+Boutique : thèmes de plateau, dos de cartes et bannières de profil, payés en pièces.
+Bannières de prestige à double prix : en pièces ou en gemmes, au choix, jamais réservées aux gemmes.
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
 Transformation des gemmes en pièces, à sens unique, chaque palier illustré (pile, bourse, coffret).
 Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
@@ -52,6 +53,7 @@ Lignes des quêtes accomplies sur l'écran de fin de partie.
 Hub : carte de niveau près du pseudo, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
+Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
 Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.

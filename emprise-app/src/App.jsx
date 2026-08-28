@@ -1961,6 +1961,21 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
         stats.xpDePartie = { ...stats.xpDePartie, flamme: { jour: feu.flamme.serie, pieces: feu.piecesVersees } };
       }
     }
+    // ---------- L'Etendard de l'Echo ----------
+    // Premiere victoire en partie LIBRE contre un Echo de cette difficulte :
+    // son Etendard se gagne. Le signal histoire/libre est EXACTEMENT celui de
+    // l'XP ci-dessus (l'Histoire et le classe s'excluent d'eux-memes), le bac
+    // a sable et la Confluence restent dehors par la porte du profil. Pas de
+    // retroactif : l'historique par difficulte n'existe pas. Le champ
+    // banniereDebloquee voyage vers l'ecran de fin, jamais vers la sauvegarde
+    // (il est pose apres writeStatsRaw, comme xpDePartie).
+    if (victoire && !classee && !partieHistoire && compteAuProfil && difficulteEcho) {
+      const etendard = BANNIERES.find((x) => x.source === "echo" && x.difficulte === difficulteEcho);
+      if (etendard) {
+        const res = await possederBanniere(etendard.cle, false);
+        if (res.ajoutee) stats.banniereDebloquee = etendard.cle;
+      }
+    }
   }
   return stats;
 }
@@ -2591,8 +2606,49 @@ const TOURNOI_ENJEU = {
   xpVainqueur: 300,    // XP en plus (les pieces suivent toutes seules)
 };
 
+// ---------- Les bannieres de profil ----------
+// Un seul catalogue pour les cinq sources : depart (le choix du premier
+// lancement), pieces (la boutique), histoire (un Etendard par chapitre
+// termine), echo (premiere victoire libre par difficulte), prestige (DOUBLE
+// prix pieces OU gemmes -- JAMAIS d'exclusivite gemmes, c'est une regle).
+// Les chemins d'images vivent ICI, en webp comprime (les originaux PNG de
+// 3 a 24 Mo dorment dans sources-images/bannieres-originaux). Trois visuels
+// manquent encore (pieces-nuee, histoire-gardiens, histoire-piques) : leur
+// chemin est pose par convention, la carte reste lisible sans le fichier.
+const BANNIERES = [
+  { cle: "depart-nuit", nom: "Le Drap de Nuit", image: "/bannieres/depart-nuit.webp", source: "depart" },
+  { cle: "depart-pierre", nom: "La Pierre Levée", image: "/bannieres/depart-pierre.webp", source: "depart" },
+  { cle: "depart-or", nom: "Le Fil d'Or", image: "/bannieres/depart-or.webp", source: "depart" },
+  { cle: "pieces-brume", nom: "Brume des Failles", image: "/bannieres/pieces-brume.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-chandelles", nom: "Chandelles du Sanctuaire", image: "/bannieres/pieces-chandelles.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-encre", nom: "L'Encre et l'Or", image: "/bannieres/pieces-encre.webp", source: "pieces", prix: 2500 },
+  { cle: "pieces-rempart", nom: "Le Rempart", image: "/bannieres/pieces-rempart.webp", source: "pieces", prix: 2500 },
+  { cle: "pieces-nuee", nom: "La Nuée", image: "/bannieres/pieces-nuee.webp", source: "pieces", prix: 3000 },
+  { cle: "histoire-cendres", nom: "L'Étendard des Cendres", image: "/bannieres/histoire-cendres.webp", source: "histoire", chapitre: "cendres" },
+  { cle: "histoire-maudits", nom: "L'Étendard des Maudits", image: "/bannieres/histoire-maudits.webp", source: "histoire", chapitre: "maudits" },
+  { cle: "histoire-abysses", nom: "L'Étendard des Abysses", image: "/bannieres/histoire-abysses.webp", source: "histoire", chapitre: "devoreuse" },
+  { cle: "histoire-pestiferes", nom: "L'Étendard des Pestiférés", image: "/bannieres/histoire-pestiferes.webp", source: "histoire", chapitre: "poison" },
+  { cle: "histoire-gardiens", nom: "L'Étendard des Gardiens", image: "/bannieres/histoire-gardiens.webp", source: "histoire", chapitre: "guardian" },
+  { cle: "histoire-archers", nom: "L'Étendard des Archers", image: "/bannieres/histoire-archers.webp", source: "histoire", chapitre: "portee" },
+  { cle: "histoire-piques", nom: "L'Étendard des Piques", image: "/bannieres/histoire-piques.webp", source: "histoire", chapitre: "percee" },
+  { cle: "histoire-scribes", nom: "L'Étendard des Scribes", image: "/bannieres/histoire-scribes.webp", source: "histoire", chapitre: "scribes" },
+  { cle: "echo-novice", nom: "L'Étendard du Novice", image: "/bannieres/echo-novice.webp", source: "echo", difficulte: "debutant" },
+  { cle: "echo-combattant", nom: "L'Étendard du Combattant", image: "/bannieres/echo-combattant.webp", source: "echo", difficulte: "intermediaire" },
+  { cle: "echo-veteran", nom: "L'Étendard du Vétéran", image: "/bannieres/echo-veteran.webp", source: "echo", difficulte: "avance" },
+  { cle: "echo-seigneur", nom: "L'Étendard du Seigneur de Guerre", image: "/bannieres/echo-seigneur.webp", source: "echo", difficulte: "expert" },
+  { cle: "prestige-trone", nom: "Le Trône d'Améthyste", image: "/bannieres/prestige-trone.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
+  { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
+  { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
+  { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
+];
+// La banniere que porte un adversaire distant tant que son profil n'en
+// transporte pas (le champ viendra avec le chantier multijoueur).
+const BANNIERE_REPLI = "depart-nuit";
+function banniereDeCle(cle) { return BANNIERES.find((b) => b.cle === cle) || null; }
+function banniereDeDifficulte(diff) { return BANNIERES.find((b) => b.source === "echo" && b.difficulte === diff) || banniereDeCle(BANNIERE_REPLI); }
+
 const BOURSE_ESSAI = 1000;
-const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"] }, accesAnticipe: [], misesTournoi: [] };
+const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "" };
 let memoryBourse = null;
 
 async function readBourseRaw() {
@@ -2626,7 +2682,7 @@ async function writeBourseRaw(str) {
 // se verse ici, une seule fois -- au premier passage comme chez un joueur de la veille.
 async function loadBourse() {
   const brut = await readBourseRaw();
-  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"] }, accesAnticipe: [], misesTournoi: [] };
+  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [] }, accesAnticipe: [], misesTournoi: [] };
   if (brut) {
     try {
       const lu = JSON.parse(brut);
@@ -2652,6 +2708,17 @@ async function loadBourse() {
         for (const item of cat) if (item.prix === 0 && !valides.includes(item.cle)) valides.push(item.cle);
         b.possessions[famille] = [...new Set(valides)];
       }
+      // Les bannieres, A PART des familles cosmetiques : validees contre le
+      // catalogue complet (gagnees comme achetees), et JAMAIS de gratuite
+      // d'office -- le choix de depart est un vrai choix, pas un cadeau du
+      // reparateur. L'equipee non possedee se replie sur la premiere possedee,
+      // sinon vide.
+      b.possessions.bannieres = (lu.possessions && Array.isArray(lu.possessions.bannieres))
+        ? [...new Set(lu.possessions.bannieres.filter((k) => BANNIERES.some((x) => x.cle === k)))]
+        : [];
+      b.banniereEquipee = typeof lu.banniereEquipee === "string" && b.possessions.bannieres.includes(lu.banniereEquipee)
+        ? lu.banniereEquipee
+        : (b.possessions.bannieres[0] || "");
     } catch (e) { /* sauvegarde abimee : on repart des offerts */ }
   }
   if (BOURSE_ESSAI > 0 && !b.essaiVerse) {
@@ -2778,6 +2845,61 @@ async function acheterCosmetique(famille, cle) {
   if (b.pieces < item.prix) return { bourse: b, fait: false };
   b.pieces -= item.prix;
   b.possessions[famille] = [...b.possessions[famille], cle];
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// ---------- Les bannieres : posseder, equiper, acheter ----------
+// Posseder une banniere (gagnee ou choisie au depart). Relit avant d'ecrire,
+// n'ajoute jamais deux fois ; une bourse sans equipee prend celle-ci d'office.
+async function possederBanniere(cle, equiperAussi) {
+  const b = await loadBourse();
+  if (!BANNIERES.some((x) => x.cle === cle)) return { bourse: b, ajoutee: false };
+  const deja = b.possessions.bannieres.includes(cle);
+  const equipeeAvant = b.banniereEquipee;
+  if (!deja) b.possessions.bannieres = [...b.possessions.bannieres, cle];
+  if (equiperAussi || !b.banniereEquipee) b.banniereEquipee = cle;
+  if (!deja || b.banniereEquipee !== equipeeAvant) await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, ajoutee: !deja };
+}
+
+// Equiper une banniere POSSEDEE : valide avant d'ecrire, comme les cosmetiques.
+async function equiperBanniere(cle) {
+  const b = await loadBourse();
+  if (!b.possessions.bannieres.includes(cle) || b.banniereEquipee === cle) return b;
+  b.banniereEquipee = cle;
+  await writeBourseRaw(JSON.stringify(b));
+  return b;
+}
+
+// L'achat en PIECES, meme modele sur qu'acheterCosmetique : relire, decider,
+// ecrire. Seules les bannieres a prix en pieces passent ici ; les gagnees
+// (histoire, echo) et celles du depart n'ont pas de prix, donc pas de chemin.
+async function acheterBannierePieces(cle) {
+  const b = await loadBourse();
+  const item = banniereDeCle(cle);
+  if (!item || !(item.prix > 0)) return { bourse: b, fait: false };
+  if (b.possessions.bannieres.includes(cle)) return { bourse: b, fait: true };
+  if (b.pieces < item.prix) return { bourse: b, fait: false };
+  b.pieces -= item.prix;
+  b.possessions.bannieres = [...b.possessions.bannieres, cle];
+  if (!b.banniereEquipee) b.banniereEquipee = cle;
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// L'achat du prestige en GEMMES : l'AUTRE moitie du double prix, jamais une
+// exclusivite -- le meme article s'achete en pieces juste au-dessus. Meme
+// modele sur, sans toucher a acheterCosmetique ni aux autres articles.
+async function acheterBanniereGemmes(cle) {
+  const b = await loadBourse();
+  const item = banniereDeCle(cle);
+  if (!item || !(item.prixGemmes > 0)) return { bourse: b, fait: false };
+  if (b.possessions.bannieres.includes(cle)) return { bourse: b, fait: true };
+  if (b.gemmes < item.prixGemmes) return { bourse: b, fait: false };
+  b.gemmes -= item.prixGemmes;
+  b.possessions.bannieres = [...b.possessions.bannieres, cle];
+  if (!b.banniereEquipee) b.banniereEquipee = cle;
   await writeBourseRaw(JSON.stringify(b));
   return { bourse: b, fait: true };
 }
@@ -2914,11 +3036,22 @@ async function completeChapter(orderKey) {
   // Idempotent POUR DE BON. L'increment etait hors de la garde : rejouer le Seigneur de
   // Guerre d'un chapitre deja fini faisait grimper le compteur sans fin, et l'ecran
   // annoncait "Partie 7 / 6", puis 8, puis 12.
+  let etendardFrais = null;
   if (!progress.completedChapters.includes(orderKey)) {
     progress.chapterWins[orderKey] = (progress.chapterWins[orderKey] || 0) + 1;
     progress.completedChapters.push(orderKey);
+    // L'Etendard du chapitre rejoint les possessions, une seule fois -- la
+    // garde est la liste completedChapters elle-meme.
+    const etendard = BANNIERES.find((x) => x.source === "histoire" && x.chapitre === orderKey);
+    if (etendard) {
+      const res = await possederBanniere(etendard.cle, false);
+      if (res.ajoutee) etendardFrais = etendard.cle;
+    }
   }
   await writeStoryRaw(JSON.stringify(progress));
+  // Pose APRES l'ecriture : le champ voyage vers l'ecran de fin par l'appelant,
+  // comme xpDePartie, mais ne se sauvegarde jamais dans la progression.
+  if (etendardFrais) progress.banniereDebloquee = etendardFrais;
   return progress;
 }
 
@@ -4700,6 +4833,98 @@ const APP_STYLES = `
         /* Un defilement commande vers un titre s'arrete SOUS la lisiere fondue par le
            masque de la page : sans cette marge, le titre arrivait pile dans l'estompe. */
         .boutique-titre { scroll-margin-top: 34px; }
+        /* ---------- Les bannieres de profil ---------- */
+        /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
+           Toutes les images en cover, dimensions posees (pas de saut), et un
+           voile sombre statique quand du texte se pose dessus. */
+        .banniere-apercu {
+          width: 100%; height: auto; aspect-ratio: 3 / 1; object-fit: cover;
+          border-radius: 10px; display: block;
+          background: linear-gradient(160deg, #241c32, #14101d);
+        }
+        /* UNE colonne, en selecteur compose : la regle de base .boutique-grille
+           arrive plus tard dans la feuille et gagnerait a egalite. */
+        .boutique-grille.bannieres-grille { grid-template-columns: 1fr; }
+        .banniere-carte { align-items: center; gap: 6px; }
+        .banniere-prix-double { display: inline-flex; align-items: center; gap: 5px; }
+        .banniere-prix-ou { font-size: 10px; color: var(--muted); }
+        .achat-double { display: flex; gap: 10px; justify-content: center; }
+        .achat-double .reset-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+        }
+        .achat-double .reset-btn:disabled { opacity: 0.45; cursor: default; }
+        /* Le choix de depart et la selection : les memes cartes larges. */
+        .choix-banniere-voile { z-index: 220; }
+        .choix-banniere-panneau {
+          max-width: 380px; display: flex; flex-direction: column; gap: 10px;
+          max-height: min(86vh, 700px); overflow-y: auto; overscroll-behavior-y: contain;
+        }
+        .choix-banniere-sous { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin: 0; }
+        .choix-banniere-carte {
+          position: relative; border-radius: 12px; padding: 5px;
+          background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.1);
+          cursor: pointer; display: flex; flex-direction: column; gap: 5px; align-items: center;
+          font: inherit; color: inherit;
+        }
+        .choix-banniere-carte.choisi { border-color: var(--gold-bright); }
+        .choix-banniere-nom {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: var(--gold-bright);
+        }
+        .selection-bannieres { display: flex; flex-direction: column; gap: 8px; }
+        /* Le bandeau du profil : l'image en fond-bouton, le contenu par-dessus.
+           Les zones libres du bandeau ouvrent le choix ; chaque commande garde
+           son propre toucher (les enfants passent au-dessus du fond). */
+        .profil-banniere {
+          position: relative; border-radius: 14px; overflow: hidden;
+          padding: 12px 12px 10px; margin: 2px 0 4px;
+          display: flex; flex-direction: column; gap: 10px;
+          border: 1px solid rgba(203,164,86,0.28);
+          background: linear-gradient(160deg, #241c32, #14101d);
+        }
+        .profil-banniere > *:not(.profil-banniere-fond) { position: relative; z-index: 1; }
+        .profil-banniere-fond {
+          position: absolute; inset: 0; z-index: 0; border: none; padding: 0;
+          cursor: pointer; background-size: cover; background-position: center;
+        }
+        /* Le voile sombre COTE GAUCHE, statique : pseudo, blason et carte de
+           niveau restent lisibles sur chacune des 24 images. */
+        .profil-banniere-fond::after {
+          content: ""; position: absolute; inset: 0; pointer-events: none;
+          background: linear-gradient(90deg, rgba(8,6,12,0.82), rgba(8,6,12,0.5) 55%, rgba(8,6,12,0.18));
+        }
+        /* Le face-a-face d'avant-partie : la banniere DERRIERE le nom. */
+        .vs-plaque { position: relative; overflow: hidden; }
+        .vs-plaque > *:not(.vs-plaque-fond) { position: relative; z-index: 1; }
+        .vs-plaque-fond {
+          position: absolute; inset: 0; z-index: 0;
+          background-size: cover; background-position: center; opacity: 0.5;
+        }
+        /* L'etendard-etiquette (Echo, et ma rangee) : une bande large, le nom
+           pose sur le voile gauche. */
+        .vs-etendard {
+          position: relative; width: min(320px, 86vw); height: 58px;
+          margin: 0 auto; border-radius: 10px; overflow: hidden;
+          background-size: cover; background-position: center;
+          border: 1px solid rgba(255,255,255,0.14);
+          display: flex; align-items: center;
+        }
+        .vs-etendard::before {
+          content: ""; position: absolute; inset: 0;
+          background: linear-gradient(90deg, rgba(8,6,12,0.78), rgba(8,6,12,0.2) 55%, transparent);
+        }
+        .vs-etendard span {
+          position: relative; z-index: 1; padding-left: 12px;
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #f5efe2;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        }
+        .vs-etendard.mienne span { color: var(--blue-bright); }
+        /* L'annonce de deblocage en fin de partie : fondu en opacity seule. */
+        .cer-banniere {
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: var(--gold-bright);
+          animation: cer-xp-parait 0.5s ease-out 1s both;
+        }
+        .reduced-motion .cer-banniere { animation: none; }
+
         /* ---------- Le Pantheon ---------- */
         /* Cent lignes PLATES : ni ombre ni animation par ligne — cent lignes decorees
            ruinent le defilement sur mobile. Le podium se distingue par une pastille en
@@ -11136,6 +11361,9 @@ export default function Emprise() {
     };
   }, []);
   const [gameOver, setGameOver] = useState(false);
+  // La banniere annoncee ne survit pas a l'ecran de fin : une nouvelle partie
+  // la retire d'elle-meme.
+  useEffect(() => { if (!gameOver) setBanniereAnnonce(null); }, [gameOver]);
   const [infoAbility, setInfoAbility] = useState(null);
   // null : rien a reprendre. Sinon, le resume de la partie interrompue (mode, score) :
   // la carte de reprise doit dire OU le Commandant en etait, pas seulement qu'il y est.
@@ -11219,7 +11447,34 @@ export default function Emprise() {
   // La bourse : le solde et ce qu'on possede. Chargee une fois -- et c'est ce chargement
   // qui verse le solde d'essai s'il ne l'a jamais ete.
   const [bourse, setBourse] = useState(DEFAUT_BOURSE);
-  useEffect(() => { loadBourse().then(setBourse); }, []);
+  // bourseChargee : le choix de banniere de depart ne peut se juger que sur une
+  // bourse LUE, jamais sur le defaut (toujours vide de bannieres).
+  const [bourseChargee, setBourseChargee] = useState(false);
+  useEffect(() => {
+    (async () => {
+      let b = await loadBourse();
+      // Retroactif : tout chapitre d'Histoire deja termine donne son Etendard
+      // s'il manque. possederBanniere n'ecrit que ce qui change : au deuxieme
+      // lancement, cette boucle ne touche plus rien.
+      try {
+        const p = await loadStoryProgress();
+        for (const orderKey of p.completedChapters || []) {
+          const etendard = BANNIERES.find((x) => x.source === "histoire" && x.chapitre === orderKey);
+          if (etendard) b = (await possederBanniere(etendard.cle, false)).bourse;
+        }
+      } catch (e) { /* la progression d'Histoire ne doit jamais bloquer la bourse */ }
+      setBourse(b);
+      setBourseChargee(true);
+    })();
+  }, []);
+  // La banniere fraichement debloquee de la DERNIERE partie : l'ecran de fin
+  // l'annonce, la fin de la partie suivante ou son debut l'efface (l'effet vit
+  // plus bas, apres la declaration de gameOver).
+  const [banniereAnnonce, setBanniereAnnonce] = useState(null);
+  // L'achat de banniere en cours (l'article du catalogue), et le panneau de
+  // choix parmi les possedees ouvert depuis le profil.
+  const [achatBanniere, setAchatBanniere] = useState(null);
+  const [selectionBanniere, setSelectionBanniere] = useState(false);
   // La Flamme quotidienne : chargee une fois au demarrage (la lecture evalue
   // l'extinction d'elle-meme), puis rafraichie apres chaque partie comptee.
   const [flamme, setFlamme] = useState(null);
@@ -12175,6 +12430,12 @@ export default function Emprise() {
         mode === "bot" ? botDifficulty : null
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
+        // L'Etendard d'Echo fraichement gagne : l'ecran de fin l'annonce, la
+        // bourse rechargee par rafraichirProgression porte deja la possession.
+        if (st.banniereDebloquee) {
+          const bn = banniereDeCle(st.banniereDebloquee);
+          if (bn) setBanniereAnnonce(bn.nom);
+        }
         // Les quetes avancent sur les memes parties que l XP -- la porte du profil
         // et l Histoire -- plus la Confluence pour sa quete dediee. Le bac a sable,
         // les duels locaux (monCamp nul) et les parties disqualifiees restent dehors.
@@ -12224,7 +12485,16 @@ export default function Emprise() {
         const gameIndex = numeroPartieChapitre(storyProgress, chapterMeta);
         if (chapterMeta && gameIndex >= chapterMeta.numGames) {
           setStoryChapterJustCompleted(storyChapterKey);
-          completeChapter(storyChapterKey).then(setStoryProgress);
+          completeChapter(storyChapterKey).then((p) => {
+            setStoryProgress(p);
+            // L'Etendard du chapitre vient d'etre possede : la bourse a change,
+            // et l'ecran de fin annonce le deblocage.
+            if (p.banniereDebloquee) {
+              const bn = banniereDeCle(p.banniereDebloquee);
+              if (bn) setBanniereAnnonce(bn.nom);
+              loadBourse().then(setBourse);
+            }
+          });
         } else {
           recordChapterWin(storyChapterKey).then(setStoryProgress);
         }
@@ -14317,6 +14587,13 @@ export default function Emprise() {
     );
   }
 
+  // La banniere fraichement debloquee (Etendard d'Histoire ou d'Echo), SOUS les
+  // lignes existantes. Fondu en opacity seule, comme le reste de l'ecran.
+  function bilanBanniereDePartie() {
+    if (!banniereAnnonce || !gameOver) return null;
+    return <div className="cer-banniere">Bannière débloquée — {banniereAnnonce}</div>;
+  }
+
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
@@ -15661,6 +15938,38 @@ export default function Emprise() {
                     })}
                   </div>
 
+                  {/* ---------- Le rayon des bannieres ---------- */}
+                  {/* Les achetables seulement : pieces d'abord, prestige ensuite.
+                      Celles du depart, de l'Histoire et de l'Echo ne s'achetent
+                      pas -- elles ne paraissent donc jamais ici. */}
+                  <h2 className="boutique-titre second">Bannières</h2>
+                  <p className="boutique-sous">L&apos;étendard de votre profil, porté avant chaque duel.</p>
+                  <div className="boutique-grille bannieres-grille">
+                    {[...BANNIERES.filter((x) => x.source === "pieces"), ...BANNIERES.filter((x) => x.source === "prestige")].map((bn) => {
+                      const possede = bourse.possessions.bannieres.includes(bn.cle);
+                      const equipee = bourse.banniereEquipee === bn.cle;
+                      return (
+                        <button
+                          key={bn.cle}
+                          className={`boutique-carte banniere-carte ${equipee ? "choisi" : ""}`}
+                          onClick={() => possede
+                            ? equiperBanniere(bn.cle).then(setBourse)
+                            : setAchatBanniere(bn)}
+                          aria-pressed={equipee}
+                          aria-label={`Bannière ${bn.nom}.${equipee ? " Équipée." : possede ? " Possédée." : bn.source === "prestige" ? ` ${bn.prix} pièces ou ${bn.prixGemmes} gemmes.` : ` ${bn.prix} pièces.`}`}
+                        >
+                          <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" loading="lazy" />
+                          <span className="boutique-nom">{bn.nom}</span>
+                          {equipee || possede
+                            ? <span className="boutique-etat">{equipee ? "Équipée" : "Possédée"}</span>
+                            : bn.source === "prestige"
+                              ? <span className="boutique-prix banniere-prix-double"><span className="piece-icone" aria-hidden="true" />{bn.prix}<span className="banniere-prix-ou">ou</span><span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes}</span>
+                              : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{bn.prix}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <h2 className="boutique-titre second">Gemmes</h2>
                   <p className="boutique-sous">La monnaie des étals, taillée dans l&apos;améthyste.</p>
                   <div className="boutique-grille">
@@ -16156,6 +16465,25 @@ export default function Emprise() {
                 <div className="info-panel settings-panel profil-panel profil-fiche" onClick={(e) => e.stopPropagation()}>
                   <button className="profil-fiche-croix" onClick={() => setActiveModal(null)}
                           aria-label="Fermer">&times;</button>
+                  {/* ---------- Le bandeau de banniere ---------- */}
+                  {/* La banniere equipee, DERRIERE le pseudo, le blason et la carte
+                      de niveau. Le fond est un bouton : toucher une zone libre du
+                      bandeau ouvre le choix parmi les possedees ; les commandes
+                      par-dessus gardent leurs propres touchers. Voile sombre a
+                      gauche, statique : le texte reste lisible sur les 24 images. */}
+                  {(() => {
+                    const equipee = banniereDeCle(bourse.banniereEquipee);
+                    return (
+                  <div className={`profil-banniere ${equipee ? "" : "neutre"}`}>
+                  {equipee && (
+                    <button
+                      className="profil-banniere-fond"
+                      style={{ backgroundImage: `url("${equipee.image}")` }}
+                      onClick={() => setSelectionBanniere(true)}
+                      aria-label={`Bannière équipée : ${equipee.nom}. Changer de bannière.`}
+                      title="Changer de bannière"
+                    />
+                  )}
                   {/* Le nom se change ici, la ou on le lit : le toucher ouvre le champ,
                       pre-rempli du nom actuel pour le corriger plutot que le retaper. */}
                   {editionPseudo ? (
@@ -16256,6 +16584,9 @@ export default function Emprise() {
                         )}
                         </div>
                       </div>
+                    );
+                  })()}
+                  </div>
                     );
                   })()}
                   {/* Trois colonnes, jamais quatre : les trophees se lisent deja dans la
@@ -16448,6 +16779,56 @@ export default function Emprise() {
                 )}
 
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- Le choix de la banniere de depart ---------- */}
+          {/* Une seule fois : tant qu'aucune banniere de DEPART n'est possedee
+              (les Etendards retroactifs d'Histoire ne volent pas ce choix).
+              Sobre, plein ecran, pas de croix : on choisit, il disparait pour
+              toujours. Il attend la fin de la ceremonie d'entree. */}
+          {bourseChargee && introEtape >= 2
+            && !bourse.possessions.bannieres.some((k) => { const x = banniereDeCle(k); return x && x.source === "depart"; })
+            && (
+            <div className="info-overlay choix-banniere-voile">
+              <div className="info-panel choix-banniere-panneau" role="dialog" aria-label="Choisissez votre bannière">
+                <div className="info-panel-title">Votre bannière</div>
+                <p className="choix-banniere-sous">Elle habillera votre profil et précédera vos duels. Un seul choix : les deux autres resteront dans l&apos;ombre.</p>
+                {BANNIERES.filter((x) => x.source === "depart").map((bn) => (
+                  <button key={bn.cle} className="choix-banniere-carte"
+                          onClick={() => possederBanniere(bn.cle, true).then(({ bourse: b }) => setBourse(b))}
+                          aria-label={`Choisir ${bn.nom}`}>
+                    <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" />
+                    <span className="choix-banniere-nom">{bn.nom}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ---------- Le choix parmi les bannieres possedees ---------- */}
+          {/* Ouvert par le bandeau du profil : les possedees seulement, un
+              toucher equipe et referme. Meme gabarit de cartes que le choix
+              de depart. */}
+          {selectionBanniere && (
+            <div className="info-overlay" onClick={() => setSelectionBanniere(false)}>
+              <div className="info-panel choix-banniere-panneau" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Vos bannières</div>
+                <div className="selection-bannieres">
+                  {BANNIERES.filter((x) => bourse.possessions.bannieres.includes(x.cle)).map((bn) => {
+                    const equipee = bourse.banniereEquipee === bn.cle;
+                    return (
+                      <button key={bn.cle} className={`choix-banniere-carte ${equipee ? "choisi" : ""}`}
+                              aria-pressed={equipee}
+                              onClick={() => equiperBanniere(bn.cle).then((b) => { setBourse(b); setSelectionBanniere(false); })}>
+                        <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" loading="lazy" />
+                        <span className="choix-banniere-nom">{bn.nom}{equipee ? " (équipée)" : ""}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button className="reset-btn" onClick={() => setSelectionBanniere(false)}>Fermer</button>
               </div>
             </div>
           )}
@@ -18152,8 +18533,18 @@ export default function Emprise() {
                           const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
                           const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
                           const nomPlaque = camp === monCamp ? (pseudo || "Vous") : (nomAdverse || "Votre adversaire");
+                          // La banniere de profil, DERRIERE le nom : la mienne est
+                          // l'equipee ; l'adversaire distant porte Le Drap de Nuit
+                          // tant que son profil ne transporte pas la sienne (le
+                          // champ viendra avec le chantier multijoueur, pas ici).
+                          const etendard = camp === monCamp
+                            ? (banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI))
+                            : banniereDeCle(BANNIERE_REPLI);
                           return (
                             <div className={`vs-plaque ${camp}`}>
+                              {etendard && (
+                                <span className="vs-plaque-fond" style={{ backgroundImage: `url("${etendard.image}")` }} aria-hidden="true" />
+                              )}
                               <span
                                 className={`vs-banniere ${ordre ? "" : "neutre"}`}
                                 style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
@@ -18174,11 +18565,20 @@ export default function Emprise() {
                           </div>
                         );
                       })()}
-                      <div className="sub">
-                        {enLigne
-                          ? "Sa main"
-                          : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}
-                      </div>
+                      {/* L'Echo porte l'Etendard de sa difficulte : l'adversaire
+                          bot a toujours une banniere coherente. En duel local,
+                          l'etiquette reste nue -- on ne connait pas l'autre. */}
+                      {(() => {
+                        const etiquette = enLigne ? "Sa main" : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label;
+                        const etendardAdverse = !enLigne && botDifficulty ? banniereDeDifficulte(botDifficulty) : null;
+                        return etendardAdverse ? (
+                          <div className="vs-etendard" style={{ backgroundImage: `url("${etendardAdverse.image}")` }}>
+                            <span>{etiquette}</span>
+                          </div>
+                        ) : (
+                          <div className="sub">{etiquette}</div>
+                        );
+                      })()}
                       {/* La Reserve figure des l'apercu, a cote de la main : le joueur
                           vient de la composer, il doit la retrouver la ou il la verra
                           pendant toute la partie. Celle d'en face est de dos elle aussi,
@@ -18191,7 +18591,18 @@ export default function Emprise() {
                         </div>
                         {pileDeReserve(reserveDe(campAdverse), true)}
                       </div>
-                      <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
+                      {/* Ma banniere sous celle d'en face : la mienne en bas,
+                          la sienne en haut, comme les mains. */}
+                      {(() => {
+                        const mienne = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
+                        return mienne ? (
+                          <div className="vs-etendard mienne" style={{ backgroundImage: `url("${mienne.image}")`, marginTop: 16 }}>
+                            <span>Votre main</span>
+                          </div>
+                        ) : (
+                          <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
+                        );
+                      })()}
                       <div className="main-et-reserve">
                         <div className="hand-row" style={{ maxWidth: 320 }}>
                           {apercuParOrdre(maMain).map((card) => (
@@ -18644,6 +19055,7 @@ export default function Emprise() {
               {bilanTrophees()}
               {bilanXpDePartie()}
               {bilanQuetesDePartie()}
+              {bilanBanniereDePartie()}
               {boutonRevanche()}
               {boutonAmitie()}
               {lienSignalerAdversaire()}
@@ -18681,6 +19093,7 @@ export default function Emprise() {
             {bilanTrophees()}
             {bilanXpDePartie()}
             {bilanQuetesDePartie()}
+            {bilanBanniereDePartie()}
             {boutonRevanche()}
             {boutonAmitie()}
             {lienSignalerAdversaire()}
@@ -18699,6 +19112,46 @@ export default function Emprise() {
       {/* Toucher un pack : un panneau d'information, RIEN d'autre. Aucune gemme n'est
           creditee, la bourse n'est pas touchee -- le paiement passera par les achats
           integres des magasins, a la publication. */}
+      {/* L'achat d'une banniere : pieces simple, ou DOUBLE prix du prestige --
+          deux boutons, chacun grise si SON solde manque, un seul debite. */}
+      {achatBanniere && (() => {
+        const bn = achatBanniere;
+        const acquerir = (achat) => achat(bn.cle).then(({ bourse: b, fait }) => {
+          setBourse(b);
+          // Acquise : on l'equipe dans la foulee, comme les autres cosmetiques.
+          if (fait) equiperBanniere(bn.cle).then(setBourse);
+          setAchatBanniere(null);
+        });
+        return (
+          <div className="info-overlay" onClick={() => setAchatBanniere(null)}>
+            <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel-title">{bn.nom}</div>
+              <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" />
+              {bn.source === "prestige" ? (
+                <>
+                  <div className="achat-solde">Bannière de prestige : payez en pièces ou en gemmes, au choix.</div>
+                  <div className="achat-double">
+                    <button className="reset-btn" disabled={bourse.pieces < bn.prix} onClick={() => acquerir(acheterBannierePieces)}>
+                      <span className="piece-icone" aria-hidden="true" />{bn.prix} pièces
+                    </button>
+                    <button className="reset-btn" disabled={bourse.gemmes < bn.prixGemmes} onClick={() => acquerir(acheterBanniereGemmes)}>
+                      <span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes} gemmes
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="achat-prix"><span className="piece-icone" aria-hidden="true" />{bn.prix}<span className="lecteur-seul"> pièces</span></div>
+                  {bourse.pieces < bn.prix && <div className="achat-solde">Il vous manque {bn.prix - bourse.pieces} pièces.</div>}
+                  <button className="reset-btn" disabled={bourse.pieces < bn.prix} onClick={() => acquerir(acheterBannierePieces)}>Acquérir</button>
+                </>
+              )}
+              <button className="landing-link" onClick={() => setAchatBanniere(null)}>Fermer</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {packRegarde && (
         <div className="info-overlay" onClick={() => setPackRegarde(null)}>
           <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
