@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 12h30";
+const VERSION_AFFICHEE = "29 août · 13h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -2434,9 +2434,11 @@ const PACKS_GEMMES = [
 ];
 
 // ---------- Pieces ----------
-// Les pieces suivent l'XP : chaque point d'XP gagne verse autant de pieces.
-// Une seule constante regle tout ; a 1, les deux nombres sont identiques.
-const PIECES_PAR_XP = 1;
+// Les pieces suivent l'XP : chaque point d'XP gagne verse PIECES_PAR_XP pieces.
+// A 2 depuis le 29/08 (demande du Commandant) : a 1, les deux nombres etaient
+// identiques partout et la ligne de fin ressemblait a un doublon d'affichage.
+// Une partie a 20 XP verse donc 40 pieces.
+const PIECES_PAR_XP = 2;
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
 // jamais l'inverse. Taux plat, affiche en toutes lettres au joueur.
 const PIECES_PAR_GEMME = 10;
@@ -3348,9 +3350,26 @@ function combosDuCoup(ctx) {
 // les captures, banniere pour les Ordres, vague pour les Ondes et Resonances,
 // couronne de laurier pour les victoires, livre pour les modes. La coche
 // remplace le glyphe sur une quete accomplie.
+// Les glyphes IMAGES, au fur et a mesure que le Commandant les depose : d'abord
+// l'icone PAR QUETE (nommee d'apres le libelle du jeu), sinon le glyphe de sa
+// famille, sinon le SVG au trait -- le cercle reste lisible quoi qu'il arrive,
+// meme si un fichier manque.
+const ICONES_QUETES = {
+  victoires2: "/quetes/icone-double-victoire.png",
+  captures20: "/quetes/icone-nul-ne-s-echappe.png",
+  ondes3: "/quetes/icone-la-cascade.png",
+};
+const GLYPHES_QUETES = {
+  ordres: "/quetes/glyphe-ordres.png",
+};
+
 function glypheDeQuete(def, faite) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   if (faite) return (<svg {...props} strokeWidth={2.4}><path d="M6 12.5l4 4L18 8" /></svg>);
+  const image = ICONES_QUETES[def.cle] || GLYPHES_QUETES[def.famille];
+  if (image) {
+    return (<img className="quete-glyphe-image" src={image} alt="" aria-hidden="true" width="28" height="28" />);
+  }
   switch (def.famille) {
     case "captures":
       return (<svg {...props}><path d="M5.5 5.5l13 13M18.5 5.5l-13 13" /><path d="M15 18.5l3.5-3.5M5.5 15l3.5 3.5" /></svg>);
@@ -4526,9 +4545,12 @@ const APP_STYLES = `
         .hub-pieces:active { transform: none; }
         /* 24 px, comme le cristal : le Commandant prefere les deux au meme pas. */
         .hub-pieces .piece-icone { width: 24px; height: 24px; flex: none; }
-        /* 20 px (10 puis 16 avant lui) : le cristal se lisait encore trop petit.
-           Agrandi a la demande du Commandant, deux fois. */
-        .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
+        /* 24 px (10, 16 puis 20 avant lui), et l'image du Commandant : le hub porte
+           SA gemme (diamant grave d'or), les autres ecrans gardent le cristal. */
+        .hub-gemmes .gemme-icone {
+          width: 24px; height: 24px; flex: none;
+          background-image: url("/boutique/gemme-hub.png");
+        }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
@@ -5322,6 +5344,9 @@ const APP_STYLES = `
           color: var(--gold-bright);
         }
         .quete-glyphe svg { width: 22px; height: 22px; }
+        /* Le glyphe image occupe ~70 % du cercle de 40 px ; s'il manque au
+           chargement, l'img reste vide et le cercle dore tient seul. */
+        .quete-glyphe-image { width: 28px; height: 28px; object-fit: contain; display: block; }
         .quete-glyphe.plein {
           background: linear-gradient(180deg, #e6cf8f, #cba456);
           border-color: transparent; color: #241a0a;
