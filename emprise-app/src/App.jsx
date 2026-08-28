@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 3h";
+const VERSION_AFFICHEE = "29 août · 3h45";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1908,6 +1908,17 @@ async function resetStats() {
 // Le solde d'essai. VERSE UNE FOIS, marque dans la sauvegarde, et affiche comme un essai
 // a l'ecran : le jour du lancement cette constante tombe a zero, personne ne garde de
 // gemmes gratuites, et le champ essaiVerse dit qui en avait recu.
+// L'ancre du plan : 100 gemmes pour environ 1 euro. La mention dit ce que chaque palier
+// rend de plus par euro ; la plus grande porte « Meilleure offre ». Les paliers de
+// reserve (5900, 14000) existent dans le plan mais pas ici : pas au lancement.
+// prixDit : « euro » en toutes lettres, pour le lecteur d'ecran qui lit mal le symbole.
+const PACKS_GEMMES = [
+  { cle: "poignee", nom: "Poignée de gemmes", gemmes: 80, prix: "0,99 €", prixDit: "0,99 euro", mention: "", image: "/boutique/pack-poignee.webp" },
+  { cle: "bourse", nom: "Bourse de gemmes", gemmes: 500, prix: "4,99 €", prixDit: "4,99 euros", mention: "+24 %", image: "/boutique/pack-bourse.webp" },
+  { cle: "coffret", nom: "Coffret de gemmes", gemmes: 1200, prix: "9,99 €", prixDit: "9,99 euros", mention: "+48 %", image: "/boutique/pack-coffret.webp" },
+  { cle: "coffre", nom: "Coffre de gemmes", gemmes: 2600, prix: "19,99 €", prixDit: "19,99 euros", mention: "Meilleure offre", image: "/boutique/pack-coffre.webp" },
+];
+
 const BOURSE_ESSAI = 1000;
 const DEFAUT_BOURSE = { gemmes: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"] } };
 let memoryBourse = null;
@@ -3779,6 +3790,20 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none;
         }
         .hub-haut-rang { display: flex; gap: 12px; }
+        /* Le solde de gemmes, sous les portes du coin. La meme largeur que les boutons
+           au-dessus : la colonne reste une colonne. Teinte amethyste, comme tout ce qui
+           touche aux gemmes -- le dore reste aux pieces et aux trophees. */
+        .hub-gemmes {
+          width: 48px; padding: 4px 0 5px; flex: none;
+          display: flex; align-items: center; justify-content: center; gap: 4px;
+          background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
+          border-radius: 10px; cursor: pointer;
+          font-family: 'Cinzel', serif; font-size: 11.5px; font-weight: 700; color: #d9c2f5;
+          font-variant-numeric: tabular-nums;
+          transition: border-color .2s, transform .35s ease;
+        }
+        .hub-gemmes:active { transition-duration: .1s; transform: scale(0.94); }
+        .hub-gemmes .gemme-icone { width: 10px; height: 10px; flex: none; }
         /* ---------- Le Pantheon ---------- */
         /* Cent lignes PLATES : ni ombre ni animation par ligne — cent lignes decorees
            ruinent le defilement sur mobile. Le podium se distingue par une pastille en
@@ -3935,6 +3960,12 @@ const APP_STYLES = `
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
+          /* Ce qui defile hors de l'ecran s'EVANOUIT au lieu d'etre tranche net : le
+             Commandant voyait le titre PLATEAUX coupe en deux contre le bandeau du hub.
+             Un masque en degrade fond les 26 premiers pixels et les 16 derniers ; le
+             transparent du masque cache, le noir montre. Prefixe -webkit pour iOS. */
+          -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 16px), transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 16px), transparent 100%);
         }
         /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
         .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
@@ -3975,6 +4006,7 @@ const APP_STYLES = `
           width: 100%; max-width: 340px;
         }
         .boutique-carte {
+          position: relative;
           display: flex; flex-direction: column; align-items: center; gap: 3px;
           padding: 9px 7px 8px; border-radius: 13px; cursor: pointer;
           background: linear-gradient(180deg, rgba(36,28,52,0.82), rgba(24,18,34,0.82));
@@ -4461,14 +4493,12 @@ const APP_STYLES = `
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
         /* ---------- La bourse ---------- */
-        /* La gemme, en amethyste comme le plan la veut : un losange en degrade, pas une
-           image -- nette a toute taille, gratuite a charger. Elle ne s'anime pas. */
+        /* La gemme est desormais une IMAGE : le cristal taille dans la poignee
+           d'amethystes du Commandant. Ni rotation, ni bordure, ni ombre -- elles
+           fabriquaient l'ancien losange et deformeraient l'image. */
         .gemme-icone {
           display: inline-block; width: 11px; height: 11px;
-          transform: rotate(45deg); border-radius: 2.5px;
-          background: linear-gradient(135deg, #c9a0f0 0%, #9256cf 48%, #5c2b96 100%);
-          border: 1px solid rgba(224, 190, 255, 0.7);
-          box-shadow: 0 1px 4px rgba(92, 43, 150, 0.5);
+          background: url("/boutique/gemme-icone.png") center / contain no-repeat;
         }
         .boutique-solde {
           display: inline-flex; align-items: center; gap: 7px;
@@ -4486,6 +4516,25 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: #c9a0f0;
           margin-top: 2px; font-variant-numeric: tabular-nums;
         }
+        /* ---------- La vitrine des packs ---------- */
+        /* Les cartes reprennent .boutique-carte : coherence avant nouveaute. Seules les
+           pieces neuves ont leur classe. La mention est un petit bandeau pose sur la
+           carte, et c'est son TEXTE qui informe -- jamais une couleur seule. */
+        .pack-mention {
+          position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+          padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+          font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+          color: #1d1030; background: linear-gradient(180deg, #d9c2f5, #b183e8);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+        }
+        .pack-image { width: 74%; height: auto; aspect-ratio: 1 / 1; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.55)); }
+        .pack-quantite {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: #d9c2f5;
+          font-variant-numeric: tabular-nums;
+        }
+        .pack-prix { font-size: 11.5px; color: var(--muted); }
+
         .achat-panneau { max-width: 300px; }
         .achat-prix {
           display: inline-flex; align-items: center; gap: 7px;
@@ -9875,6 +9924,10 @@ export default function Emprise() {
   useEffect(() => { loadBourse().then(setBourse); }, []);
   // L'achat qu'on est en train de confirmer : { famille, cle, nom, prix }.
   const [achatEnCours, setAchatEnCours] = useState(null);
+  // Le pack qu'on regarde. JAMAIS un debit : le paiement passera par les achats
+  // integres des magasins, qui n'existent qu'a la publication. Un etat a part, pour ne
+  // pas preter a un pack la semantique de vrai debit d'achatEnCours.
+  const [packRegarde, setPackRegarde] = useState(null);
   const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
   // Le nom valide qui attend la fin du devoilement. Tant qu'il est la, l'ecran de saisie
   // reste, le champ se tait, et le bouton ne repond plus.
@@ -13640,6 +13693,17 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
               )}
             </button>
+            {/* Le tresor. Toucher mene aux etals : un solde qu'on regarde est un solde
+                qu'on veut depenser. */}
+            <button
+              className="hub-gemmes"
+              onClick={() => allerPageHub("boutique")}
+              aria-label={`${bourse.gemmes} gemmes, ouvrir la Boutique`}
+              title="Boutique"
+            >
+              <span className="gemme-icone" aria-hidden="true" />
+              <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
+            </button>
             </span>
             )}
           </header>
@@ -13727,6 +13791,27 @@ export default function Emprise() {
                         </button>
                       );
                     })}
+                  </div>
+
+                  <h2 className="boutique-titre second">Gemmes</h2>
+                  <p className="boutique-sous">La monnaie des étals, taillée dans l&apos;améthyste.</p>
+                  <div className="boutique-grille">
+                    {PACKS_GEMMES.map((p) => (
+                      <button
+                        key={p.cle}
+                        className="boutique-carte"
+                        onClick={() => setPackRegarde(p)}
+                        aria-label={`${p.nom}, ${p.gemmes} gemmes, ${p.prixDit}`}
+                      >
+                        {p.mention && <span className="pack-mention">{p.mention}</span>}
+                        {/* Decorative : le texte de la carte dit deja tout. width et
+                            height, pour que son arrivee ne fasse pas sauter la grille. */}
+                        <img className="pack-image" src={p.image} alt="" aria-hidden="true" width="512" height="512" loading="lazy" />
+                        <span className="pack-quantite"><span className="gemme-icone" aria-hidden="true" />{p.gemmes}</span>
+                        <span className="boutique-nom">{p.nom}</span>
+                        <span className="pack-prix">{p.prix}</span>
+                      </button>
+                    ))}
                   </div>
 
                   <p className="boutique-note">
@@ -16574,6 +16659,20 @@ export default function Emprise() {
 
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
+      {/* Toucher un pack : un panneau d'information, RIEN d'autre. Aucune gemme n'est
+          creditee, la bourse n'est pas touchee -- le paiement passera par les achats
+          integres des magasins, a la publication. */}
+      {packRegarde && (
+        <div className="info-overlay" onClick={() => setPackRegarde(null)}>
+          <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">{packRegarde.nom}</div>
+            <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{packRegarde.gemmes}<span className="lecteur-seul"> gemmes</span></div>
+            <div className="achat-solde">Les acquisitions de gemmes ouvriront à la sortie du jeu. Les prix affichés sont définitifs.</div>
+            <button className="landing-link" onClick={() => setPackRegarde(null)}>Fermer</button>
+          </div>
+        </div>
+      )}
+
       {/* La confirmation d'achat : le prix, le solde d'apres, et un choix franc. Si le
           solde ne suffit pas, on le DIT -- avec le manque exact -- au lieu de griser un
           bouton sans explication. */}
