@@ -1950,6 +1950,17 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     // Pose APRES l'ecriture des stats : ce champ voyage vers l'ecran de fin par le
     // setStats de l'appelant, mais ne se sauvegarde jamais.
     stats.xpDePartie = bilan;
+    // ---------- La Flamme quotidienne ----------
+    // Le MEME signal que l'XP classee (classee, soit trophyGain non nul), et la
+    // porte du profil en plus : Histoire, Echos, Confluence, tournois solo et
+    // bac a sable ne la nourrissent jamais. La premiere partie classee du jour
+    // seulement -- nourrirFlamme refuse d'elle-meme un second jour identique.
+    if (classee && compteAuProfil) {
+      const feu = await nourrirFlamme();
+      if (feu.jourNouveau) {
+        stats.xpDePartie = { ...stats.xpDePartie, flamme: { jour: feu.flamme.serie, pieces: feu.piecesVersees } };
+      }
+    }
   }
   return stats;
 }
@@ -2437,6 +2448,128 @@ const PIECES_PAR_GEMME = 10;
 // Montants predefinis de l'ecran de conversion (en gemmes).
 const CONVERSIONS = [100, 250, 500];
 
+// ---------- Flamme quotidienne ----------
+// Serie classique : +1 par jour ou une partie CLASSEE se livre (victoire ou
+// defaite), retombe a zero apres un jour manque -- choix assume du createur.
+// Les paliers se reversent a chaque nouvelle serie qui les atteint. Deux
+// adoucissements font partie du dessin, ne pas les "simplifier" : le record ne
+// retombe jamais, et les pieces deja versees ne se reprennent jamais.
+// AUCUNE protection de Flamme payante -- ni gemmes, ni pieces, ni publicite,
+// ni rachat d'aucune sorte : ne jamais en ajouter une.
+const FLAMME_PALIERS = [
+  { jours: 7,   pieces: 200 },
+  { jours: 30,  pieces: 1000 },
+  { jours: 100, pieces: 5000 },
+];
+const DEFAUT_FLAMME = { serie: 0, record: 0, dernierJour: "", palierVerseSerie: 0 };
+let memoryFlamme = null;
+
+async function readFlammeRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-flamme");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { /* pont en panne : on TENTE les couches locales au lieu de
+      conclure a l'absence -- un rate transitoire qui ferait passer la
+      sauvegarde pour vide conduirait nourrirFlamme a ecrire une serie neuve
+      par-dessus le record a vie. */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-flamme");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryFlamme;
+}
+
+async function writeFlammeRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-flamme", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-flamme", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryFlamme = str;
+}
+
+// La veille d'un jour "AAAA-MM-JJ", par le calendrier : new Date(a, m, j - 1)
+// gere les fins de mois et l'heure d'ete, la ou une soustraction de
+// millisecondes peut sauter un jour.
+function veilleDeJour(jour) {
+  const [a, m, j] = jour.split("-").map(Number);
+  return dateLocaleJour(new Date(a, m - 1, j - 1));
+}
+
+// L'extinction : un dernier jour qui n'est ni aujourd'hui ni hier eteint la
+// serie et remet le compteur de palier a zero, pour que la serie suivante
+// reverse les paliers qu'elle atteindra. Le record, lui, ne bouge JAMAIS.
+// Le jour de reference vient de l'appelant, echantillonne UNE seule fois :
+// minuit ne peut pas tomber entre deux lectures d'horloge.
+// Rend vrai si quelque chose a change (a l'appelant de sauvegarder).
+function eteindreFlammeSiFroide(f, aujourdhui) {
+  if (f.dernierJour === aujourdhui || f.dernierJour === veilleDeJour(aujourdhui)) return false;
+  if (f.serie === 0 && f.palierVerseSerie === 0) return false;
+  f.serie = 0;
+  f.palierVerseSerie = 0;
+  return true;
+}
+
+// Lecture reparatrice, comme la bourse : nombres bornes (0 a 100 000), date au
+// format AAAA-MM-JJ ou vide. L'extinction s'evalue a CHAQUE lecture -- au
+// chargement de l'application comme juste avant d'incrementer -- et se
+// sauvegarde aussitot : l'affichage et l'increment lisent le meme etat.
+async function loadFlamme(jourDeReference) {
+  const aujourdhui = jourDeReference || dateLocaleJour();
+  const brut = await readFlammeRaw();
+  const f = { ...DEFAUT_FLAMME };
+  if (brut) {
+    try {
+      const lu = JSON.parse(brut);
+      const borne = (n) => (Number.isFinite(n) ? Math.max(0, Math.min(100000, Math.floor(n))) : 0);
+      f.serie = borne(lu.serie);
+      f.record = borne(lu.record);
+      f.palierVerseSerie = borne(lu.palierVerseSerie);
+      f.dernierJour = typeof lu.dernierJour === "string" && /^\d{4}-\d{2}-\d{2}$/.test(lu.dernierJour) ? lu.dernierJour : "";
+    } catch (e) { /* sauvegarde abimee : on repart d'une flamme eteinte */ }
+  }
+  // Une date d'un jour A VENIR (horloge rendue, fuseau traverse vers l'ouest)
+  // bloquerait la premiere partie de ce jour-la : elle se vide, et l'extinction
+  // juste dessous tranche le sort de la serie.
+  if (f.dernierJour > aujourdhui) f.dernierJour = "";
+  // Le record ne peut pas etre sous la serie en cours : repare AVANT l'extinction,
+  // pour que la serie sauve son record meme si elle s'eteint a l'instant.
+  if (f.record < f.serie) f.record = f.serie;
+  if (eteindreFlammeSiFroide(f, aujourdhui)) await writeFlammeRaw(JSON.stringify(f));
+  return f;
+}
+
+// La PREMIERE partie classee du jour nourrit la Flamme : +1, le record suit, et
+// chaque palier que cette serie atteint sans l'avoir touche se verse. Une seule
+// incrementation par jour calendaire, quoi qu'il arrive. Le marqueur
+// (palierVerseSerie) s'ecrit AVANT le credit des pieces : entre les deux, une
+// panne coute un versement plutot que d'en doubler un.
+async function nourrirFlamme() {
+  // Le jour s'echantillonne UNE fois et voyage jusqu'a l'extinction : minuit
+  // entre deux lectures d'horloge ne peut plus fausser la decision.
+  const aujourdhui = dateLocaleJour();
+  const f = await loadFlamme(aujourdhui); // l'extinction vient d'etre evaluee ici
+  if (f.dernierJour === aujourdhui) return { flamme: f, jourNouveau: false, piecesVersees: 0 };
+  f.serie += 1;
+  f.dernierJour = aujourdhui;
+  if (f.record < f.serie) f.record = f.serie;
+  let pieces = 0;
+  for (const palier of FLAMME_PALIERS) {
+    if (f.serie >= palier.jours && f.palierVerseSerie < palier.jours) {
+      pieces += palier.pieces;
+      f.palierVerseSerie = palier.jours;
+    }
+  }
+  await writeFlammeRaw(JSON.stringify(f));
+  if (pieces > 0) await crediterPieces(pieces);
+  return { flamme: f, jourNouveau: true, piecesVersees: pieces };
+}
+
 // ---------- Tournoi en ligne a enjeu ----------
 // 8 joueurs misent 20 gemmes : cagnotte 160. SEUL le vainqueur recoit des
 // gemmes (100) -- decision du Commandant, le prix du finaliste (40) a vecu.
@@ -2539,8 +2672,9 @@ async function crediterGemmes(montant) {
   return b;
 }
 
-// Crediter des pieces -- l'ombre de l'XP, versee par gagnerXp, et demain rien
-// d'autre. Meme modele sur : relire, ajouter, borner, ecrire.
+// Crediter des pieces -- l'ombre de l'XP versee par gagnerXp, et les paliers de
+// la Flamme quotidienne : rien d'autre. Meme modele sur : relire, ajouter,
+// borner, ecrire.
 async function crediterPieces(montant) {
   const b = await loadBourse();
   const somme = Math.max(0, Math.floor(montant || 0));
@@ -4541,8 +4675,9 @@ const APP_STYLES = `
           background: linear-gradient(180deg, #f0dcae, #cfa452);
           color: #2a1c08;
         }
-        /* 24 px, comme le cristal : le Commandant prefere les deux au meme pas. */
-        .hub-pieces .piece-icone { width: 24px; height: 24px; flex: none; }
+        /* 28 px (24 avant) : a taille egale la piece ronde parait plus petite
+           que le cristal haut, le Commandant l'a donc voulue un cran au-dessus. */
+        .hub-pieces .piece-icone { width: 28px; height: 28px; flex: none; }
         /* 24 px (10, 16 puis 20 avant lui). Une seule image de gemme partout
            (gemme-icone.png, le cristal d'amethyste) : pas d'exception ici. */
         .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
@@ -5546,6 +5681,60 @@ const APP_STYLES = `
         }
         .cer-xp-gemmes .gemme-icone { width: 12px; height: 12px; }
         .reduced-motion .cer-xp-niveau, .reduced-motion .cer-xp-gemmes { animation: none; }
+
+        /* ---------- La Flamme quotidienne ---------- */
+        /* A cote de la carte de niveau : la flamme au trait, les jours en Cinzel
+           dore. Eteinte (serie a zero) : trait gris, pas de nombre. JAMAIS
+           d'animation en boucle sur la flamme du hub. */
+        .hub-flamme {
+          background: none; border: none; padding: 0; cursor: pointer;
+          display: flex; flex-direction: column; align-items: center; gap: 1px;
+          color: var(--gold-bright); flex: none; font: inherit;
+          transition: transform .35s ease;
+        }
+        /* Le retour au toucher des voisins (transform seule, jamais de boucle). */
+        .hub-flamme:active { transform: scale(0.94); transition-duration: .1s; }
+        .hub-flamme-icone { width: 22px; height: 22px; }
+        .hub-flamme-jours {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          line-height: 1; font-variant-numeric: tabular-nums;
+        }
+        .hub-flamme.eteinte { color: var(--muted); }
+        /* La ligne de fin de partie : fondu en opacity seule, apres les gemmes. */
+        .cer-flamme {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: var(--gold-bright);
+          animation: cer-xp-parait 0.5s ease-out 0.8s both;
+        }
+        .cer-flamme .piece-icone { width: 12px; height: 12px; }
+        /* L'ordinal en simple lettre reduite : Cinzel n'a pas les exposants
+           Unicode, qui retombaient dans la police de secours. */
+        .cer-flamme-exp { font-size: 8px; line-height: 1; }
+        .reduced-motion .cer-flamme { animation: none; }
+        /* Le panneau : serie, record, paliers, la regle dite sobrement. Rien de
+           culpabilisant, aucun compte a rebours, et RIEN a y acheter. */
+        .flamme-panel { max-width: 320px; }
+        .flamme-etat { font-size: 14px; }
+        .flamme-record { font-size: 12px; color: var(--muted); }
+        .flamme-paliers { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+        .flamme-palier {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 8px 12px; border-radius: 10px;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+          font-size: 12.5px;
+        }
+        .flamme-palier.atteint { border-color: rgba(203,164,86,0.45); color: var(--gold-bright); }
+        .flamme-palier-prix { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+        .flamme-palier .piece-icone { width: 14px; height: 14px; }
+        .flamme-regle { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 6px 0 0; }
+        /* La ligne du profil : la serie du Classe sous les trois chiffres. */
+        .profil-flamme {
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          font-size: 12.5px; color: var(--gold-bright);
+        }
+        .profil-flamme.eteinte { color: var(--muted); }
+        .profil-flamme-icone { width: 16px; height: 16px; flex: none; }
+        .profil-flamme b { font-variant-numeric: tabular-nums; }
 
         /* ---------- La bourse ---------- */
         /* La gemme est desormais une IMAGE : le cristal taille dans la poignee
@@ -11006,6 +11195,10 @@ export default function Emprise() {
   // qui verse le solde d'essai s'il ne l'a jamais ete.
   const [bourse, setBourse] = useState(DEFAUT_BOURSE);
   useEffect(() => { loadBourse().then(setBourse); }, []);
+  // La Flamme quotidienne : chargee une fois au demarrage (la lecture evalue
+  // l'extinction d'elle-meme), puis rafraichie apres chaque partie comptee.
+  const [flamme, setFlamme] = useState(null);
+  useEffect(() => { loadFlamme().then(setFlamme); }, []);
   // La progression : l'XP totale, dont le niveau se recalcule toujours. Le bilan de la
   // DERNIERE partie voyage a part : l'ecran de fin le lit, et la partie suivante le
   // remplace ou l'efface d'elle-meme.
@@ -11116,6 +11309,7 @@ export default function Emprise() {
   function rafraichirProgression() {
     loadProgression().then(setProgression);
     loadBourse().then(setBourse);
+    loadFlamme().then(setFlamme);
   }
   // L'achat qu'on est en train de confirmer : { famille, cle, nom, prix }.
   const [achatEnCours, setAchatEnCours] = useState(null);
@@ -14057,6 +14251,7 @@ export default function Emprise() {
     // ligne d'XP au lieu d'annoncer un faux +0.
     const gemmes = (b.gemmesVersees || 0) + (b.gemmesTournoi || 0);
     return (
+      <>
       <div className="cer-xp">
         {(b.gain > 0 || gemmes === 0) && (
           <span className="cer-xp-gain">+{b.gain} XP · <span className="piece-icone" aria-hidden="true" />+{b.piecesVersees || b.gain * PIECES_PAR_XP}<span className="lecteur-seul"> pièces</span></span>
@@ -14068,6 +14263,17 @@ export default function Emprise() {
           <span className="cer-xp-gemmes"><span className="gemme-icone" aria-hidden="true" />+{gemmes}<span className="lecteur-seul"> gemmes</span></span>
         )}
       </div>
+      {/* La Flamme, SOUS la ligne d'XP : seulement la premiere partie classee du
+          jour la porte. Fondu en opacity seule, comme le reste de l'ecran. */}
+      {b.flamme && (
+        <div className="cer-flamme">
+          Flamme : {b.flamme.jour}<sup className="cer-flamme-exp">{b.flamme.jour === 1 ? "er" : "e"}</sup> jour
+          {b.flamme.pieces > 0 && (
+            <> · <span className="piece-icone" aria-hidden="true" />+{b.flamme.pieces}<span className="lecteur-seul"> pièces</span></>
+          )}
+        </div>
+      )}
+      </>
     );
   }
 
@@ -15137,6 +15343,26 @@ export default function Emprise() {
               >
                 <span className="hub-niveau-nombre" aria-hidden="true">{niveauDepuisXp(progression.xpTotal).niveauJoueur}</span>
               </span>
+              {/* La Flamme quotidienne, a cote de la carte de niveau : la flamme au
+                  trait et les jours en Cinzel dore. Eteinte : trait gris, pas de
+                  nombre. Le toucher ouvre le petit panneau qui dit la regle. */}
+              <button
+                className={`hub-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}
+                onClick={() => setActiveModal("flamme")}
+                aria-haspopup="dialog"
+                aria-label={!flamme ? "Flamme"
+                  : flamme.serie > 0
+                    ? `Flamme : ${flamme.serie} jour${flamme.serie > 1 ? "s" : ""}, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}`
+                    : `Flamme éteinte${flamme.record > 0 ? `, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}` : ""}`}
+                title="La Flamme"
+              >
+                <svg className="hub-flamme-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                </svg>
+                {flamme && flamme.serie > 0 && (
+                  <span className="hub-flamme-jours" aria-hidden="true">{flamme.serie}</span>
+                )}
+              </button>
               <button
                 className="hub-trophees"
                 onClick={() => setActiveModal("pantheon")}
@@ -15993,6 +16219,19 @@ export default function Emprise() {
                     <div><b>{victoires}</b><span>victoires</span></div>
                     <div><b>{stats.tournoisGagnes || 0}</b><span>tournois</span></div>
                   </div>
+                  {/* La serie du mode classe (la Flamme), sous les trois chiffres --
+                      demande du Commandant. Le record est un fait d'armes : il se
+                      lit ici aussi, meme flamme eteinte. */}
+                  <div className={`profil-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}>
+                    <svg className="profil-flamme-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                    </svg>
+                    {flamme && flamme.serie > 0 ? (
+                      <>Série classée : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b> · record {flamme.record}</>
+                    ) : (
+                      <>Série classée : éteinte{flamme && flamme.record > 0 ? <> · record {flamme.record} jour{flamme.record > 1 ? "s" : ""}</> : null}</>
+                    )}
+                  </div>
 
                   <div className="profil-section-titre">Le Commandant que vous êtes</div>
                   {profil.titres.length > 0 ? (
@@ -16162,6 +16401,39 @@ export default function Emprise() {
                   </>
                 )}
 
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- Le panneau de la Flamme ---------- */}
+          {/* Serie en cours, record a vie, paliers de pieces -- et la regle dite
+              sobrement, sans compte a rebours ni culpabilisation. RIEN a acheter
+              ici : la Flamme ne se protege pas, ne se rachete pas. */}
+          {activeModal === "flamme" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel settings-panel flamme-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">La Flamme</div>
+                <div className="flamme-etat">
+                  {flamme && flamme.serie > 0 ? (
+                    <>Série en cours : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b></>
+                  ) : (
+                    <>La Flamme est éteinte.</>
+                  )}
+                </div>
+                <div className="flamme-record">Record : {flamme ? flamme.record : 0} jour{flamme && flamme.record > 1 ? "s" : ""}</div>
+                <div className="flamme-paliers">
+                  {FLAMME_PALIERS.map((p) => (
+                    <div key={p.jours} className={`flamme-palier ${flamme && flamme.palierVerseSerie >= p.jours ? "atteint" : ""}`}>
+                      <span>{p.jours} jours</span>
+                      <span className="flamme-palier-prix">
+                        {flamme && flamme.palierVerseSerie >= p.jours && <span className="lecteur-seul">versé : </span>}
+                        <span className="piece-icone" aria-hidden="true" />{p.pieces}<span className="lecteur-seul"> pièces</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="flamme-regle">La Flamme grandit chaque jour où vous livrez un duel classé. Un jour sans partie classée l&apos;éteint.</p>
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
               </div>
             </div>

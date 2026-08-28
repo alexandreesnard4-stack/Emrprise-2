@@ -36,6 +36,7 @@ Boutique : thèmes de plateau et dos de cartes, payés en pièces.
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
 Transformation des gemmes en pièces, à sens unique.
 Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
+La Flamme du Commandant : livrer un duel classé chaque jour fait grandir une série, avec des pièces à certains paliers ; le record est gardé à vie, et rien ne s'achète pour la protéger.
 Soldes d'essai avant la sortie : gemmes et pièces seront remises à zéro au lancement.
 
 == Quêtes ==
