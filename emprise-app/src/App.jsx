@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 14h30";
+const VERSION_AFFICHEE = "29 août · 15h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -2000,22 +2000,6 @@ async function recordTournoiGagne(tournoiId) {
   return stats;
 }
 
-// La place de finaliste, au MEME verrou : un joueur est champion OU finaliste
-// d'un tournoi, jamais les deux -- la meme liste jure donc pour les deux
-// versements. Pas d'XP, pas de compteur de victoires : les gemmes du second
-// prix, rien d'autre. gagnerXp(0) ne change rien mais rend la forme exacte du
-// bilan de fin de partie : l'ecran n'affichera que les gemmes.
-async function recordTournoiFinaliste(tournoiId) {
-  const stats = await loadStats();
-  const vus = Array.isArray(stats.tournoisCredites) ? stats.tournoisCredites : [];
-  if (vus.includes(tournoiId)) return stats;
-  stats.tournoisCredites = [...vus, tournoiId].slice(-12);
-  await writeStatsRaw(JSON.stringify(stats));
-  await crediterGemmes(TOURNOI_ENJEU.prixFinaliste);
-  const bilan = await gagnerXp(0);
-  stats.xpDePartie = { ...bilan, gemmesTournoi: TOURNOI_ENJEU.prixFinaliste };
-  return stats;
-}
 
 // Remet les statistiques à zéro (même mécanisme de stockage hybride que ci-dessus).
 async function resetStats() {
@@ -2454,14 +2438,14 @@ const PIECES_PAR_GEMME = 10;
 const CONVERSIONS = [100, 250, 500];
 
 // ---------- Tournoi en ligne a enjeu ----------
-// 8 joueurs misent 20 gemmes : cagnotte 160. Redistribue 140 (100 + 40),
-// les 20 restantes sortent du jeu -- la cagnotte ne cree jamais de gemmes.
+// 8 joueurs misent 20 gemmes : cagnotte 160. SEUL le vainqueur recoit des
+// gemmes (100) -- decision du Commandant, le prix du finaliste (40) a vecu.
+// Le reste sort du jeu : la cagnotte ne cree jamais de gemmes.
 // Le tournoi SOLO, lui, reste gratuit et sans prix : payer pour des bots
 // serait une pompe a gemmes ou une arnaque.
 const TOURNOI_ENJEU = {
   entree: 20,          // gemmes debitees a l'inscription
   prixVainqueur: 100,  // gemmes
-  prixFinaliste: 40,   // gemmes
   xpVainqueur: 300,    // XP en plus (les pieces suivent toutes seules)
 };
 
@@ -12489,22 +12473,6 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiData, tournoiOnlineId, myUid]);
 
-  // La place de finaliste : celui de la finale (f0) qui n'est pas le champion.
-  // Meme patron de gardes que l'effet du champion, meme verrou durable -- un
-  // joueur est champion OU finaliste, la liste tournoisCredites jure pour les deux.
-  const tournoiFinalisteRef = useRef(null);
-  useEffect(() => {
-    if (!myUid || !tournoiData || !tournoiOnlineId) return;
-    if (!tournoiData.champion) return;
-    const f0 = tournoiData.matches && tournoiData.matches.f0;
-    if (!f0 || (f0.a !== myUid && f0.b !== myUid)) return;
-    if (tournoiData.champion === myUid) return;
-    if (tournoiFinalisteRef.current === tournoiOnlineId) return;
-    if ((stats.tournoisCredites || []).includes(tournoiOnlineId)) return;
-    tournoiFinalisteRef.current = tournoiOnlineId;
-    recordTournoiFinaliste(tournoiOnlineId).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tournoiData, tournoiOnlineId, myUid]);
 
   // Au demarrage : le sort des mises restees en l'air. L'application fermee,
   // aucun ecran ne ramene a une salle d'attente (le code n'est pas retenu) : un
@@ -12545,17 +12513,13 @@ export default function Emprise() {
             if (r.fait) setBourse(r.bourse);
           } else {
             // Le tournoi s'est conclu sans que l'ecran de fin ait pu crediter
-            // (l'ecoute est morte avec l'application) : le document porte pourtant
-            // tout -- champion et finale. Le prix se verse ICI, au meme verrou
-            // anti-double, puis la mise se regle. Sans champion, le tournoi court
-            // encore : le marqueur attend sa conclusion.
-            const f0 = t.matches && t.matches.f0;
+            // (l'ecoute est morte avec l'application) : le document porte tout.
+            // Le prix du champion se verse ICI, au meme verrou anti-double, puis
+            // la mise se regle. Conclu sans moi champion : la mise se regle
+            // seulement -- seul le vainqueur recoit des gemmes. Sans champion,
+            // le tournoi court encore : le marqueur attend sa conclusion.
             if (t.champion === myUid) {
               const st = await recordTournoiGagne(mise.id);
-              setStats(st); rafraichirProgression();
-              await reglerMiseTournoi(mise.id);
-            } else if (t.champion && f0 && (f0.a === myUid || f0.b === myUid)) {
-              const st = await recordTournoiFinaliste(mise.id);
               setStats(st); rafraichirProgression();
               await reglerMiseTournoi(mise.id);
             } else if (t.champion) {
@@ -16953,7 +16917,7 @@ export default function Emprise() {
           {/* L'enjeu, annonce AVANT de confirmer quoi que ce soit. */}
           <div className="tournoi-enjeu">
             <span className="gemme-icone" aria-hidden="true" />
-            Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} · Finaliste : {TOURNOI_ENJEU.prixFinaliste}
+            Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
           </div>
           <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
           <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
@@ -17048,9 +17012,6 @@ export default function Emprise() {
             (m) => m && (m.a === myUid || m.b === myUid) && m.vainqueur && m.vainqueur !== myUid
           );
         const suisChampion = champion && tournoiData.champion === myUid;
-        // Le finaliste : dans la finale, mais pas champion.
-        const suisFinaliste = champion && matches.f0 && tournoiData.champion !== myUid
-          && (matches.f0.a === myUid || matches.f0.b === myUid);
 
         return (
           <div className="order-picker">
@@ -17058,7 +17019,7 @@ export default function Emprise() {
             <h2>Tournoi en ligne</h2>
             <div className="tournoi-enjeu">
               <span className="gemme-icone" aria-hidden="true" />
-              Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} · Finaliste : {TOURNOI_ENJEU.prixFinaliste}
+              Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
             </div>
             {statut === "waiting" && (
               <>
@@ -17097,9 +17058,6 @@ export default function Emprise() {
             )}
             {suisChampion && (
               <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{TOURNOI_ENJEU.prixVainqueur} gemmes · +{TOURNOI_ENJEU.xpVainqueur} XP</div>
-            )}
-            {suisFinaliste && (
-              <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{TOURNOI_ENJEU.prixFinaliste} gemmes — finaliste</div>
             )}
             <div className="tb-scene">
               <div
