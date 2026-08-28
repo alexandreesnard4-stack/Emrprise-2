@@ -1,0 +1,60 @@
+EMPRISE - État du jeu
+Ce fichier liste ce qui est jouable aujourd'hui. Une ligne par fonctionnalité.
+
+== Moteur ==
+Duel de cartes sur plateau de 20 cases, chaque carte porte quatre rangs (haut, bas, gauche, droite).
+Capture d'une carte voisine quand le rang attaquant dépasse le rang défenseur.
+Résonance : deux rangs exactement égaux parmi les voisines déclenchent une rafle.
+Onde : une carte capturée active sa capacité au service de son nouveau camp, et la chaîne peut se propager.
+Dix Ordres jouables, chacun avec sa capacité propre (échange de rangs, attraction, percée, tir à distance, renfort de meute, retournement, poison, bouclier, rangs cachés, rage des captures subies).
+Hérauts : des capacités supérieures activables dans certains duels.
+Mort Subite : à égalité parfaite, les Réserves des deux camps départagent sur les cases restantes.
+Réserve composée avant la partie : deux cartes gardées de côté, une par Ordre.
+Minuteur de coup en partie classée et en ligne, avec coup automatique à expiration.
+Repentir (annuler son coup) et Augure (conseil du meilleur coup), en option contre l'Écho.
+
+== Modes de jeu ==
+Contre un Écho : quatre niveaux de difficulté, de Novice à Seigneur de Guerre.
+Mode Histoire : huit chapitres, un par Ordre, avec un combat final par chapitre.
+Duel local : deux joueurs sur le même appareil.
+Confluence : huit Ordres draftés, la même main pour les deux camps (contre l'Écho ou en local).
+Bac à sable : tous les Ordres en main pour essayer librement.
+Partie classée en ligne : appariement automatique, trophées, ligues de Bronze à Légende, arène visuelle selon la ligue.
+Jouer avec un ami par code de partie.
+Défis entre amis : Duel classique ou Confluence, avec ou sans Hérauts, bannière d'invitation au hub.
+Tournoi solo : huit Commandants contre l'Écho, difficulté croissante, un Ordre banni à chaque tour.
+Tournoi en ligne : huit joueurs par code partagé, arbre quarts, demies et finale.
+Reprise d'une partie solo interrompue.
+Revanche en ligne, chat pendant la partie, signalement et blocage d'un joueur.
+Tutoriel interactif, Mort Subite comprise.
+
+== Économie ==
+Deux monnaies : les pièces se gagnent en jouant, les gemmes sont la monnaie rare.
+Niveaux de Commandant de 1 à 50 : chaque partie comptée rapporte de l'XP, et les pièces suivent l'XP.
+Paliers de niveaux : des gemmes versées tous les cinq niveaux.
+Boutique : thèmes de plateau et dos de cartes, payés en pièces.
+Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
+Transformation des gemmes en pièces, à sens unique.
+Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
+Soldes d'essai avant la sortie : gemmes et pièces seront remises à zéro au lancement.
+
+== Quêtes ==
+Trois quêtes journalières, renouvelées chaque nuit, et trois hebdomadaires, renouvelées chaque lundi.
+Une relance gratuite par jour et une par semaine, qui remplace une quête par une autre famille.
+Récompenses en XP, versées en fin de partie (les pièces suivent).
+Capsule discrète en pleine partie quand une quête d'actions vient de s'accomplir.
+Page Quêtes : cartes illustrées, barres de progression, médaillons par quête ou par famille.
+Le médaillon d'une quête fraîchement accomplie se retourne à l'ouverture de la page.
+Lignes des quêtes accomplies sur l'écran de fin de partie.
+
+== Interface ==
+Hub : carte de niveau près du pseudo, trésor pièces et gemmes, bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
+Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, et le teaser d'un prochain Ordre avec compte à rebours.
+Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
+Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
+Panthéon : l'écran du classement des meilleurs Commandants.
+Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.
+Écran de fin : score, trophées animés, XP et pièces de la partie, gains de tournoi.
+Partage des codes de partie et de tournoi (copie, et envoi quand l'appareil le permet).
+Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
+Préférence système d'animations réduites respectée.
