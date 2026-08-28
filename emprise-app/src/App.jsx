@@ -1159,7 +1159,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 2h";
+const VERSION_AFFICHEE = "29 août · 2h30";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1263,6 +1263,12 @@ function variablesPlateau(cle) {
     "--plateau-lueur": p.lueur,
   };
 }
+
+// La feuille de partage du telephone n'existe que sur origine securisee (https, ou
+// localhost). Evaluee UNE fois : elle ne va pas apparaitre en cours de route, et chaque
+// bouton d'envoi ne se montre que si elle existe -- un bouton d'envoi qui copie est un
+// bouton qui ment.
+const PARTAGE_NATIF = typeof navigator !== "undefined" && !!navigator.share;
 
 // Copier un texte, partout -- y compris hors HTTPS. navigator.clipboard n'existe que sur
 // origine securisee (https ou localhost) : sur un telephone qui ouvre http://192.168.x.x
@@ -14039,11 +14045,11 @@ export default function Emprise() {
                           <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                         </svg>
                       </button>
-                      <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
+                      {PARTAGE_NATIF && <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
                         </svg>
-                      </button>
+                      </button>}
                     </div>
                   )}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
@@ -14131,11 +14137,11 @@ export default function Emprise() {
                           <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                         </svg>
                       </button>
-                      <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
+                      {PARTAGE_NATIF && <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
                         </svg>
-                      </button>
+                      </button>}
                     </div>
                     <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
                   </>
@@ -15099,11 +15105,11 @@ export default function Emprise() {
                       <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
                     </svg>
                   </button>
-                  <button className="bouton-copier" onClick={partagerCodeTournoi} aria-label="Envoyer le code" title="Envoyer le code">
+                  {PARTAGE_NATIF && <button className="bouton-copier" onClick={partagerCodeTournoi} aria-label="Envoyer le code" title="Envoyer le code">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
                     </svg>
-                  </button>
+                  </button>}
                 </div>
                 <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
                 <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
