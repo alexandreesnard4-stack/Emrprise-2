@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 13h45";
+const VERSION_AFFICHEE = "29 août · 14h30";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -5294,6 +5294,45 @@ const APP_STYLES = `
         .teaser-wrap.teaser-devoile:hover .thumb-teaser,
         .teaser-wrap.teaser-devoile.teaser-peek .thumb-teaser,
         .order-option.order-option-locked .teaser-devoile .thumb-teaser { filter: none; }
+
+        /* ---------- La capsule Quete accomplie, en partie ---------- */
+        /* Purement visuelle : pointer-events none, au-dessus du plateau et de
+           la main (z 60), sous l'eventail (70) et sous tout panneau. Entree en
+           fondu + legere montee, tenue, sortie en fondu -- opacity et transform
+           seulement, l'ombre est statique. */
+        .capsule-quete {
+          position: fixed; left: 50%; bottom: 158px; z-index: 60;
+          transform: translate(-50%, 0);
+          display: flex; align-items: center; gap: 8px;
+          max-width: min(320px, calc(100vw - 40px));
+          background: rgba(19,13,29,0.94);
+          border: 1px solid rgba(203,164,86,0.5); border-radius: 999px;
+          padding: 7px 14px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+          pointer-events: none;
+          animation: capsule-vie 2.1s ease both;
+        }
+        .capsule-quete-coche { color: var(--gold-bright); font-size: 12px; font-weight: 700; flex: none; }
+        .capsule-quete-nom {
+          font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 12.5px;
+          color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          min-width: 0;
+        }
+        .capsule-quete-xp {
+          font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
+          color: var(--gold-bright); flex: none; white-space: nowrap;
+        }
+        /* Entree ~200 ms (10 % de 2,1 s), tenue ~1,6 s, sortie ~300 ms. */
+        @keyframes capsule-vie {
+          0% { opacity: 0; transform: translate(-50%, 6px); }
+          10% { opacity: 1; transform: translate(-50%, 0); }
+          86% { opacity: 1; transform: translate(-50%, 0); }
+          100% { opacity: 0; transform: translate(-50%, 0); }
+        }
+        /* Mouvement reduit : l'ecrase-duree global (0,001 s) figerait n'importe
+           quel fondu sur sa DERNIERE frame -- opacity 0, capsule invisible.
+           Donc : aucune animation, capsule pleine ; le minuteur JS la retire. */
+        .reduced-motion .capsule-quete { animation: none; opacity: 1; transform: translate(-50%, 0); }
 
         /* ---------- Les quetes ---------- */
         /* La page : plein ecran par-dessus le hub, fond opaque, seul le corps
@@ -10957,6 +10996,80 @@ export default function Emprise() {
   const [pageQuetes, setPageQuetes] = useState(false);
   const [quetesDernierePartie, setQuetesDernierePartie] = useState(null);
   const quetesReleveRef = useRef(nouveauReleveQuetes());
+  // ---------- La capsule « Quete accomplie » en cours de partie ----------
+  // Purement VISUELLE : le versement (XP, pieces) reste en fin de partie via
+  // avancerQuetes -- une partie abandonnee ne credite rien, capsule ou pas.
+  // Une quete signalée UNE fois par partie, une capsule a la fois, et jamais
+  // au milieu d'une cascade : on attend la fin visuelle du coup.
+  const [capsuleQuete, setCapsuleQuete] = useState(null); // { cle, libelle, xp }
+  const capsulesFileRef = useRef([]);
+  const capsulesMontreesRef = useRef(new Set());
+  const capsuleTimerRef = useRef(null);
+  // Seules les quetes d'ACTIONS mesurables en direct : les quetes de parties,
+  // de victoires, de modes et d'Ordres ne se concluent qu'a la fin (issue et
+  // partie « jouee » inconnues avant) -- elles gardent leur ligne d'ecran de
+  // fin, sans capsule.
+  const CAPSULE_TYPES = { captures: true, ondes: true, ondeDe3: true, resonances: true };
+  const CAPSULE_DUREE_MS = 2100;
+  function progressionProjetee(def, quete, releve) {
+    switch (def.type) {
+      case "captures": return quete.progression + (releve.captures || 0);
+      case "ondes": return quete.progression + (releve.ondes || 0);
+      case "ondeDe3": return quete.progression + ((releve.plusGrosseOnde || 0) >= 3 ? 1 : 0);
+      case "resonances": return quete.progression + (releve.resonances || 0);
+      default: return quete.progression;
+    }
+  }
+  function programmerCapsuleSuivante() {
+    if (capsuleTimerRef.current || !capsulesFileRef.current.length) return;
+    // DEUX temps, et c'est un correctif de revue : au moment de la detection,
+    // flashEvents n'a pas encore ecrit animsFinishAtRef pour CE coup (il vient
+    // dans resolveRest, apres). On laisse d'abord la pose s'ecrire, PUIS on lit
+    // l'horizon des animations -- une Onde repousse la capsule apres toute sa
+    // cascade. Un coup ordinaire garde son flip simple : plancher de 1,6 s.
+    capsuleTimerRef.current = setTimeout(() => {
+      const attente = Math.max(animsFinishAtRef.current - Date.now(), 1600);
+      capsuleTimerRef.current = setTimeout(() => {
+        const suivante = capsulesFileRef.current.shift();
+        if (!suivante) { capsuleTimerRef.current = null; return; }
+        setCapsuleQuete(suivante);
+        capsuleTimerRef.current = setTimeout(() => {
+          capsuleTimerRef.current = null;
+          setCapsuleQuete(null);
+          // La suivante de la file, s'il y en a une : elle repasse par la
+          // lecture de l'horizon, recalculee a cet instant.
+          programmerCapsuleSuivante();
+        }, CAPSULE_DUREE_MS);
+      }, attente);
+    }, 80);
+  }
+  // Apres chaque mise a jour du releve : les quetes dont la progression
+  // PROJETEE (stockee + releve de la partie) atteint l'objectif entrent en
+  // file. La ref capsulesMontrees jure : une quete, une capsule par partie,
+  // meme si le compteur repasse le seuil.
+  function detecterCapsulesQuetes() {
+    if (!quetes) return;
+    const releve = quetesReleveRef.current;
+    for (const liste of [quetes.quetesJour, quetes.quetesSemaine]) {
+      for (const a of liste) {
+        if (a.faite || capsulesMontreesRef.current.has(a.cle)) continue;
+        const def = defQuete(a.cle);
+        if (!def || !CAPSULE_TYPES[def.type]) continue;
+        if (progressionProjetee(def, a, releve) >= def.objectif) {
+          capsulesMontreesRef.current.add(a.cle);
+          capsulesFileRef.current.push({ cle: a.cle, libelle: libelleDeQuete(def, a), xp: def.xp });
+        }
+      }
+    }
+    programmerCapsuleSuivante();
+  }
+  function reinitialiserCapsules() {
+    capsulesFileRef.current = [];
+    capsulesMontreesRef.current = new Set();
+    clearTimeout(capsuleTimerRef.current);
+    capsuleTimerRef.current = null;
+    setCapsuleQuete(null);
+  }
   // L ouverture retire la pastille : les quetes accomplies sont desormais vues.
   async function ouvrirPageQuetes() {
     setPageQuetes(true);
@@ -13138,6 +13251,7 @@ export default function Emprise() {
     setHistory([]);
     combosRef.current = nouveauSuiviCombos();
     quetesReleveRef.current = nouveauReleveQuetes();
+    reinitialiserCapsules();
     chatVusRef.current = 0;
     setChatMessages([]); setChatNonLus(0); setChatOuvert(false); chatOuvertRef.current = false;
     chatCachesRef.current = new Set(); chatAvantCoupureRef.current = new Set();
@@ -14098,6 +14212,7 @@ export default function Emprise() {
     if (history.length === 0) {
       combosRef.current = nouveauSuiviCombos();
       quetesReleveRef.current = nouveauReleveQuetes();
+      reinitialiserCapsules();
     }
     if (partieCompteAuProfil && !combosRef.current.disqualifie) {
       combosDuCoup({
@@ -14116,6 +14231,11 @@ export default function Emprise() {
         plateauAvant: board, plateauApres: resolvedBoard,
         releve: quetesReleveRef.current,
       });
+      // La capsule suit la porte REELLE du versement de fin de partie : une
+      // partie disqualifiee (Repentir) ne comptera plus... sauf en Histoire,
+      // ou les quetes se versent malgre le Repentir -- la capsule s'y montre
+      // donc aussi. Meme logique que la porte d'avancerQuetes, rien de plus.
+      if (!combosRef.current.disqualifie || (!!storyChapterKey && !testMode)) detecterCapsulesQuetes();
     }
     if (viaTouch) {
       // Léger tapotement à la pose, plus franc si ça capture — jamais pour le bot ni
@@ -14269,6 +14389,9 @@ export default function Emprise() {
     // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
     // du style du joueur, on la retire du profil plutot que de compter des combos essayes.
     combosRef.current.disqualifie = true;
+    // La capture annulee n'existe plus : aucune capsule deja en file ou a
+    // l'ecran ne doit venir feliciter un plateau revenu en arriere.
+    reinitialiserCapsules();
     const stack = history.slice();
     let target = stack.pop();
     if (mode === "bot" && target.owner === "red" && stack.length) {
@@ -17969,6 +18092,19 @@ export default function Emprise() {
 
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
 
+          {/* La capsule de quete : informative, jamais bloquante, hors de portee
+              du toucher. Le lecteur d'ecran recoit la meme nouvelle par la zone
+              polie ci-dessous, montee en permanence. */}
+          <div className="lecteur-seul" role="status" aria-live="polite">
+            {capsuleQuete ? `Quête accomplie : ${capsuleQuete.libelle}, plus ${capsuleQuete.xp} XP` : ""}
+          </div>
+          {capsuleQuete && (
+            <div key={capsuleQuete.cle} className="capsule-quete" aria-hidden="true">
+              <span className="capsule-quete-coche">✓</span>
+              <span className="capsule-quete-nom">{capsuleQuete.libelle}</span>
+              <span className="capsule-quete-xp">+{capsuleQuete.xp} XP</span>
+            </div>
+          )}
           <div className="zone-bas">
             {mainCamp(campBas)}
             {labelCamp(campBas)}
