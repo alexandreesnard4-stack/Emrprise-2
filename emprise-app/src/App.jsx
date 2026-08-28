@@ -1180,7 +1180,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 2h30";
+const VERSION_AFFICHEE = "29 août · 3h";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1213,32 +1213,34 @@ const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0
 // aucun telechargement, et un nouveau theme n'est que cinq couleurs de plus.
 // FAILLE est le plateau d'origine, valeur pour valeur -- changer de catalogue ne doit
 // rien changer a ce que voient les joueurs qui n'y touchent pas.
+// prix : en gemmes, selon la grille validee -- theme de plateau 500, dos 250. Zero pour
+// le premier de chaque famille : offert, possede d'office.
 const PLATEAUX = [
-  { cle: "faille", nom: "Faille", monde: "Le plateau des premiers duels",
+  { cle: "faille", nom: "Faille", monde: "Le plateau des premiers duels", prix: 0,
     dalle: "linear-gradient(180deg, #2b2438 0%, #241d31 46%, #17121f 100%)",
     bord: "rgba(203,164,86,0.16)",
     case: "linear-gradient(180deg, rgba(0,0,0,0.42), rgba(255,255,255,0.028) 62%, rgba(255,255,255,0.045))",
     caseBord: "rgba(203,164,86,0.09)",
     lueur: "rgba(255,240,205,0.10)" },
-  { cle: "braise", nom: "Braise", monde: "Les forges éteintes des Cendres",
+  { cle: "braise", nom: "Braise", monde: "Les forges éteintes des Cendres", prix: 500,
     dalle: "linear-gradient(180deg, #38251c 0%, #2b1a14 46%, #1a0f0b 100%)",
     bord: "rgba(226,133,72,0.22)",
     case: "linear-gradient(180deg, rgba(0,0,0,0.46), rgba(255,146,74,0.035) 62%, rgba(255,168,96,0.06))",
     caseBord: "rgba(226,133,72,0.12)",
     lueur: "rgba(255,196,140,0.12)" },
-  { cle: "abysse", nom: "Abysse", monde: "La fosse d'où remontent les Abysses",
+  { cle: "abysse", nom: "Abysse", monde: "La fosse d'où remontent les Abysses", prix: 500,
     dalle: "linear-gradient(180deg, #17303a 0%, #10242d 46%, #08141a 100%)",
     bord: "rgba(86,196,203,0.20)",
     case: "linear-gradient(180deg, rgba(0,0,0,0.46), rgba(96,214,224,0.03) 62%, rgba(120,226,236,0.055))",
     caseBord: "rgba(86,196,203,0.11)",
     lueur: "rgba(178,238,246,0.11)" },
-  { cle: "sylve", nom: "Sylve", monde: "Les futaies profondes des Archers",
+  { cle: "sylve", nom: "Sylve", monde: "Les futaies profondes des Archers", prix: 500,
     dalle: "linear-gradient(180deg, #21301f 0%, #182518 46%, #0d150d 100%)",
     bord: "rgba(138,190,104,0.20)",
     case: "linear-gradient(180deg, rgba(0,0,0,0.44), rgba(160,214,124,0.03) 62%, rgba(182,228,148,0.05))",
     caseBord: "rgba(138,190,104,0.11)",
     lueur: "rgba(206,238,182,0.11)" },
-  { cle: "ossuaire", nom: "Ossuaire", monde: "La terre sèche des Maudits",
+  { cle: "ossuaire", nom: "Ossuaire", monde: "La terre sèche des Maudits", prix: 500,
     dalle: "linear-gradient(180deg, #33302c 0%, #26241f 46%, #15130f 100%)",
     bord: "rgba(214,203,178,0.20)",
     case: "linear-gradient(180deg, rgba(0,0,0,0.45), rgba(232,224,204,0.03) 62%, rgba(240,234,216,0.05))",
@@ -1252,16 +1254,16 @@ const PLATEAU_DEFAUT = "faille";
 // des degrades et des motifs repetes, donc nets a toute taille et gratuits a charger.
 // Blason est le dos d'origine, valeur pour valeur.
 const DOS_CARTES = [
-  { cle: "blason", nom: "Blason", matiere: "Le dos des premiers duels",
+  { cle: "blason", nom: "Blason", matiere: "Le dos des premiers duels", prix: 0,
     fond: "radial-gradient(circle at 50% 38%, rgba(203,164,86,0.22) 0%, rgba(203,164,86,0) 62%), linear-gradient(160deg, #2a2138 0%, #14101d 100%)",
     bord: "rgba(203,164,86,0.5)", anneau: "rgba(232,200,119,0.75)", socle: "#8a6f34" },
-  { cle: "cuir", nom: "Cuir clouté", matiere: "Peau tannée, rivets de bronze",
+  { cle: "cuir", nom: "Cuir clouté", matiere: "Peau tannée, rivets de bronze", prix: 250,
     fond: "radial-gradient(circle at 50% 38%, rgba(226,160,96,0.18) 0%, rgba(226,160,96,0) 60%), radial-gradient(circle at 3px 3px, rgba(255,214,168,0.14) 0.9px, rgba(0,0,0,0) 1.7px) 0 0 / 9px 9px, linear-gradient(160deg, #3b2a1e 0%, #1c130d 100%)",
     bord: "rgba(214,150,84,0.55)", anneau: "rgba(246,206,150,0.8)", socle: "#7a5326" },
-  { cle: "damas", nom: "Damas", matiere: "Soie tissée en chevrons",
+  { cle: "damas", nom: "Damas", matiere: "Soie tissée en chevrons", prix: 250,
     fond: "repeating-linear-gradient(45deg, rgba(203,164,86,0.075) 0 3px, rgba(0,0,0,0) 3px 7px), repeating-linear-gradient(-45deg, rgba(203,164,86,0.06) 0 3px, rgba(0,0,0,0) 3px 7px), linear-gradient(160deg, #1f2a26 0%, #0d1512 100%)",
     bord: "rgba(168,196,150,0.5)", anneau: "rgba(214,232,196,0.78)", socle: "#4c6b45" },
-  { cle: "obsidienne", nom: "Obsidienne", matiere: "Verre noir, tranchant de lumière",
+  { cle: "obsidienne", nom: "Obsidienne", matiere: "Verre noir, tranchant de lumière", prix: 250,
     fond: "linear-gradient(115deg, rgba(255,255,255,0) 36%, rgba(198,214,232,0.16) 48%, rgba(255,255,255,0) 60%), linear-gradient(160deg, #1c1c23 0%, #08080b 100%)",
     bord: "rgba(178,196,214,0.5)", anneau: "rgba(214,230,246,0.75)", socle: "#3a4450" },
 ];
@@ -1900,6 +1902,87 @@ async function resetStats() {
   memoryStats = null;
   await writeStatsRaw(JSON.stringify(DEFAULT_STATS));
   return { ...DEFAULT_STATS };
+}
+
+// ---------- La bourse : gemmes et possessions (meme stockage hybride) ----------
+// Le solde d'essai. VERSE UNE FOIS, marque dans la sauvegarde, et affiche comme un essai
+// a l'ecran : le jour du lancement cette constante tombe a zero, personne ne garde de
+// gemmes gratuites, et le champ essaiVerse dit qui en avait recu.
+const BOURSE_ESSAI = 1000;
+const DEFAUT_BOURSE = { gemmes: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"] } };
+let memoryBourse = null;
+
+async function readBourseRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-bourse");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { return null; }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-bourse");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryBourse;
+}
+
+async function writeBourseRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-bourse", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-bourse", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryBourse = str;
+}
+
+// La lecture repare ce qu'elle trouve : les offerts d'office sont TOUJOURS possedes,
+// une cle inconnue est jetee, un solde negatif ou absurde est borne. Et le solde d'essai
+// se verse ici, une seule fois -- au premier passage comme chez un joueur de la veille.
+async function loadBourse() {
+  const brut = await readBourseRaw();
+  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"] } };
+  if (brut) {
+    try {
+      const lu = JSON.parse(brut);
+      b.gemmes = Number.isFinite(lu.gemmes) ? Math.max(0, Math.min(1000000, Math.floor(lu.gemmes))) : 0;
+      b.essaiVerse = !!lu.essaiVerse;
+      for (const famille of Object.keys(FAMILLES_COSMETIQUES)) {
+        const cat = FAMILLES_COSMETIQUES[famille].catalogue;
+        const lues = (lu.possessions && Array.isArray(lu.possessions[famille])) ? lu.possessions[famille] : [];
+        const valides = lues.filter((k) => cat.some((x) => x.cle === k));
+        for (const item of cat) if (item.prix === 0 && !valides.includes(item.cle)) valides.push(item.cle);
+        b.possessions[famille] = [...new Set(valides)];
+      }
+    } catch (e) { /* sauvegarde abimee : on repart des offerts */ }
+  }
+  if (BOURSE_ESSAI > 0 && !b.essaiVerse) {
+    b.gemmes += BOURSE_ESSAI;
+    b.essaiVerse = true;
+    await writeBourseRaw(JSON.stringify(b));
+  }
+  return b;
+}
+
+function possedeCosmetique(bourse, famille, cle) {
+  return !!(bourse.possessions[famille] && bourse.possessions[famille].includes(cle));
+}
+
+// L'achat relit la bourse avant de decider, comme le compteur de tournois : un double
+// appel ne debite pas deux fois, et un prix inconnu ne debite rien.
+async function acheterCosmetique(famille, cle) {
+  const b = await loadBourse();
+  const f = FAMILLES_COSMETIQUES[famille];
+  const item = f && f.catalogue.find((x) => x.cle === cle);
+  if (!item || item.prix <= 0) return { bourse: b, fait: false };
+  if (possedeCosmetique(b, famille, cle)) return { bourse: b, fait: true };
+  if (b.gemmes < item.prix) return { bourse: b, fait: false };
+  b.gemmes -= item.prix;
+  b.possessions[famille] = [...b.possessions[famille], cle];
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
 }
 
 // ---------- Cosmetiques choisis (meme mecanisme de stockage hybride que les stats) ----------
@@ -4377,6 +4460,42 @@ const APP_STYLES = `
            bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
+        /* ---------- La bourse ---------- */
+        /* La gemme, en amethyste comme le plan la veut : un losange en degrade, pas une
+           image -- nette a toute taille, gratuite a charger. Elle ne s'anime pas. */
+        .gemme-icone {
+          display: inline-block; width: 11px; height: 11px;
+          transform: rotate(45deg); border-radius: 2.5px;
+          background: linear-gradient(135deg, #c9a0f0 0%, #9256cf 48%, #5c2b96 100%);
+          border: 1px solid rgba(224, 190, 255, 0.7);
+          box-shadow: 0 1px 4px rgba(92, 43, 150, 0.5);
+        }
+        .boutique-solde {
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 5px 13px; border-radius: 999px; margin-bottom: 2px;
+          background: rgba(146, 86, 207, 0.12); border: 1px solid rgba(146, 86, 207, 0.4);
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; color: #d9c2f5;
+          font-variant-numeric: tabular-nums;
+        }
+        .boutique-solde-essai {
+          font-family: 'Spectral', Georgia, serif; font-style: italic; font-weight: 400;
+          font-size: 10px; color: var(--muted);
+        }
+        .boutique-prix {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: #c9a0f0;
+          margin-top: 2px; font-variant-numeric: tabular-nums;
+        }
+        .achat-panneau { max-width: 300px; }
+        .achat-prix {
+          display: inline-flex; align-items: center; gap: 7px;
+          font-family: 'Cinzel', serif; font-size: 22px; font-weight: 700; color: #d9c2f5;
+          margin: 6px 0 2px;
+        }
+        .achat-prix .gemme-icone { width: 14px; height: 14px; }
+        .achat-solde { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+        .achat-solde.manque { color: var(--red-bright); }
+
         /* ---------- La composition d'un defi ---------- */
         .defi-config { max-width: 330px; }
         .defi-config-libelle {
@@ -9750,6 +9869,12 @@ export default function Emprise() {
   // en attendant, et c'est le plateau d'origine -- rien ne clignote.
   const [cosmetiques, setCosmetiques] = useState(DEFAUT_COSMETIQUES);
   useEffect(() => { loadCosmetiques().then(setCosmetiques); }, []);
+  // La bourse : le solde et ce qu'on possede. Chargee une fois -- et c'est ce chargement
+  // qui verse le solde d'essai s'il ne l'a jamais ete.
+  const [bourse, setBourse] = useState(DEFAUT_BOURSE);
+  useEffect(() => { loadBourse().then(setBourse); }, []);
+  // L'achat qu'on est en train de confirmer : { famille, cle, nom, prix }.
+  const [achatEnCours, setAchatEnCours] = useState(null);
   const [identifiantDevoile, setIdentifiantDevoile] = useState(false);
   // Le nom valide qui attend la fin du devoilement. Tant qu'il est la, l'ecran de saisie
   // reste, le champ se tait, et le bouton ne repond plus.
@@ -13530,18 +13655,29 @@ export default function Emprise() {
             {hubPage === "boutique" && (
               <section key="boutique" className={`hub-page page-boutique hub-glisse-${hubSens}`} aria-label="Boutique">
                 <div className="boutique-page">
+                  {/* Le solde, en tete d'etal. Tant que le solde d'essai existe, il se
+                      dit : personne ne doit croire ces gemmes achetees. */}
+                  <div className="boutique-solde">
+                    <span className="gemme-icone" aria-hidden="true" />
+                    <b>{bourse.gemmes}</b>
+                    <span className="lecteur-seul"> gemmes</span>
+                    {BOURSE_ESSAI > 0 && <span className="boutique-solde-essai">solde d'essai</span>}
+                  </div>
                   <h2 className="boutique-titre">Plateaux</h2>
                   <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
                   <div className="boutique-grille">
                     {PLATEAUX.map((p) => {
                       const choisi = cosmetiques.plateau === p.cle;
+                      const possede = possedeCosmetique(bourse, "plateau", p.cle);
                       return (
                         <button
                           key={p.cle}
                           className={`boutique-carte ${choisi ? "choisi" : ""}`}
-                          onClick={() => choisirCosmetique("plateau", p.cle).then(setCosmetiques)}
+                          onClick={() => possede
+                            ? choisirCosmetique("plateau", p.cle).then(setCosmetiques)
+                            : setAchatEnCours({ famille: "plateau", cle: p.cle, nom: p.nom, prix: p.prix })}
                           aria-pressed={choisi}
-                          aria-label={`Plateau ${p.nom}. ${p.monde}.${choisi ? " Choisi." : ""}`}
+                          aria-label={`Plateau ${p.nom}. ${p.monde}.${choisi ? " Choisi." : possede ? " Possédé." : ` ${p.prix} gemmes.`}`}
                         >
                           {/* Une vraie dalle, de vraies cases, les memes variables qu'en
                               partie : l'apercu ne peut pas mentir sur ce qu'on aura. */}
@@ -13552,7 +13688,9 @@ export default function Emprise() {
                           <span className="boutique-monde">{p.monde}</span>
                           {/* Le mot ne remplace pas la bordure doree : la couleur seule ne
                               doit jamais porter une information a elle toute seule. */}
-                          <span className="boutique-etat">{choisi ? "Choisi" : "Offert"}</span>
+                          {choisi || possede
+                            ? <span className="boutique-etat">{choisi ? "Choisi" : "Possédé"}</span>
+                            : <span className="boutique-prix"><span className="gemme-icone" aria-hidden="true" />{p.prix}</span>}
                         </button>
                       );
                     })}
@@ -13563,13 +13701,16 @@ export default function Emprise() {
                   <div className="boutique-grille">
                     {DOS_CARTES.map((d) => {
                       const choisi = cosmetiques.dos === d.cle;
+                      const possede = possedeCosmetique(bourse, "dos", d.cle);
                       return (
                         <button
                           key={d.cle}
                           className={`boutique-carte ${choisi ? "choisi" : ""}`}
-                          onClick={() => choisirCosmetique("dos", d.cle).then(setCosmetiques)}
+                          onClick={() => possede
+                            ? choisirCosmetique("dos", d.cle).then(setCosmetiques)
+                            : setAchatEnCours({ famille: "dos", cle: d.cle, nom: d.nom, prix: d.prix })}
                           aria-pressed={choisi}
-                          aria-label={`Dos ${d.nom}. ${d.matiere}.${choisi ? " Choisi." : ""}`}
+                          aria-label={`Dos ${d.nom}. ${d.matiere}.${choisi ? " Choisi." : possede ? " Possédé." : ` ${d.prix} gemmes.`}`}
                         >
                           {/* Deux dos poses l'un sur l'autre, comme la pile en partie, avec
                               un vrai portrait d'Ordre au medaillon : ce qu'on voit ici est
@@ -13580,14 +13721,16 @@ export default function Emprise() {
                           </span>
                           <span className="boutique-nom">{d.nom}</span>
                           <span className="boutique-monde">{d.matiere}</span>
-                          <span className="boutique-etat">{choisi ? "Choisi" : "Offert"}</span>
+                          {choisi || possede
+                            ? <span className="boutique-etat">{choisi ? "Choisi" : "Possédé"}</span>
+                            : <span className="boutique-prix"><span className="gemme-icone" aria-hidden="true" />{d.prix}</span>}
                         </button>
                       );
                     })}
                   </div>
 
                   <p className="boutique-note">
-                    Les cadres de profil suivront. Rien ici ne s&apos;achète encore.
+                    Les cadres de profil suivront. Le solde d&apos;essai sera remis à zéro à la sortie du jeu.
                   </p>
                 </div>
               </section>
@@ -16431,6 +16574,42 @@ export default function Emprise() {
 
       {/* Le menu d'un joueur : retirer (un ami), bloquer, signaler. Un seul panneau pour
           les trois contextes — ami, demande, adversaire de fin de partie. */}
+      {/* La confirmation d'achat : le prix, le solde d'apres, et un choix franc. Si le
+          solde ne suffit pas, on le DIT -- avec le manque exact -- au lieu de griser un
+          bouton sans explication. */}
+      {achatEnCours && (() => {
+        const assez = bourse.gemmes >= achatEnCours.prix;
+        return (
+          <div className="info-overlay" onClick={() => setAchatEnCours(null)}>
+            <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel-title">Acquérir {achatEnCours.nom}</div>
+              <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{achatEnCours.prix}<span className="lecteur-seul"> gemmes</span></div>
+              {assez ? (
+                <div className="achat-solde">Solde après l&apos;acquisition : {bourse.gemmes - achatEnCours.prix} gemmes</div>
+              ) : (
+                <div className="achat-solde manque">Il vous manque {achatEnCours.prix - bourse.gemmes} gemmes.</div>
+              )}
+              {assez && (
+                <button
+                  className="reset-btn"
+                  onClick={() => {
+                    const a = achatEnCours;
+                    acheterCosmetique(a.famille, a.cle).then(({ bourse: b, fait }) => {
+                      setBourse(b);
+                      // Acquis : on l'equipe dans la foulee -- on vient de le payer pour
+                      // le voir, pas pour le ranger.
+                      if (fait) choisirCosmetique(a.famille, a.cle).then(setCosmetiques);
+                      setAchatEnCours(null);
+                    });
+                  }}
+                >Acquérir</button>
+              )}
+              <button className="landing-link" onClick={() => setAchatEnCours(null)}>{assez ? "Annuler" : "Fermer"}</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* La composition d'un defi : le mode, puis les Herauts, puis l'envoi. Par-dessus
           l'ecran des Amis, d'ou l'on vient. */}
       {defiConfig && (
