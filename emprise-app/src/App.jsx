@@ -4528,9 +4528,9 @@ const APP_STYLES = `
         /* La rangee du tresor : pieces a gauche, gemmes a droite, meme largeur
            totale que les boutons de la colonne. Chaque pastille garde sa couleur,
            jamais les deux melangees. */
-        /* La meme bande de hauteur que la rangee du joueur en face (70 px, la
+        /* La meme bande de hauteur que la rangee du joueur en face (86 px, la
            carte de niveau) : pseudo et pastilles se centrent sur la meme ligne. */
-        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 70px; }
+        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 86px; }
         .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
@@ -5481,8 +5481,10 @@ const APP_STYLES = `
         /* La carte d'apparat du niveau : l'image definitive en fond, le nombre en
            TEXTE par-dessus -- jamais dans l'image. L'ombre portee du texte le garde
            lisible sur le panneau central de la carte. */
+        /* 64 x 86 (52 x 70 avant) : la carte grandit, le nombre NON -- le
+           Commandant voulait de l'air autour du chiffre, pas un chiffre plus gros. */
         .hub-niveau {
-          width: 52px; height: 70px; flex: none;
+          width: 64px; height: 86px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
