@@ -1224,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 13h15";
+const VERSION_AFFICHEE = "29 août · 13h30";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -5494,19 +5494,6 @@ const APP_STYLES = `
           background: url("/boutique/piece.png") center / contain no-repeat;
         }
         .achat-prix .piece-icone { width: 14px; height: 14px; }
-        .boutique-soldes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
-        .boutique-solde {
-          display: inline-flex; align-items: center; gap: 7px;
-          padding: 5px 13px; border-radius: 999px; margin-bottom: 2px;
-          background: rgba(146, 86, 207, 0.12); border: 1px solid rgba(146, 86, 207, 0.4);
-          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; color: #d9c2f5;
-          font-variant-numeric: tabular-nums;
-        }
-        /* La pastille des pieces : doree, jamais melangee a l'amethyste des gemmes. */
-        .boutique-solde.pieces {
-          background: rgba(203,164,86,0.12); border-color: rgba(203,164,86,0.4);
-          color: var(--gold-bright);
-        }
         /* La rangee de conversion : trois cartes, jamais de nombre en dur. */
         .boutique-grille.conversion-grille { grid-template-columns: repeat(3, 1fr); }
         .conversion-carte { align-items: center; gap: 4px; }
@@ -15197,21 +15184,9 @@ export default function Emprise() {
             {hubPage === "boutique" && (
               <section key="boutique" className={`hub-page page-boutique hub-glisse-${hubSens}`} aria-label="Boutique">
                 <div className="boutique-page">
-                  {/* Les deux soldes, en tete d'etal : les pieces (dorees, gagnees en
-                      jouant) puis les gemmes (amethyste). Tant que le solde d'essai
-                      existe, il se dit : personne ne doit croire ces monnaies achetees. */}
-                  <div className="boutique-soldes">
-                    <div className="boutique-solde pieces">
-                      <span className="piece-icone" aria-hidden="true" />
-                      <b>{bourse.pieces}</b>
-                      <span className="lecteur-seul"> pièces</span>
-                    </div>
-                    <div className="boutique-solde">
-                      <span className="gemme-icone" aria-hidden="true" />
-                      <b>{bourse.gemmes}</b>
-                      <span className="lecteur-seul"> gemmes</span>
-                    </div>
-                  </div>
+                  {/* Plus de soldes en tete d'etal : le tresor du hub les affiche
+                      deja, les popups d'achat disent le solde au moment de payer --
+                      retire a la demande du Commandant. */}
                   <h2 className="boutique-titre">Plateaux</h2>
                   <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
                   <div className="boutique-grille">
