@@ -477,9 +477,30 @@ const TUTORIAL_STEPS = [
     after: "Portée a capturé une carte à distance, sans qu'aucune carte adverse ne soit adjacente entre les deux !",
   },
   {
-    kind: "info",
-    title: "La Réserve et la Mort Subite",
-    text: "Avant chaque duel, vous gardez deux cartes de côté : votre Réserve, une par Ordre. Le camp qui joue en premier part avec 2 points d'avance au score. Et si le duel s'achève à égalité parfaite, la Mort Subite tranche : chaque camp pose une carte de sa Réserve sur les cases restées vides, et le duel continue jusqu'à ce qu'un vainqueur se dégage.",
+    kind: "play",
+    title: "La Mort Subite",
+    text: "Avant chaque duel, vous gardez 2 cartes de côté : votre Réserve. Ici, le duel vient de s'achever à égalité parfaite — regardez le plateau, aucun camp ne l'emporte. La Mort Subite tranche : chaque camp pose une carte de sa Réserve sur une case restée vide. Posez la vôtre sur la case qui brille.",
+    requiredCell: 7,
+    handCard: tc(1, 8, 1, 1, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
+    board: (() => {
+      // Un damier plein : cases paires Ecarlate, impaires Azur -- neuf partout une fois
+      // les cases 7 et 12 laissees vides, l'egalite se VOIT. La cible en 8 est faible
+      // (2 partout) : capturee, elle ne rafle rien derriere elle.
+      const b = Array(CELLS).fill(null);
+      const dores = ORDERS.find((l) => l.key === "eveil");
+      const cendres = ORDERS.find((l) => l.key === "cendres");
+      for (let i = 0; i < CELLS; i++) {
+        if (i === 7 || i === 12) continue;
+        const rouge = i % 2 === 0;
+        const gabarit = i === 8 ? tc(2, 2, 2, 2, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait })
+          : tc(3, 3, 3, 3, rouge
+            ? { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }
+            : { name: "Dorés", icon: dores.icon, portrait: dores.portrait });
+        b[i] = { ...gabarit, owner: rouge ? "red" : "blue" };
+      }
+      return b;
+    })(),
+    after: "Votre carte de Réserve a capturé sa voisine : l'égalité est rompue, le duel a son vainqueur ! Si l'égalité persistait, l'adversaire poserait à son tour, jusqu'à ce qu'un camp se dégage.",
   },
   {
     kind: "info",
