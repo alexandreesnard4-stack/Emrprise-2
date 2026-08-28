@@ -178,6 +178,21 @@ const ORDER_STATUS = { AVAILABLE: "disponible", COMING_SOON: "prochainement" };
 // voulu pour une sortie annoncée « le 26 », pas à une heure précise.
 const NEXT_ORDER_RELEASE = new Date("2026-09-26T00:00:00");
 
+// ---------- Acces anticipe ----------
+const ACCES_ANTICIPE = {
+  fenetreHeures: 24,   // s'ouvre 24 h avant NEXT_ORDER_RELEASE
+  prix: 200,           // gemmes
+};
+// La fenetre : de (sortie - 24 h) a la sortie, exclue. Avant : teaser scelle
+// intact. Apres : l'Ordre suit le chemin normal de mise en ligne (status bascule
+// a la main), et l'achat n'aura ete qu'une avance.
+function fenetreAccesAnticipe(order) {
+  if (!order || !order.releaseDate) return false;
+  const maintenant = Date.now();
+  const sortie = order.releaseDate.getTime();
+  return maintenant >= sortie - ACCES_ANTICIPE.fenetreHeures * 3600 * 1000 && maintenant < sortie;
+}
+
 // ⚠️ PIÈGE : trois Ordres ont une CLÉ différente de leur NOM DE CAPACITÉ.
 //    cendres → attraction   |   scribes → scribe   |   maudits → maudit
 // Pour tout ce qui touche au moteur (resolvePlacement, capacités, effets), c'est
@@ -194,35 +209,62 @@ const ORDERS = [
   { key: "guardian", ability: "guardian", name: "Gardiens", icon: "🛡️", portrait: PORTRAITS.guardian, ranks: [6, 6, 5, 5], status: ORDER_STATUS.AVAILABLE, desc: "+1 sur le rang attaqué, le temps du combat" },
   { key: "scribes", ability: "scribe", name: "Scribes", icon: "👁️", portrait: PORTRAITS.scribe, ranks: [4, 6, 5, 8], status: ORDER_STATUS.AVAILABLE, desc: "Rangs cachés en main, puis 1 tour après la pose" },
   { key: "maudits", ability: "maudit", name: "Maudits", icon: "🩸", portrait: PORTRAITS.maudit, ranks: [8, 6, 4, 2], status: ORDER_STATUS.AVAILABLE, desc: "Gagne +1 permanent sur ses 4 rangs à chaque capture subie" },
-  // Portrait temporaire (réutilise celui des Maudits, méconnaissable une fois flouté/grisé
-  // par le style "prochainement") — à remplacer par le vrai art et le vrai nom dès qu'ils
-  // sont prêts. Nom volontairement non révélé pour l'instant (teaser).
-  // Le prochain Ordre à sortir. Son identité reste masquée ("???") jusqu'au jour J : seuls
-  // la clé et la capacité révèlent qu'il s'agit des Geôliers. Le drapeau essai:true le rend
-  // jouable en bac à sable pour les essais, sans le sortir dans les autres modes.
+  // Le prochain Ordre à sortir. Son identité reste masquée ("???") jusqu'à la fenêtre
+  // d'accès anticipé (24 h avant la sortie), où le teaser se dévoile : nom, portrait
+  // sans assombrissement, description. Le drapeau essai:true le rend jouable en bac à
+  // sable pour les essais, sans le sortir dans les autres modes.
+  // Le portrait : geolier_verrou.jpg est un art DÉDIÉ, déjà sombre — il n'existe pas de
+  // geolier.jpg « clair » dans public/portraits/ ; le dévoilement retire seulement le
+  // filtre CSS et le cadenas (les vieux commentaires qui disaient autre chose mentaient).
   // Le jour de la sortie : passer status à AVAILABLE, retirer essai et releaseDate,
-  // remplacer name/icon/desc par ceux des Geôliers, et remplacer le portrait verrouillé
-  // Une seule image suffit : geolier.jpg est le portrait NORMAL, le teasing est fait
-  // les deux fichiers sont déjà dans public/portraits/.
-  { key: "geolier", ability: "geolier", name: "???", icon: "📦", portrait: "/portraits/geolier_verrou.jpg", ranks: [7, 5, 5, 3], status: ORDER_STATUS.COMING_SOON, releaseDate: NEXT_ORDER_RELEASE, essai: true, desc: "Prochain Ordre à rejoindre EMPRISE." },
+  // remplacer name/icon/desc par nom/description ci-dessous.
+  { key: "geolier", ability: "geolier", name: "???", icon: "📦", portrait: "/portraits/geolier_verrou.jpg", ranks: [7, 5, 5, 3], status: ORDER_STATUS.COMING_SOON, releaseDate: NEXT_ORDER_RELEASE, essai: true, desc: "Prochain Ordre à rejoindre EMPRISE.",
+    // ⚠️ TEXTE PROVISOIRE, à remplacer par le Commandant — rien ici n'est du lore
+    // définitif. Ces trois champs ne s'affichent que dans la fenêtre d'accès anticipé.
+    nom: "Geôliers",
+    description: "Nul ne sait qui ils gardaient, ni pourquoi leurs chaînes pendent désormais vides. Une geôle bien tenue, disent-ils, n'a pas besoin de barreaux.",
+    capaciteTexte: "Chaque capture d'un Geôlier déclenche l'Onde, sans exiger de Résonance." },
 ];
 
 // Petit utilitaire réutilisé partout où un Ordre "prochainement" doit être écarté
 // (tirages aléatoires, draft, tournoi) — un Ordre sans status explicite est traité
 // comme disponible, pour rester compatible si status venait à manquer quelque part.
+// Miroir synchrone des acces anticipes achetes (bourse.accesAnticipe) : cette
+// fonction est appelee partout, souvent hors de portee de l'etat React et toujours
+// en synchrone. loadBourse et l'achat le tiennent a jour.
+let accesAnticipesLocaux = new Set();
 function isOrderAvailable(order) {
-  return order.status !== ORDER_STATUS.COMING_SOON;
+  if (order.status !== ORDER_STATUS.COMING_SOON) return true;
+  // L'acces anticipe rend l'Ordre jouable ICI, pour CE joueur : choix de main,
+  // drafts locaux, tournoi solo, quetes. Les tirages PARTAGES avec un adversaire
+  // (main commune de Confluence en ligne) passent par tirerDeuxOrdresCommuns,
+  // volontairement sourde a ce miroir.
+  return accesAnticipesLocaux.has(order.key);
 }
 
-// Le roster réellement jouable : tout ORDERS sauf les Ordres "prochainement".
-// À utiliser partout où l'on distribue le roster complet (Confluence, bac à sable,
-// tirage au hasard) pour qu'un Ordre non sorti n'arrive jamais en main.
+// Le roster OFFICIEL : tout ORDERS sauf les Ordres "prochainement", fige au
+// chargement du module -- donc JAMAIS les acces anticipes locaux, et c'est voulu :
+// il sert la ou le roster doit etre le meme pour tout le monde (bac a sable, drafts
+// de secours). Pour la disponibilite DU joueur, appeler isOrderAvailable.
 const AVAILABLE_ORDERS = ORDERS.filter(isOrderAvailable);
 
 // Candidats en cours d'évaluation : jouables en bac à sable seulement. Ils sont exclus
 // d'AVAILABLE_ORDERS (statut "prochainement") et masqués des écrans de sélection, pour
 // ne pas polluer les parties normales, la Confluence, le tournoi ni le mode Histoire.
 const ORDRES_A_L_ESSAI = ORDERS.filter((o) => o.essai === true);
+
+// Un Ordre scelle se devoile a l'ouverture de la fenetre d'acces anticipe (vrai
+// nom, portrait sans assombrissement) et LE RESTE apres l'heure de sortie : entre
+// la sortie et la bascule manuelle du status, il ne se rescelle pas -- seul le
+// bouton d'achat meurt a l'heure dite (fenetreAccesAnticipe). Une fois status
+// bascule, ces deux fonctions redeviennent transparentes.
+function ordreDevoile(order) {
+  if (order.status !== ORDER_STATUS.COMING_SOON || !order.releaseDate) return false;
+  return Date.now() >= order.releaseDate.getTime() - ACCES_ANTICIPE.fenetreHeures * 3600 * 1000;
+}
+function nomOrdreAffiche(order) {
+  return ordreDevoile(order) && order.nom ? order.nom : order.name;
+}
 
 // Vrai décompte en direct (jours/heures/minutes/secondes) pour un Ordre
 // "prochainement" avec une date de sortie prévue — se met à jour chaque
@@ -378,22 +420,24 @@ function ComingSoonThumb({ order }) {
     clearTimeout(peekTimer.current);
     peekTimer.current = setTimeout(() => setPeek(false), 1100);
   };
+  // Dans la fenetre d'acces anticipe : plus de cadenas, portrait sans filtre.
+  const devoile = ordreDevoile(order);
   return (
     <div
-      className={`order-thumb-wrap teaser-wrap ${peek ? "teaser-peek" : ""}`}
+      className={`order-thumb-wrap teaser-wrap ${devoile ? "teaser-devoile" : ""} ${peek ? "teaser-peek" : ""}`}
       onPointerDown={revealBriefly}
     >
       <div className="teaser-aura" />
-      <img className="thumb thumb-teaser" src={order.portrait} alt={order.name} />
+      <img className="thumb thumb-teaser" src={order.portrait} alt={nomOrdreAffiche(order)} />
       <div className="teaser-scan" />
-      <div className="lock-chip">
+      {!devoile && (<div className="lock-chip">
         <svg className="lock-icon" viewBox="0 0 24 24" fill="none">
           <path d="M6 10V7a6 6 0 0112 0v3" stroke="var(--gold-bright)" strokeWidth="2" strokeLinecap="round" fill="none" />
           <rect x="4" y="10" width="16" height="12" rx="2.5" fill="var(--gold-bright)" stroke="var(--gold)" strokeWidth="1" />
           <circle cx="12" cy="15" r="1.7" fill="#1b2138" />
           <rect x="11" y="16" width="2" height="3.5" rx="1" fill="#1b2138" />
         </svg>
-      </div>
+      </div>)}
     </div>
   );
 }
@@ -1180,7 +1224,7 @@ const MORT_SUBITE_RONDES_MAX = 2;
 // La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
 // elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
 // a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 8h45";
+const VERSION_AFFICHEE = "29 août · 10h30";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
@@ -1946,9 +1990,30 @@ async function recordTournoiGagne(tournoiId) {
   stats.tournoisCredites = [...vus, tournoiId].slice(-12);
   stats.tournoisGagnes = (stats.tournoisGagnes || 0) + 1;
   await writeStatsRaw(JSON.stringify(stats));
-  // L'XP du tournoi s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
-  // tournoi n'avait jamais ete compte, elle jure donc aussi pour ces 150 XP.
-  stats.xpDePartie = await gagnerXp(XP_PARTIES.tournoiRemporte);
+  // L'enjeu s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
+  // tournoi n'avait jamais ete compte -- elle jure donc pour le prix en gemmes
+  // ET pour l'XP du vainqueur (les pieces suivent l'XP toutes seules). Les prix
+  // sont des constantes : jamais calcules depuis des pieces, dans aucun sens.
+  await crediterGemmes(TOURNOI_ENJEU.prixVainqueur);
+  const bilan = await gagnerXp(TOURNOI_ENJEU.xpVainqueur);
+  stats.xpDePartie = { ...bilan, gemmesTournoi: TOURNOI_ENJEU.prixVainqueur };
+  return stats;
+}
+
+// La place de finaliste, au MEME verrou : un joueur est champion OU finaliste
+// d'un tournoi, jamais les deux -- la meme liste jure donc pour les deux
+// versements. Pas d'XP, pas de compteur de victoires : les gemmes du second
+// prix, rien d'autre. gagnerXp(0) ne change rien mais rend la forme exacte du
+// bilan de fin de partie : l'ecran n'affichera que les gemmes.
+async function recordTournoiFinaliste(tournoiId) {
+  const stats = await loadStats();
+  const vus = Array.isArray(stats.tournoisCredites) ? stats.tournoisCredites : [];
+  if (vus.includes(tournoiId)) return stats;
+  stats.tournoisCredites = [...vus, tournoiId].slice(-12);
+  await writeStatsRaw(JSON.stringify(stats));
+  await crediterGemmes(TOURNOI_ENJEU.prixFinaliste);
+  const bilan = await gagnerXp(0);
+  stats.xpDePartie = { ...bilan, gemmesTournoi: TOURNOI_ENJEU.prixFinaliste };
   return stats;
 }
 
@@ -2283,7 +2348,8 @@ const XP_PARTIES = {
   defaite: 5,
   defaiteClassee: 8,
   egalite: 10,
-  tournoiRemporte: 150,  // en plus des parties qui le composent
+  // tournoiRemporte a vecu ici (150) ; l'XP du tournoi en ligne vit desormais
+  // dans TOURNOI_ENJEU.xpVainqueur, versee au meme verrou que le prix en gemmes.
 };
 // Gemmes versees a chaque palier de 5 niveaux.
 const GEMMES_PALIERS = { parPalier: 50, dernierPalier: 150 }; // niveau 50 : 150
@@ -2377,8 +2443,20 @@ const PIECES_PAR_GEMME = 10;
 // Montants predefinis de l'ecran de conversion (en gemmes).
 const CONVERSIONS = [100, 250, 500];
 
+// ---------- Tournoi en ligne a enjeu ----------
+// 8 joueurs misent 20 gemmes : cagnotte 160. Redistribue 140 (100 + 40),
+// les 20 restantes sortent du jeu -- la cagnotte ne cree jamais de gemmes.
+// Le tournoi SOLO, lui, reste gratuit et sans prix : payer pour des bots
+// serait une pompe a gemmes ou une arnaque.
+const TOURNOI_ENJEU = {
+  entree: 20,          // gemmes debitees a l'inscription
+  prixVainqueur: 100,  // gemmes
+  prixFinaliste: 40,   // gemmes
+  xpVainqueur: 300,    // XP en plus (les pieces suivent toutes seules)
+};
+
 const BOURSE_ESSAI = 1000;
-const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"] } };
+const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"] }, accesAnticipe: [], misesTournoi: [] };
 let memoryBourse = null;
 
 async function readBourseRaw() {
@@ -2412,13 +2490,25 @@ async function writeBourseRaw(str) {
 // se verse ici, une seule fois -- au premier passage comme chez un joueur de la veille.
 async function loadBourse() {
   const brut = await readBourseRaw();
-  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"] } };
+  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"] }, accesAnticipe: [], misesTournoi: [] };
   if (brut) {
     try {
       const lu = JSON.parse(brut);
       b.gemmes = Number.isFinite(lu.gemmes) ? Math.max(0, Math.min(1000000, Math.floor(lu.gemmes))) : 0;
       b.pieces = Number.isFinite(lu.pieces) ? Math.max(0, Math.min(1000000, Math.floor(lu.pieces))) : 0;
       b.essaiVerse = !!lu.essaiVerse;
+      // Les acces anticipes : des cles d'Ordre que le jeu connait, rien d'autre.
+      b.accesAnticipe = Array.isArray(lu.accesAnticipe)
+        ? [...new Set(lu.accesAnticipe.filter((k) => ORDERS.some((o) => o.key === k)))]
+        : [];
+      // Les mises de tournoi encore en l'air : un code court et un montant borne.
+      // C'est le marqueur qui garantit qu'une mise ne se rembourse jamais deux fois.
+      b.misesTournoi = Array.isArray(lu.misesTournoi)
+        ? lu.misesTournoi
+            .filter((m) => m && typeof m.id === "string" && m.id.length <= 12 && Number.isFinite(m.montant))
+            .map((m) => ({ id: m.id, montant: Math.max(0, Math.min(1000, Math.floor(m.montant))) }))
+            .slice(-16)
+        : [];
       for (const famille of Object.keys(FAMILLES_COSMETIQUES)) {
         const cat = FAMILLES_COSMETIQUES[famille].catalogue;
         const lues = (lu.possessions && Array.isArray(lu.possessions[famille])) ? lu.possessions[famille] : [];
@@ -2433,6 +2523,9 @@ async function loadBourse() {
     b.essaiVerse = true;
     await writeBourseRaw(JSON.stringify(b));
   }
+  // Le miroir synchrone des acces anticipes suit chaque lecture : c'est lui que
+  // lit isOrderAvailable, partout ou l'etat React n'arrive pas.
+  accesAnticipesLocaux = new Set(b.accesAnticipe);
   return b;
 }
 
@@ -2473,6 +2566,66 @@ async function convertirGemmesEnPieces(nbGemmes) {
   b.gemmes -= gemmes;
   b.pieces = Math.min(1000000, b.pieces + gemmes * PIECES_PAR_GEMME);
   await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// ---------- La mise du tournoi en ligne ----------
+// Payer : relire, decider, ecrire. Le marqueur misesTournoi rend le debit
+// idempotent (un meme tournoi ne se paie qu'une fois) et memorise le montant
+// paye -- le remboursement rendra CE montant, pas le tarif du jour.
+async function payerMiseTournoi(tournoiId) {
+  const b = await loadBourse();
+  const mises = b.misesTournoi || [];
+  if (mises.some((m) => m.id === tournoiId)) return { bourse: b, fait: true };
+  if (b.gemmes < TOURNOI_ENJEU.entree) return { bourse: b, fait: false };
+  b.gemmes -= TOURNOI_ENJEU.entree;
+  // Jamais de slice ici : evincer silencieusement un marqueur, c'est rendre ses
+  // gemmes irrecuperables. La borne de corruption vit dans loadBourse, large.
+  b.misesTournoi = [...mises, { id: tournoiId, montant: TOURNOI_ENJEU.entree }];
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// Rembourser : credit et retrait du marqueur dans LA MEME ecriture -- le double
+// remboursement est impossible par construction, quel que soit le nombre de
+// chemins qui detectent la mort d'un tournoi.
+async function rembourserMiseTournoi(tournoiId) {
+  const b = await loadBourse();
+  const mises = b.misesTournoi || [];
+  const mise = mises.find((m) => m.id === tournoiId);
+  if (!mise) return { bourse: b, fait: false };
+  b.gemmes = Math.min(1000000, b.gemmes + mise.montant);
+  b.misesTournoi = mises.filter((m) => m.id !== tournoiId);
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// Regler : le tournoi a commence, la mise est engagee dans la cagnotte. Le
+// marqueur s'efface SANS credit -- plus aucun remboursement possible.
+async function reglerMiseTournoi(tournoiId) {
+  const b = await loadBourse();
+  const mises = b.misesTournoi || [];
+  if (!mises.some((m) => m.id === tournoiId)) return b;
+  b.misesTournoi = mises.filter((m) => m.id !== tournoiId);
+  await writeBourseRaw(JSON.stringify(b));
+  return b;
+}
+
+// ---------- L'achat d'acces anticipe ----------
+// Meme modele sur que l'achat de cosmetique : relire, revalider TOUT (fenetre,
+// possession, solde), debiter, ecrire. Une cle deja presente rend fait:true sans
+// debiter ; hors fenetre, aucun achat, quoi qu'affiche un ecran perime.
+async function acheterAccesAnticipe(cleOrdre) {
+  const b = await loadBourse();
+  const order = ORDERS.find((o) => o.key === cleOrdre);
+  if (!order || order.status !== ORDER_STATUS.COMING_SOON) return { bourse: b, fait: false };
+  if (b.accesAnticipe.includes(cleOrdre)) return { bourse: b, fait: true };
+  if (!fenetreAccesAnticipe(order)) return { bourse: b, fait: false };
+  if (b.gemmes < ACCES_ANTICIPE.prix) return { bourse: b, fait: false };
+  b.gemmes -= ACCES_ANTICIPE.prix;
+  b.accesAnticipe = [...b.accesAnticipe, cleOrdre];
+  await writeBourseRaw(JSON.stringify(b));
+  accesAnticipesLocaux = new Set(b.accesAnticipe);
   return { bourse: b, fait: true };
 }
 
@@ -4359,6 +4512,17 @@ const APP_STYLES = `
           transition: border-color .2s, transform .35s ease;
         }
         .hub-gemmes:active { transition-duration: .1s; transform: scale(0.94); }
+        /* La rangee du tresor : pieces a gauche, gemmes a droite, meme largeur
+           totale que les boutons de la colonne. Chaque pastille garde sa couleur,
+           jamais les deux melangees. */
+        .hub-tresor { display: flex; gap: 6px; align-self: stretch; }
+        .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
+        .hub-pieces {
+          background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
+          color: var(--gold-bright); cursor: default;
+        }
+        .hub-pieces:active { transform: none; }
+        .hub-pieces .piece-icone { width: 13px; height: 13px; flex: none; }
         /* 16 px et non 10 : a 10 le cristal se lisait comme un point. Agrandi a la
            demande du Commandant. */
         .hub-gemmes .gemme-icone { width: 16px; height: 16px; flex: none; }
@@ -5071,6 +5235,44 @@ const APP_STYLES = `
            bottom 100% le colle juste au-dessus d'elle, quelle que soit sa hauteur, encoche
            comprise. Aucun nombre en dur, et jamais de recouvrement possible. */
         .hub-bas { position: relative; width: 100%; flex: none; }
+        /* ---------- Tournoi a enjeu et acces anticipe ---------- */
+        .tournoi-enjeu {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: 'Spectral', Georgia, serif; font-size: 12px; color: var(--muted);
+          margin: 2px 0 6px;
+        }
+        .tournoi-gain {
+          display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
+        }
+        .ordre-devoile-desc {
+          font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 12px;
+          color: var(--bone); line-height: 1.45; margin: 4px 0 2px;
+        }
+        .ordre-devoile-capacite {
+          font-family: 'Spectral', Georgia, serif; font-size: 11.5px;
+          color: var(--muted); margin-bottom: 4px;
+        }
+        .acces-anticipe-btn {
+          display: inline-flex; align-items: center; gap: 7px; margin-top: 8px;
+          padding: 8px 14px; border-radius: 11px; cursor: pointer;
+          background: rgba(146,86,207,0.14); border: 1px solid rgba(146,86,207,0.5);
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: #d9c2f5;
+          transition: transform .12s ease;
+        }
+        .acces-anticipe-btn:active { transform: scale(0.95); }
+        .acces-anticipe-debloque {
+          display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: var(--gold-bright);
+        }
+        /* Le teaser devoile : portrait sans filtre, meme au survol -- le cadenas,
+           lui, est deja retire du rendu. Selecteurs plus specifiques que ceux du
+           teaser scelle : l'ordre dans la feuille n'a pas a trancher. */
+        .teaser-wrap.teaser-devoile .thumb-teaser,
+        .teaser-wrap.teaser-devoile:hover .thumb-teaser,
+        .teaser-wrap.teaser-devoile.teaser-peek .thumb-teaser,
+        .order-option.order-option-locked .teaser-devoile .thumb-teaser { filter: none; }
+
         /* ---------- Les quetes ---------- */
         /* La page : plein ecran par-dessus le hub, fond opaque, seul le corps
            defile. Un etat booleen l ouvre -- ce n est pas un onglet du hub. */
@@ -10744,6 +10946,13 @@ export default function Emprise() {
   const [achatEnCours, setAchatEnCours] = useState(null);
   // La conversion qu'on est en train de confirmer : un montant de gemmes.
   const [conversionEnCours, setConversionEnCours] = useState(null);
+  // Le siege de tournoi refuse faute de gemmes : le manque a dire au joueur.
+  const [tournoiManque, setTournoiManque] = useState(null);
+  // Une seule prise de siege a la fois : deux taps rapides creaient deux tournois
+  // et faisaient courir deux debits de mise l'un contre l'autre.
+  const siegeEnCoursRef = useRef(false);
+  // L'acces anticipe qu'on est en train de confirmer : une cle d'Ordre.
+  const [accesEnCours, setAccesEnCours] = useState(null);
   // Le pack qu'on regarde. JAMAIS un debit : le paiement passera par les achats
   // integres des magasins, qui n'existent qu'a la publication. Un etat a part, pour ne
   // pas preter a un pack la semantique de vrai debit d'achatEnCours.
@@ -11809,6 +12018,16 @@ export default function Emprise() {
   async function creerTournoiEnLigne() {
     if (!myUid) { setTournoiErreur("Connexion en cours, réessayez dans un instant."); return; }
     setTournoiErreur("");
+    if (siegeEnCoursRef.current) return;
+    siegeEnCoursRef.current = true;
+    try {
+    // L'enjeu se verifie AVANT de creer quoi que ce soit : sous la mise, pas de
+    // tournoi, et un document orphelin de moins.
+    const bourseAvantCreation = await loadBourse();
+    if (bourseAvantCreation.gemmes < TOURNOI_ENJEU.entree) {
+      setTournoiManque(TOURNOI_ENJEU.entree - bourseAvantCreation.gemmes);
+      return;
+    }
     try {
       let code = null;
       for (let essai = 0; essai < 5 && !code; essai++) {
@@ -11827,11 +12046,22 @@ export default function Emprise() {
         } catch (e) { if (e.message !== "code-pris") throw e; }
       }
       if (!code) { setTournoiErreur("Impossible de trouver un code libre. Réessayez."); return; }
+      // Le siege est pris : la mise se debite (relire, decider, ecrire). Le
+      // marqueur misesTournoi la rend impossible a debiter deux fois.
+      const mise = await payerMiseTournoi(code);
+      setBourse(mise.bourse);
+      if (!mise.fait) {
+        // Introuvable en pratique (le solde vient d'etre verifie) : le siege se rend.
+        await retirerMonSiege(code);
+        setTournoiManque(TOURNOI_ENJEU.entree - mise.bourse.gemmes);
+        return;
+      }
       setTournoiOnlineId(code);
       setPhase("tourney-online");
     } catch (e) {
       setTournoiErreur("Impossible de créer le tournoi. Vérifiez votre connexion.");
     }
+    } finally { siegeEnCoursRef.current = false; }
   }
 
   async function rejoindreTournoiEnLigne() {
@@ -11839,8 +12069,19 @@ export default function Emprise() {
     const code = codeTournoiInput.trim().toUpperCase();
     if (!code) return;
     setTournoiErreur("");
+    if (siegeEnCoursRef.current) return;
+    siegeEnCoursRef.current = true;
+    try {
+    // Le solde d'abord : un siege qu'on ne peut pas miser ne se prend pas.
+    const bourseAvantSiege = await loadBourse();
+    if (bourseAvantSiege.gemmes < TOURNOI_ENJEU.entree) {
+      setTournoiManque(TOURNOI_ENJEU.entree - bourseAvantSiege.gemmes);
+      return;
+    }
+    let ajoute = false;
     try {
       await runTransaction(db, async (tx) => {
+        ajoute = false;
         const ref = doc(db, "tournaments", code);
         const snap = await tx.get(ref);
         if (!snap.exists()) throw new Error("introuvable");
@@ -11850,7 +12091,20 @@ export default function Emprise() {
         if (t.status !== "waiting") throw new Error("commence");
         if (joueurs.length >= 8) throw new Error("complet");
         tx.update(ref, { joueurs: [...joueurs, myUid] });
+        ajoute = true;
       });
+      // La mise suit le siege NOUVELLEMENT pris. Deja inscrit : la mise d'origine
+      // tient, pas de second debit -- et payerMiseTournoi est de toute facon
+      // idempotente par identifiant de tournoi.
+      if (ajoute) {
+        const mise = await payerMiseTournoi(code);
+        setBourse(mise.bourse);
+        if (!mise.fait) {
+          await retirerMonSiege(code);
+          setTournoiManque(TOURNOI_ENJEU.entree - mise.bourse.gemmes);
+          return;
+        }
+      }
       setTournoiOnlineId(code);
       setPhase("tourney-online");
     } catch (e) {
@@ -11859,25 +12113,46 @@ export default function Emprise() {
       else if (e.message === "complet") setTournoiErreur("Ce tournoi est déjà complet (8 Commandants).");
       else setTournoiErreur("Impossible de rejoindre. Vérifiez le code et votre connexion.");
     }
+    } finally { siegeEnCoursRef.current = false; }
   }
 
   // Quitter la salle d'attente (avant le lancement) : on libère son siège, sinon le
   // tournoi resterait bloqué à attendre un huitième joueur parti depuis longtemps.
+  // Retire mon uid du document, si le tournoi attend encore. Rend l'issue :
+  // "retire" (siege rendu), "commence" (trop tard), "disparu" (document efface),
+  // "echec" (reseau) -- l'appelant decide du sort de la mise avec ca.
+  async function retirerMonSiege(id) {
+    try {
+      let sort = "retire";
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", id);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) { sort = "disparu"; return; }
+        const t = snap.data();
+        if (t.status !== "waiting") { sort = "commence"; return; }
+        tx.update(ref, { joueurs: (t.joueurs || []).filter((u) => u !== myUid) });
+      });
+      return sort;
+    } catch (e) { return "echec"; }
+  }
+
   async function quitterSalleTournoi() {
     const id = tournoiOnlineId;
     setTournoiOnlineId(null); setTournoiData(null);
     try { localStorage.removeItem(CLE_TOURNOI); } catch (e) { /* rien */ }
     if (!id || !myUid) return;
-    try {
-      await runTransaction(db, async (tx) => {
-        const ref = doc(db, "tournaments", id);
-        const snap = await tx.get(ref);
-        if (!snap.exists()) return;
-        const t = snap.data();
-        if (t.status !== "waiting") return; // trop tard pour se retirer proprement
-        tx.update(ref, { joueurs: (t.joueurs || []).filter((u) => u !== myUid) });
-      });
-    } catch (e) { /* le siège restera occupé : le tournoi ne pourra pas se lancer, dommage */ }
+    const sort = await retirerMonSiege(id);
+    // Le tournoi n'a pas commence : le retrait rend la mise, integralement.
+    // Disparu : elle se rend aussi, il ne se jouera jamais. Commence : elle est
+    // engagee dans la cagnotte, elle se regle. "echec" (reseau) : le siege est
+    // peut-etre encore occupe -- la mise attend, le balayage du prochain
+    // demarrage tranchera.
+    if (sort === "retire" || sort === "disparu") {
+      const r = await rembourserMiseTournoi(id);
+      if (r.fait) setBourse(r.bourse);
+    } else if (sort === "commence") {
+      await reglerMiseTournoi(id);
+    }
   }
 
   // Lancement des quarts de finale, par N'IMPORTE QUEL client qui constate 8 inscrits :
@@ -11985,10 +12260,26 @@ export default function Emprise() {
   useEffect(() => {
     if (!tournoiOnlineId) return;
     const unsub = onSnapshot(doc(db, "tournaments", tournoiOnlineId), (snap) => {
-      if (!snap.exists()) { setTournoiErreur("Ce tournoi n'existe plus."); return; }
+      if (!snap.exists()) {
+        // Un instantane de CACHE peut pretendre que le document n'existe pas alors
+        // que le serveur le tient (reseau tombe a l'instant ou l'ecoute s'attache) :
+        // seule la verite du serveur declare un tournoi mort -- et rembourse.
+        if (snap.metadata && snap.metadata.fromCache) return;
+        setTournoiErreur("Ce tournoi n'existe plus.");
+        // Un tournoi efface avant d'avoir commence rend sa mise. Une seule fois :
+        // le marqueur s'efface avec le remboursement, quel que soit le nombre de
+        // chemins qui detectent la mort.
+        rembourserMiseTournoi(tournoiOnlineId).then((r) => { if (r.fait) setBourse(r.bourse); });
+        return;
+      }
       const t = snap.data();
       setTournoiData(t);
       setTournoiErreur("");
+      // La mise se regle a la CONCLUSION (champion ecrit), pas au depart : tant
+      // qu'elle est marquee, le balayage du prochain demarrage sait que ce tournoi
+      // me doit peut-etre un prix. Aucun remboursement possible une fois lance :
+      // les chemins de remboursement n'acceptent que l'attente et la disparition.
+      if (t.champion) reglerMiseTournoi(tournoiOnlineId);
       if (t.status === "waiting" && (t.joueurs || []).length === 8 && !tournoiLancementRef.current) {
         tournoiLancementRef.current = true;
         lancerQuartsDeFinale().finally(() => { tournoiLancementRef.current = false; });
@@ -12012,6 +12303,85 @@ export default function Emprise() {
     recordTournoiGagne(tournoiOnlineId).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiData, tournoiOnlineId, myUid]);
+
+  // La place de finaliste : celui de la finale (f0) qui n'est pas le champion.
+  // Meme patron de gardes que l'effet du champion, meme verrou durable -- un
+  // joueur est champion OU finaliste, la liste tournoisCredites jure pour les deux.
+  const tournoiFinalisteRef = useRef(null);
+  useEffect(() => {
+    if (!myUid || !tournoiData || !tournoiOnlineId) return;
+    if (!tournoiData.champion) return;
+    const f0 = tournoiData.matches && tournoiData.matches.f0;
+    if (!f0 || (f0.a !== myUid && f0.b !== myUid)) return;
+    if (tournoiData.champion === myUid) return;
+    if (tournoiFinalisteRef.current === tournoiOnlineId) return;
+    if ((stats.tournoisCredites || []).includes(tournoiOnlineId)) return;
+    tournoiFinalisteRef.current = tournoiOnlineId;
+    recordTournoiFinaliste(tournoiOnlineId).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiData, tournoiOnlineId, myUid]);
+
+  // Au demarrage : le sort des mises restees en l'air. L'application fermee,
+  // aucun ecran ne ramene a une salle d'attente (le code n'est pas retenu) : un
+  // tournoi encore en attente rend le siege ET la mise ; disparu, la mise ;
+  // joue, la mise se regle sans retour. Hors ligne, tout attend le prochain
+  // demarrage -- rembourserMiseTournoi reste impossible a rejouer deux fois.
+  const misesVerifieesRef = useRef(false);
+  useEffect(() => {
+    if (!myUid || misesVerifieesRef.current) return;
+    misesVerifieesRef.current = true;
+    (async () => {
+      const b = await loadBourse();
+      for (const mise of b.misesTournoi || []) {
+        if (mise.id === tournoiOnlineId) continue;
+        try {
+          const snap = await getDoc(doc(db, "tournaments", mise.id));
+          if (!snap.exists()) {
+            // Limite assumee : un document efface = un tournoi qui ne s'est jamais
+            // joue (les regles interdisent delete au client, et l'application n'en
+            // efface aucun). Un menage de console qui supprimerait un tournoi JOUE
+            // avant le passage de ce balayage rembourserait une mise engagee --
+            // ne nettoyer en console que les tournois anciens.
+            const r = await rembourserMiseTournoi(mise.id);
+            if (r.fait) setBourse(r.bourse);
+            continue;
+          }
+          const t = snap.data();
+          const assis = (t.joueurs || []).includes(myUid);
+          if (t.status === "waiting") {
+            const sort = assis ? await retirerMonSiege(mise.id) : "retire";
+            if (sort === "retire" || sort === "disparu") {
+              const r = await rembourserMiseTournoi(mise.id);
+              if (r.fait) setBourse(r.bourse);
+            }
+          } else if (!assis) {
+            // Parti avant le depart, et le remboursement du retrait n'avait pas abouti.
+            const r = await rembourserMiseTournoi(mise.id);
+            if (r.fait) setBourse(r.bourse);
+          } else {
+            // Le tournoi s'est conclu sans que l'ecran de fin ait pu crediter
+            // (l'ecoute est morte avec l'application) : le document porte pourtant
+            // tout -- champion et finale. Le prix se verse ICI, au meme verrou
+            // anti-double, puis la mise se regle. Sans champion, le tournoi court
+            // encore : le marqueur attend sa conclusion.
+            const f0 = t.matches && t.matches.f0;
+            if (t.champion === myUid) {
+              const st = await recordTournoiGagne(mise.id);
+              setStats(st); rafraichirProgression();
+              await reglerMiseTournoi(mise.id);
+            } else if (t.champion && f0 && (f0.a === myUid || f0.b === myUid)) {
+              const st = await recordTournoiFinaliste(mise.id);
+              setStats(st); rafraichirProgression();
+              await reglerMiseTournoi(mise.id);
+            } else if (t.champion) {
+              await reglerMiseTournoi(mise.id);
+            }
+          }
+        } catch (e) { /* hors ligne : la mise attend le prochain demarrage */ }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid]);
 
   // Dépôt du résultat de MON match dès qu'il se termine (victoire comme défaite : les
   // deux clients tentent, le premier gagne, l'autre ne fait rien).
@@ -12040,7 +12410,7 @@ export default function Emprise() {
     const modeDefi = (optionsDefi && optionsDefi.mode) || "classique";
     let confluenceCommune = null;
     if (modeDefi === "confluence") {
-      const [oa, ob] = pickRandomTwoOrders();
+      const [oa, ob] = tirerDeuxOrdresCommuns();
       confluenceCommune = { ordres: [oa.key, ob.key], main: makeHand(oa, ob).map(stripForSave) };
     }
     const nouvellePartie = {
@@ -13307,6 +13677,18 @@ export default function Emprise() {
     }
   }
 
+  // Le tirage de la MAIN COMMUNE (Confluence en ligne) : un tirage PARTAGE, ecrit
+  // dans le document et applique tel quel chez l'adversaire. Volontairement sourd
+  // aux acces anticipes locaux : un Ordre achete ICI ne doit jamais arriver dans
+  // la main d'un adversaire qui ne le possede pas. Le ban de tournoi ne s'applique
+  // pas a un defi d'ami.
+  function tirerDeuxOrdresCommuns() {
+    const pool = ORDERS.filter((o) => o.status !== ORDER_STATUS.COMING_SOON);
+    const a = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+    const b = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+    return [a, b];
+  }
+
   function pickRandomTwoOrders() {
     const pool = ORDERS.filter((o) => isOrderAvailable(o) && !(tourney.active && tourney.ban === o.key));
     const a = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
@@ -13362,7 +13744,10 @@ export default function Emprise() {
     } else if (phase === "tourney-online") {
       // Salle d'attente : on libère son siège. Tournoi lancé : on sort juste de l'écran,
       // le tournoi continue sans nous et l'accueil proposera d'y revenir.
-      if (tournoiData && tournoiData.status === "waiting") quitterSalleTournoi();
+      // tournoiData encore nul (premier instantane pas arrive) : on tente le
+      // retrait quand meme -- retirerMonSiege tranche selon l'etat REEL du
+      // document, et la mise suit (rendue si le tournoi attendait encore).
+      if (!tournoiData || tournoiData.status === "waiting") quitterSalleTournoi();
       else { setTournoiOnlineId(null); setTournoiData(null); }
       setPhase("tourney-online-menu");
     } else if (phase === "tourney-menu") {
@@ -13509,14 +13894,20 @@ export default function Emprise() {
   function bilanXpDePartie() {
     if (!xpDernierePartie || !gameOver) return null;
     const b = xpDernierePartie;
+    // Les gemmes d'un palier de niveau et celles d'un prix de tournoi se disent
+    // d'un seul nombre. Un bilan sans XP (finaliste : gemmes seules) tait la
+    // ligne d'XP au lieu d'annoncer un faux +0.
+    const gemmes = (b.gemmesVersees || 0) + (b.gemmesTournoi || 0);
     return (
       <div className="cer-xp">
-        <span className="cer-xp-gain">+{b.gain} XP · <span className="piece-icone" aria-hidden="true" />+{b.piecesVersees || b.gain * PIECES_PAR_XP}<span className="lecteur-seul"> pièces</span></span>
+        {(b.gain > 0 || gemmes === 0) && (
+          <span className="cer-xp-gain">+{b.gain} XP · <span className="piece-icone" aria-hidden="true" />+{b.piecesVersees || b.gain * PIECES_PAR_XP}<span className="lecteur-seul"> pièces</span></span>
+        )}
         {b.apres.niveauJoueur > b.avant.niveauJoueur && (
           <span className="cer-xp-niveau">Niveau {b.apres.niveauJoueur}</span>
         )}
-        {b.gemmesVersees > 0 && (
-          <span className="cer-xp-gemmes"><span className="gemme-icone" aria-hidden="true" />+{b.gemmesVersees}<span className="lecteur-seul"> gemmes</span></span>
+        {gemmes > 0 && (
+          <span className="cer-xp-gemmes"><span className="gemme-icone" aria-hidden="true" />+{gemmes}<span className="lecteur-seul"> gemmes</span></span>
         )}
       </div>
     );
@@ -14613,8 +15004,14 @@ export default function Emprise() {
             </div>
             {hubPage !== "ordres" && (
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
-            {/* Le tresor. Toucher mene aux etals : un solde qu'on regarde est un solde
-                qu'on veut depenser. */}
+            {/* Le tresor, en deux pastilles cote a cote : les pieces a gauche (dorees,
+                gagnees en jouant -- un solde qui se constate), les gemmes a droite (un
+                solde qui s'achete : le + reste chez elles, et le toucher mene aux etals). */}
+            <span className="hub-tresor">
+            <span className="hub-gemmes hub-pieces" role="img" aria-label={`${bourse.pieces} pièces`} title="Pièces">
+              <span className="piece-icone" aria-hidden="true" />
+              <span className="hub-gemmes-nombre">{bourse.pieces}</span>
+            </span>
             <button
               className="hub-gemmes"
               onClick={() => { versGemmesRef.current = true; allerPageHub("boutique"); }}
@@ -14625,6 +15022,7 @@ export default function Emprise() {
               <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
               <span className="hub-gemmes-plus" aria-hidden="true">+</span>
             </button>
+            </span>
             <span className="hub-haut-rang">
             <button
               className="hub-rouage hub-horloge"
@@ -14641,10 +15039,6 @@ export default function Emprise() {
               title="Réglages"
             >
               <img className="hub-rouage-img" src="/nav/rouage.webp" alt="" />
-              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ display: "none" }}>
-                <path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
-                <path d="M10.6 2h2.8l.5 2.3c.5.2 1 .4 1.5.7l2.2-1 2 3.4-1.8 1.5c0 .3.1.7.1 1.1s0 .8-.1 1.1l1.8 1.5-2 3.4-2.2-1c-.5.3-1 .5-1.5.7l-.5 2.3h-2.8l-.5-2.3c-.5-.2-1-.4-1.5-.7l-2.2 1-2-3.4 1.8-1.5c0-.3-.1-.7-.1-1.1s0-.8.1-1.1L4.4 7.4l2-3.4 2.2 1c.5-.3 1-.5 1.5-.7L10.6 2zm1.4 4.5A5.5 5.5 0 1 0 17.5 12 5.5 5.5 0 0 0 12 6.5z" />
-              </svg>
             </button>
             </span>
             {/* Les amis ont leur propre porte, sous le rouage des reglages. La pastille
@@ -15030,7 +15424,7 @@ export default function Emprise() {
                           ) : (
                             <VagueMaitrise order={order} taux={m.taux} />
                           )}
-                          <span className="hub-ordre-vignette-nom">{order.name}</span>
+                          <span className="hub-ordre-vignette-nom">{nomOrdreAffiche(order)}</span>
                           {!bientot && <span className="hub-ordre-pourcent">{m.pourcent} %</span>}
                         </div>
                       </button>
@@ -15155,15 +15549,35 @@ export default function Emprise() {
                   {/* A gauche la carte, grossie ; a droite ce qu'elle dit de vous. Un
                       Ordre encore scelle n a ni rang ni pourcentage : il a une date. */}
                   <div className="ordre-detail-carte">
-                    {!isOrderAvailable(order)
+                    {order.status === ORDER_STATUS.COMING_SOON
                       ? <ComingSoonThumb order={order} />
                       : <VagueMaitrise order={order} taux={m.taux} grand />}
                   </div>
-                  {!isOrderAvailable(order) ? (
+                  {/* Sur le STATUS et non sur la disponibilite : un Ordre debloque
+                      par acces anticipe reste en presentation d'avant-sortie ici --
+                      decompte qui continue, bouton qui dit Debloque -- jusqu'a ce
+                      que status bascule le jour J. */}
+                  {order.status === ORDER_STATUS.COMING_SOON ? (
                     <div className="ordre-detail-texte">
-                      <div className="ordre-detail-bientot">Arrive prochainement</div>
-                      <div className="ordre-detail-nom">{order.name}</div>
+                      <div className="ordre-detail-bientot">{ordreDevoile(order) ? "Accès anticipé" : "Arrive prochainement"}</div>
+                      <div className="ordre-detail-nom">{nomOrdreAffiche(order)}</div>
+                      {ordreDevoile(order) && order.description && (
+                        <div className="ordre-devoile-desc">{order.description}</div>
+                      )}
+                      {ordreDevoile(order) && order.capaciteTexte && (
+                        <div className="ordre-devoile-capacite">{order.capaciteTexte}</div>
+                      )}
                       <OrdreDecompte order={order} />
+                      {ordreDevoile(order) && (
+                        (bourse.accesAnticipe || []).includes(order.key) ? (
+                          <div className="acces-anticipe-debloque">Débloqué</div>
+                        ) : fenetreAccesAnticipe(order) ? (
+                          <button className="acces-anticipe-btn" onClick={() => setAccesEnCours(order.key)}>
+                            <span className="gemme-icone" aria-hidden="true" />
+                            Accès anticipé — {ACCES_ANTICIPE.prix} gemmes
+                          </button>
+                        ) : null
+                      )}
                     </div>
                   ) : (
                   <div className="ordre-detail-texte">
@@ -15171,7 +15585,7 @@ export default function Emprise() {
                       {m.rang.nom}
                       <span className="ordre-detail-rang-num">{m.numero}/{MAITRISE_RANGS.length}</span>
                     </div>
-                    <div className="ordre-detail-nom">{order.name}</div>
+                    <div className="ordre-detail-nom">{nomOrdreAffiche(order)}</div>
                     <div className="ordre-detail-pourcent">{m.pourcent} %</div>
                     {/* Ni compte de parties, ni "encore X pour..." : chiffrer le chemin en
                         fait une corvee. Le rang et le pourcentage suffisent, le reste se
@@ -16302,7 +16716,7 @@ export default function Emprise() {
                       <div className="order-thumb-wrap"><img className="thumb" src={order.portrait} alt="" /></div>
                     )}
                     <div className="info">
-                      <div className="name">{order.name}</div>
+                      <div className="name">{nomOrdreAffiche(order)}</div>
                       <span className="desc">{comingSoon ? <CountdownLabel order={order} /> : order.desc}</span>
                     </div>
                     {comingSoon && <span className="coming-soon-badge">Bientôt disponible</span>}
@@ -16344,6 +16758,11 @@ export default function Emprise() {
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Tournoi en ligne</h2>
           <div className="sub">Huit Commandants, trois tours. Créez un tournoi et partagez son code, ou rejoignez avec celui d'un ami.</div>
+          {/* L'enjeu, annonce AVANT de confirmer quoi que ce soit. */}
+          <div className="tournoi-enjeu">
+            <span className="gemme-icone" aria-hidden="true" />
+            Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} · Finaliste : {TOURNOI_ENJEU.prixFinaliste}
+          </div>
           <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
           <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
           <input
@@ -16437,11 +16856,18 @@ export default function Emprise() {
             (m) => m && (m.a === myUid || m.b === myUid) && m.vainqueur && m.vainqueur !== myUid
           );
         const suisChampion = champion && tournoiData.champion === myUid;
+        // Le finaliste : dans la finale, mais pas champion.
+        const suisFinaliste = champion && matches.f0 && tournoiData.champion !== myUid
+          && (matches.f0.a === myUid || matches.f0.b === myUid);
 
         return (
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
             <h2>Tournoi en ligne</h2>
+            <div className="tournoi-enjeu">
+              <span className="gemme-icone" aria-hidden="true" />
+              Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} · Finaliste : {TOURNOI_ENJEU.prixFinaliste}
+            </div>
             {statut === "waiting" && (
               <>
                 <div className="sub">Partagez ce code : le tournoi démarre dès que les 8 sièges sont pris.</div>
@@ -16476,6 +16902,12 @@ export default function Emprise() {
               <div className="sub tb-champion-annonce">
                 🏆 {suisChampion ? "Vous remportez le tournoi !" : `${champion.nom} remporte le tournoi !`}
               </div>
+            )}
+            {suisChampion && (
+              <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{TOURNOI_ENJEU.prixVainqueur} gemmes · +{TOURNOI_ENJEU.xpVainqueur} XP</div>
+            )}
+            {suisFinaliste && (
+              <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{TOURNOI_ENJEU.prixFinaliste} gemmes — finaliste</div>
             )}
             <div className="tb-scene">
               <div
@@ -16893,7 +17325,7 @@ export default function Emprise() {
                     <div className="icon-frame">{order.icon}</div>
                   )}
                   <div className="info">
-                    <span className="name">{order.name}</span>
+                    <span className="name">{nomOrdreAffiche(order)}</span>
                     <span className="desc">{comingSoon ? <CountdownLabel order={order} /> : order.desc}</span>
                   </div>
                   {comingSoon && <span className="coming-soon-badge">Bientôt disponible</span>}
@@ -16984,7 +17416,7 @@ export default function Emprise() {
                     <div className="icon-frame">{order.icon}</div>
                   )}
                   <div className="info">
-                    <span className="name">{order.name}</span>
+                    <span className="name">{nomOrdreAffiche(order)}</span>
                     <span className="desc">{comingSoon ? <CountdownLabel order={order} /> : taken ? `Choisie par ${pickedBy === "blue" ? "Azur" : "Écarlate"}` : order.desc}</span>
                   </div>
                   {comingSoon && <span className="coming-soon-badge">Bientôt disponible</span>}
@@ -17014,7 +17446,7 @@ export default function Emprise() {
                   <div className="icon-frame">{order.icon}</div>
                 )}
                 <div className="info">
-                  <span className="name">{order.name}</span>
+                  <span className="name">{nomOrdreAffiche(order)}</span>
                 </div>
                 {tourneyBanPick === order.key && (
                   <svg className="ban-crack-overlay" viewBox="0 0 100 140" preserveAspectRatio="none">
@@ -17847,6 +18279,54 @@ export default function Emprise() {
                 >Transformer</button>
               )}
               <button className="landing-link" onClick={() => setConversionEnCours(null)}>{assez ? "Annuler" : "Fermer"}</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Le siege de tournoi refuse : le manque exact, sur le gabarit d'achat. */}
+      {tournoiManque != null && (
+        <div className="info-overlay" onClick={() => setTournoiManque(null)}>
+          <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Tournoi en ligne</div>
+            <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{TOURNOI_ENJEU.entree}<span className="lecteur-seul"> gemmes</span></div>
+            <div className="achat-solde manque">Il vous manque {tournoiManque} gemmes.</div>
+            <button className="landing-link" onClick={() => setTournoiManque(null)}>Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* L'acces anticipe : la confirmation sur le gabarit d'achat. La fonction
+          d'achat revalide tout (fenetre, possession, solde) avant de debiter. */}
+      {accesEnCours && (() => {
+        const ordre = ORDERS.find((o) => o.key === accesEnCours);
+        if (!ordre) return null;
+        const dejaObtenu = (bourse.accesAnticipe || []).includes(ordre.key);
+        const assez = bourse.gemmes >= ACCES_ANTICIPE.prix;
+        return (
+          <div className="info-overlay" onClick={() => setAccesEnCours(null)}>
+            <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel-title">Accès anticipé — {nomOrdreAffiche(ordre)}</div>
+              <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{ACCES_ANTICIPE.prix}<span className="lecteur-seul"> gemmes</span></div>
+              {dejaObtenu ? (
+                <div className="achat-solde">Déjà débloqué.</div>
+              ) : assez ? (
+                <div className="achat-solde">Solde après : {bourse.gemmes - ACCES_ANTICIPE.prix} gemmes. L&apos;Ordre sera gratuit pour tous à sa sortie : l&apos;achat n&apos;est qu&apos;une avance.</div>
+              ) : (
+                <div className="achat-solde manque">Il vous manque {ACCES_ANTICIPE.prix - bourse.gemmes} gemmes.</div>
+              )}
+              {!dejaObtenu && assez && (
+                <button
+                  className="reset-btn"
+                  onClick={() => {
+                    acheterAccesAnticipe(accesEnCours).then(({ bourse: b }) => {
+                      setBourse(b);
+                      setAccesEnCours(null);
+                    });
+                  }}
+                >Débloquer</button>
+              )}
+              <button className="landing-link" onClick={() => setAccesEnCours(null)}>{!dejaObtenu && assez ? "Annuler" : "Fermer"}</button>
             </div>
           </div>
         );
