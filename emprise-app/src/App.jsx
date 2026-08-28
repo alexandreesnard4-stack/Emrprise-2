@@ -3803,7 +3803,9 @@ const APP_STYLES = `
           transition: border-color .2s, transform .35s ease;
         }
         .hub-gemmes:active { transition-duration: .1s; transform: scale(0.94); }
-        .hub-gemmes .gemme-icone { width: 10px; height: 10px; flex: none; }
+        /* 16 px et non 10 : a 10 le cristal se lisait comme un point. Agrandi a la
+           demande du Commandant. */
+        .hub-gemmes .gemme-icone { width: 16px; height: 16px; flex: none; }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
