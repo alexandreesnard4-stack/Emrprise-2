@@ -4930,7 +4930,7 @@ const APP_STYLES = `
            11,5 px au-dela. */
         .hub-banniere-pseudo {
           position: absolute; inset: 0; display: block;
-          padding-left: 26px; padding-right: 8px; box-sizing: border-box;
+          padding-left: 29px; padding-right: 8px; box-sizing: border-box;
           line-height: 50px; text-align: center;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
@@ -4945,10 +4945,12 @@ const APP_STYLES = `
            de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
           position: absolute; left: 0; top: 50%; transform: translate(-40%, -50%); z-index: 1;
-          width: 32px; height: 44px; border: none; padding: 0; cursor: pointer;
+          /* 38 x 52 (32 x 44 avant) : la place de DEUX chiffres, demande du
+             Commandant -- la pleine hauteur de la banniere, jamais plus bas. */
+          width: 38px; height: 52px; border: none; padding: 0; cursor: pointer;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.65)) drop-shadow(0 0 3px rgba(203,164,86,0.55));
         }
-        .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 12px; }
+        .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 14px; }
         /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
            Toutes les images en cover, dimensions posees (pas de saut), et un
            voile sombre statique quand du texte se pose dessus. */
