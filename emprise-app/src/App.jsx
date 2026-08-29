@@ -4797,7 +4797,8 @@ const APP_STYLES = `
           flex: none;
         }
         /* Aligne sur la premiere rangee de boutons, pas sur le milieu du bloc. */
-        .hub-joueur { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        /* La flamme a gauche, les trophees a DROITE sous la banniere. */
+        .hub-joueur { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
         .hub-pseudo {
           background: none; border: none; padding: 0; cursor: pointer; text-align: left;
           font: inherit;
@@ -4911,7 +4912,10 @@ const APP_STYLES = `
            bord gauche en debordant vers le bas. L'overflow cache vit sur
            l'IMAGE et le voile, jamais sur le groupe : le debord de la carte
            doit se voir. Fond sombre en repli, AUCUNE animation ici. */
-        .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; }
+        /* La marge droite complete le gap de la rangee : la carte, qui deborde
+           de 40 % de ses 38 px, retombe dans cet espace sans mordre la
+           pastille des pieces. */
+        .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 8px; }
         .hub-banniere {
           position: relative; display: block;
           width: 100%; height: 52px;
@@ -4932,7 +4936,7 @@ const APP_STYLES = `
            11,5 px au-dela. */
         .hub-banniere-pseudo {
           position: absolute; inset: 0; display: block;
-          padding-left: 29px; padding-right: 8px; box-sizing: border-box;
+          padding-left: 8px; padding-right: 29px; box-sizing: border-box;
           line-height: 50px; text-align: center;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
@@ -4946,7 +4950,9 @@ const APP_STYLES = `
            (un drop-shadow ne s'anime jamais ici) ; sa bordure doree est celle
            de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
-          position: absolute; left: 0; top: 50%; transform: translate(-40%, -50%); z-index: 1;
+          /* A DROITE de la banniere desormais (demande du Commandant, 30/08) :
+             le miroir exact du chevauchement gauche. */
+          position: absolute; right: 0; top: 50%; transform: translate(40%, -50%); z-index: 1;
           /* 38 x 52 (32 x 44 avant) : la place de DEUX chiffres, demande du
              Commandant -- la pleine hauteur de la banniere, jamais plus bas. */
           width: 38px; height: 52px; border: none; padding: 0; cursor: pointer;
