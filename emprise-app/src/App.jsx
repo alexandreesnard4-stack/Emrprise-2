@@ -3684,6 +3684,13 @@ const ICONES_QUETES = {
   ondes3: "/quetes/icone-la-cascade.png",
   victoire1: "/quetes/icone-triomphe.png",
   parties3: "/quetes/icone-le-commandant-a-l-oeuvre.png",
+  captures10: "/quetes/icone-que-vos-rangs-parlent.png",
+  grosseOnde: "/quetes/icone-deferlante.png",
+  ordres3: "/quetes/icone-l-appel-des-bannieres.png",
+  ordreImpose: "/quetes/icone-sous-la-banniere.png",
+  histoire1: "/quetes/icone-chroniques.png",
+  veteran1: "/quetes/icone-l-epreuve-du-veteran.png",
+  confluence1: "/quetes/icone-draft-d-ordres.png",
 };
 // Les glyphes PAR FAMILLE, quand une image existe. L'entree "ordres" pointait
 // vers un fichier jamais livre (glyphe-ordres.png, absent du disque comme de
@@ -4800,8 +4807,9 @@ const APP_STYLES = `
           flex: none;
         }
         /* Aligne sur la premiere rangee de boutons, pas sur le milieu du bloc. */
-        /* La flamme a gauche, les trophees a DROITE sous la banniere. */
-        .hub-joueur { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+        /* La flamme puis les trophees, ensemble a GAUCHE sous la banniere
+           (demande du Commandant, 31/08 -- retour de l'ecartement). */
+        .hub-joueur { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .hub-pseudo {
           background: none; border: none; padding: 0; cursor: pointer; text-align: left;
           font: inherit;
