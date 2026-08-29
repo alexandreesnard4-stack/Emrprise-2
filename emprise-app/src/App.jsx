@@ -1959,7 +1959,7 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -1985,23 +1985,48 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
   if (monCamp && (compteAuProfil || partieHistoire)) {
     const victoire = winner === monCamp;
     const classee = trophyGain !== 0;
+    // L'ecart de score AFFICHE au joueur, assaini : un entier d'au moins 1,
+    // sinon nul -- et nul veut dire base SANS marge, jamais un ecart invente
+    // (fin forcee, vieil appelant). La marge est plafonnee : au-dela, l'ecart
+    // en dit plus sur la faiblesse d'en face que sur le talent du vainqueur.
+    const ecart = Number.isFinite(ecartScore) && ecartScore >= 1 ? Math.floor(ecartScore) : null;
+    const marge = ecart === null ? 0 : Math.min(ecart, PIECES_PARTIES.margePlafond);
     let montant;
+    let pieces;
+    let piecesDetail;
     if (victoire && classee) {
       // La ligue APRES la partie : celle ou le joueur vient d'arriver.
       const indexLigue = Math.max(0, LEAGUES.indexOf(getLeague(stats.trophies)));
       montant = XP_PARTIES.victoireClasseBase + XP_PARTIES.victoireClasseParLigue * indexLigue;
+      const base = PIECES_PARTIES.classe.baseVictoire + PIECES_PARTIES.classe.parLigue * indexLigue;
+      piecesDetail = { base, marge: PIECES_PARTIES.classe.parEcart * marge, prime: 0, histoire: 0 };
     } else if (victoire) {
       // L'Histoire est un combat de bot comme un autre : meme table, plus sa prime.
       const table = XP_PARTIES.victoireEcho;
       const duBot = table[difficulteEcho] != null ? table[difficulteEcho] : table.intermediaire;
       montant = duBot + (partieHistoire ? XP_PARTIES.bonusHistoire : 0);
+      const tableP = PIECES_PARTIES.echo.baseVictoire;
+      const base = tableP[difficulteEcho] != null ? tableP[difficulteEcho] : tableP.intermediaire;
+      piecesDetail = { base, marge: PIECES_PARTIES.echo.parEcart * marge, prime: 0,
+                       histoire: partieHistoire ? PIECES_PARTIES.bonusHistoire : 0 };
     }
-    else if (classee) montant = XP_PARTIES.defaiteClassee;
-    else montant = XP_PARTIES.defaite;
-    const bilan = await gagnerXp(montant);
+    else if (classee) {
+      montant = XP_PARTIES.defaiteClassee;
+      piecesDetail = { base: PIECES_PARTIES.classe.baseDefaite, marge: 0,
+                       prime: ecart === 1 ? PIECES_PARTIES.classe.primeDefaiteSerree : 0, histoire: 0 };
+    }
+    else {
+      montant = XP_PARTIES.defaite;
+      piecesDetail = { base: PIECES_PARTIES.echo.baseDefaite, marge: 0,
+                       prime: ecart === 1 ? PIECES_PARTIES.echo.primeDefaiteSerree : 0, histoire: 0 };
+    }
+    pieces = piecesDetail.base + piecesDetail.marge + piecesDetail.prime + piecesDetail.histoire;
+    const bilan = await gagnerXp(montant, pieces);
     // Pose APRES l'ecriture des stats : ce champ voyage vers l'ecran de fin par le
-    // setStats de l'appelant, mais ne se sauvegarde jamais.
-    stats.xpDePartie = bilan;
+    // setStats de l'appelant, mais ne se sauvegarde jamais. Le detail du versement
+    // (base, marge, prime, Histoire) part avec lui : l'ecran de fin doit dire
+    // POURQUOI 90 plutot que 45.
+    stats.xpDePartie = { ...bilan, piecesDetail };
     // ---------- La Flamme quotidienne ----------
     // Le MEME signal que l'XP classee (classee, soit trophyGain non nul), et la
     // porte du profil en plus : Histoire, Echos, Confluence, tournois solo et
@@ -2037,7 +2062,7 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
 // versement est impossible par construction, dernierPalierVerse est la seule source de
 // verite -- puis sauvegarde. Rend tout ce que l'ecran de fin veut dire : l'avant,
 // l'apres, et les gemmes versees.
-async function gagnerXp(montant) {
+async function gagnerXp(montant, piecesExplicites = null) {
   const p = await loadProgression();
   const gain = Math.max(0, Math.floor(montant || 0));
   const avant = niveauDepuisXp(p.xpTotal);
@@ -2048,9 +2073,13 @@ async function gagnerXp(montant) {
     gemmesVersees += palier === NIVEAU_MAX ? GEMMES_PALIERS.dernierPalier : GEMMES_PALIERS.parPalier;
     p.dernierPalierVerse = palier;
   }
-  // Les pieces suivent l'XP, ICI et nulle part ailleurs : parties, tournois et
-  // quetes passent tous par cette porte, les pieces suivent donc partout.
-  const piecesVersees = gain * PIECES_PAR_XP;
+  // Les pieces se versent ICI et nulle part ailleurs, mais chacun apporte son
+  // compte : une PARTIE arrive avec son bareme (PIECES_PARTIES, la marge de
+  // victoire, calcule dans recordGameStats) ; quetes et tournoi, sans montant
+  // explicite, suivent encore l'XP a deux pieces le point.
+  const piecesVersees = piecesExplicites !== null
+    ? Math.max(0, Math.floor(piecesExplicites))
+    : gain * PIECES_SUIVANT_XP;
   if (piecesVersees > 0) await crediterPieces(piecesVersees);
   if (gemmesVersees > 0) await crediterGemmes(gemmesVersees);
   await writeProgressionRaw(JSON.stringify(p));
@@ -2507,11 +2536,36 @@ const PACKS_GEMMES = [
 ];
 
 // ---------- Pieces ----------
-// Les pieces suivent l'XP : chaque point d'XP gagne verse PIECES_PAR_XP pieces.
-// A 2 depuis le 29/08 (demande du Commandant) : a 1, les deux nombres etaient
-// identiques partout et la ligne de fin ressemblait a un doublon d'affichage.
-// Une partie a 20 XP verse donc 40 pieces.
-const PIECES_PAR_XP = 2;
+// Les pieces DE PARTIE ne suivent plus l'XP : elles recompensent la maniere de
+// jouer, par la MARGE DE VICTOIRE. Bareme calibre sur 2500 parties du moteur
+// reel (outils-equilibrage/bareme.cjs) : l'ecart de score va de 1 a 15, jamais
+// pair (le point du premier joueur interdit l'egalite), 3,92 de moyenne, 33 %
+// des parties a 1 point. Les captures ne discriminent pas (10,4 contre 8,4),
+// elles ne paient donc rien.
+const PIECES_PARTIES = {
+  // La marge de victoire : chaque point d'ecart au score final paie, jusqu'a
+  // un plafond -- au-dela, l'ecart en dit plus sur la faiblesse d'en face
+  // que sur le talent du vainqueur. Valeurs calibrees sur 2500 parties.
+  margePlafond: 10,
+  classe: {
+    baseVictoire: 40,
+    parLigue: 20,          // x index de ligue : Bronze 0 -> Legende 4
+    parEcart: 5,
+    baseDefaite: 12,
+    primeDefaiteSerree: 8, // quand l'ecart vaut 1
+  },
+  echo: {
+    baseVictoire: { debutant: 8, intermediaire: 16, avance: 24, expert: 32 },
+    parEcart: 2,
+    baseDefaite: 8,
+    primeDefaiteSerree: 6,
+  },
+  bonusHistoire: 20,
+};
+// Quetes et tournoi en ligne, eux, suivent encore l'XP : deux pieces par point.
+// C'est l'ancien lien pieces-XP, conserve pour ces deux sources seulement (la
+// spec des pieces gele leur economie) -- les parties passent par le bareme.
+const PIECES_SUIVANT_XP = 2;
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
 // jamais l'inverse. Taux plat, affiche en toutes lettres au joueur.
 const PIECES_PAR_GEMME = 10;
@@ -6166,6 +6220,15 @@ const APP_STYLES = `
           animation: cer-xp-parait 0.5s ease-out 0.8s both;
         }
         .cer-flamme .piece-icone { width: 12px; height: 12px; }
+        /* Le detail du versement de pieces (base + marge + prime), sous la
+           ligne d'XP : discret, en fondu opacity seule comme ses voisines. */
+        .cer-pieces-detail {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-size: 11.5px; color: var(--muted);
+          animation: cer-xp-parait 0.5s ease-out 0.65s both;
+        }
+        .cer-pieces-detail .piece-icone { width: 11px; height: 11px; }
+        .reduced-motion .cer-pieces-detail { animation: none; }
         /* L'ordinal en simple lettre reduite : Cinzel n'a pas les exposants
            Unicode, qui retombaient dans la police de secours. */
         .cer-flamme-exp { font-size: 8px; line-height: 1; }
@@ -12802,7 +12865,11 @@ export default function Emprise() {
         // L'Histoire par son signal dedie (la porte du profil l'exclut), et la
         // difficulte du bot -- celle du chapitre en Histoire, du choix ailleurs.
         !!storyChapterKey && !testMode,
-        mode === "bot" ? botDifficulty : null
+        mode === "bot" ? botDifficulty : null,
+        // L'ecart de score AFFICHE au joueur (les memes blueScore/redScore que
+        // l'ecran), jamais recalcule. Une fin forcee (abandon, forfait) rend le
+        // plateau muet : pas d'ecart, la base se verse sans marge.
+        mode === "online" && vainqueurForce ? null : Math.abs(blueScore - redScore)
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
@@ -14959,7 +15026,7 @@ export default function Emprise() {
       <>
       <div className="cer-xp">
         {(b.gain > 0 || gemmes === 0) && (
-          <span className="cer-xp-gain">+{b.gain} XP · <span className="piece-icone" aria-hidden="true" />+{b.piecesVersees || b.gain * PIECES_PAR_XP}<span className="lecteur-seul"> pièces</span></span>
+          <span className="cer-xp-gain">+{b.gain} XP · <span className="piece-icone" aria-hidden="true" />+{b.piecesVersees || 0}<span className="lecteur-seul"> pièces</span></span>
         )}
         {b.apres.niveauJoueur > b.avant.niveauJoueur && (
           <span className="cer-xp-niveau">Niveau {b.apres.niveauJoueur}</span>
@@ -14968,6 +15035,18 @@ export default function Emprise() {
           <span className="cer-xp-gemmes"><span className="gemme-icone" aria-hidden="true" />+{gemmes}<span className="lecteur-seul"> gemmes</span></span>
         )}
       </div>
+      {/* Le detail du versement de pieces : le joueur voit POURQUOI il touche
+          90 plutot que 45. Tu la ligne quand il n'y a que la base : un nombre
+          seul sous le meme nombre ne dirait rien. Fondu en opacity seulement. */}
+      {b.piecesDetail && (b.piecesDetail.marge > 0 || b.piecesDetail.prime > 0 || b.piecesDetail.histoire > 0) && (
+        <div className="cer-pieces-detail">
+          <span className="piece-icone" aria-hidden="true" />{b.piecesDetail.base}
+          {b.piecesDetail.marge > 0 && <> + {b.piecesDetail.marge} de marge</>}
+          {b.piecesDetail.prime > 0 && <> + {b.piecesDetail.prime} de défaite serrée</>}
+          {b.piecesDetail.histoire > 0 && <> + {b.piecesDetail.histoire} d&apos;Histoire</>}
+          <span className="lecteur-seul"> pièces</span>
+        </div>
+      )}
       {/* La Flamme, SOUS la ligne d'XP : seulement la premiere partie classee du
           jour la porte. Fondu en opacity seule, comme le reste de l'ecran. */}
       {b.flamme && (
