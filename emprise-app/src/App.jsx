@@ -16166,7 +16166,8 @@ export default function Emprise() {
             {hubPage === "jouer" && (
               <section key="jouer" className={`hub-page hub-glisse-${hubSens}`} aria-label="Jouer">
                 <div className="landing-emblem"><span className="landing-line-single" /></div>
-                <h1 className="landing-title"><span className="landing-title-aura" aria-hidden="true">EMPRISE</span><span className="landing-title-or">EMPRISE</span></h1>
+                {/* Le titre EMPRISE a quitte le hub (demande du Commandant, 29/08) :
+                    il ne vit plus que sur l'ecran du nom. Le sous-titre reste. */}
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
                 <div className="league-badge">Le multijoueur arrive prochainement</div>
 
