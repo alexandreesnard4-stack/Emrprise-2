@@ -5486,12 +5486,17 @@ const APP_STYLES = `
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
-          /* Ce qui defile hors de l'ecran s'EVANOUIT au lieu d'etre tranche net : le
-             Commandant voyait le titre PLATEAUX coupe en deux contre le bandeau du hub.
-             Un masque en degrade fond les 26 premiers pixels et les 16 derniers ; le
-             transparent du masque cache, le noir montre. Prefixe -webkit pour iOS. */
-          -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 16px), transparent 100%);
-          mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 16px), transparent 100%);
+          /* La bande morte du haut, diagnostiquee (01/09) : le titre PLATEAUX
+             demarrait DANS la zone fondue du masque (fondu de 26 px), l'oeil
+             voyait des pixels laves et un titre a moitie fantome. Or le
+             chevauchement qui justifiait ce fondu du haut n'existe plus : le
+             bandeau du hub s'arrete 10 px AU-DESSUS du bord du defilement
+             depuis ses reamenagements. Le fondu du haut a donc vecu ; celui du
+             bas reste. padding-top 2 (4 herite de .hub-page avant) : le titre
+             commence net, a 14 px du bandeau. */
+          padding-top: 2px;
+          -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 16px), transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 16px), transparent 100%);
         }
         /* Bloc de titre resserre : le hub doit tenir sans defilement vertical. */
         .landing.hub .landing-title { font-size: clamp(26px, 8vw, 34px); }
@@ -5523,13 +5528,21 @@ const APP_STYLES = `
         }
         .boutique-sous {
           font-family: 'Spectral', Georgia, serif; font-style: italic;
-          font-size: 12px; color: var(--muted); margin: 0 0 10px;
+          font-size: 12px; color: var(--muted); margin: 0 0 6px;
         }
         /* Deux colonnes : a une seule, il fallait defiler pour comparer, et comparer est
            tout ce qu'on vient faire ici. */
         .boutique-grille {
           display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
           width: 100%; max-width: 340px;
+          /* 4 px sous chaque grille : avec le gap de 2 de la colonne et les
+             12 du titre suivant, l ecart carte-titre fait 18 px partout. */
+          margin-bottom: 4px;
+        }
+        /* Ecran large : la grille respire des 480 px -- 3 colonnes, 500 px.
+           En dessous, RIEN ne change, le telephone garde ses 2 colonnes. */
+        @media (min-width: 480px) {
+          .boutique-grille { max-width: 500px; grid-template-columns: repeat(3, 1fr); }
         }
         .boutique-carte {
           position: relative;
@@ -5563,8 +5576,10 @@ const APP_STYLES = `
           box-shadow: inset 0 2px 4px rgba(0,0,0,0.7);
         }
         /* Le deuxieme rayon respire, sinon les deux grilles se touchent et on lit une
-           seule liste de neuf articles au lieu de deux familles. */
-        .boutique-titre.second { margin-top: 20px; }
+           seule liste de neuf articles au lieu de deux familles. 12 (20 avant,
+           01/09) : le rythme se resserre, l ecart total carte-titre vise 18 px
+           avec le gap de la colonne et la marge des grilles. */
+        .boutique-titre.second { margin-top: 12px; }
         /* La pile de dos : deux cartes decalees, comme celle qu'on pose a cote de sa main.
            Le rapport 3/4 est celui d'une carte -- l'apercu ne doit pas mentir sur la forme
            non plus. */
