@@ -2612,9 +2612,8 @@ const TOURNOI_ENJEU = {
 // termine), echo (premiere victoire libre par difficulte), prestige (DOUBLE
 // prix pieces OU gemmes -- JAMAIS d'exclusivite gemmes, c'est une regle).
 // Les chemins d'images vivent ICI, en webp comprime (les originaux PNG de
-// 3 a 24 Mo dorment dans sources-images/bannieres-originaux). Trois visuels
-// manquent encore (pieces-nuee, histoire-gardiens, histoire-piques) : leur
-// chemin est pose par convention, la carte reste lisible sans le fichier.
+// 3 a 24 Mo dorment dans sources-images/bannieres-originaux). Les 24 visuels
+// sont livres et verifies a l'oeil, un par un.
 const BANNIERES = [
   { cle: "depart-nuit", nom: "Le Drap de Nuit", image: "/bannieres/depart-nuit.webp", source: "depart" },
   { cle: "depart-pierre", nom: "La Pierre Levée", image: "/bannieres/depart-pierre.webp", source: "depart" },
@@ -5940,23 +5939,8 @@ const APP_STYLES = `
         .reduced-motion .cer-xp-niveau, .reduced-motion .cer-xp-gemmes { animation: none; }
 
         /* ---------- La Flamme quotidienne ---------- */
-        /* A cote de la carte de niveau : la flamme au trait, les jours en Cinzel
-           dore. Eteinte (serie a zero) : trait gris, pas de nombre. JAMAIS
-           d'animation en boucle sur la flamme du hub. */
-        .hub-flamme {
-          background: none; border: none; padding: 0; cursor: pointer;
-          display: flex; flex-direction: column; align-items: center; gap: 1px;
-          color: var(--gold-bright); flex: none; font: inherit;
-          transition: transform .35s ease;
-        }
-        /* Le retour au toucher des voisins (transform seule, jamais de boucle). */
-        .hub-flamme:active { transform: scale(0.94); transition-duration: .1s; }
-        .hub-flamme-icone { width: 22px; height: 22px; }
-        .hub-flamme-jours {
-          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
-          line-height: 1; font-variant-numeric: tabular-nums;
-        }
-        .hub-flamme.eteinte { color: var(--muted); }
+        /* Elle ne se montre plus au hub (demande du Commandant, 29/08) : sa
+           seule fenetre est la ligne du profil, qui ouvre son panneau. */
         /* La ligne de fin de partie : fondu en opacity seule, apres les gemmes. */
         .cer-flamme {
           display: inline-flex; align-items: center; gap: 4px;
@@ -5984,10 +5968,12 @@ const APP_STYLES = `
         .flamme-palier-prix { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
         .flamme-palier .piece-icone { width: 14px; height: 14px; }
         .flamme-regle { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 6px 0 0; }
-        /* La ligne du profil : la serie du Classe sous les trois chiffres. */
+        /* La ligne du profil : la serie du Classe sous les trois chiffres.
+           C'est un BOUTON : le toucher ouvre le panneau de la Flamme. */
         .profil-flamme {
           display: flex; align-items: center; justify-content: center; gap: 6px;
           font-size: 12.5px; color: var(--gold-bright);
+          background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
         }
         .profil-flamme.eteinte { color: var(--muted); }
         .profil-flamme-icone { width: 16px; height: 16px; flex: none; }
@@ -11502,6 +11488,9 @@ export default function Emprise() {
   // l'extinction d'elle-meme), puis rafraichie apres chaque partie comptee.
   const [flamme, setFlamme] = useState(null);
   useEffect(() => { loadFlamme().then(setFlamme); }, []);
+  // Son panneau s'ouvre depuis la ligne du profil et se pose PAR-DESSUS lui :
+  // un etat a part, pour ne pas fermer le profil en l'ouvrant.
+  const [flammeOuverte, setFlammeOuverte] = useState(false);
   // La progression : l'XP totale, dont le niveau se recalcule toujours. Le bilan de la
   // DERNIERE partie voyage a part : l'ecran de fin le lit, et la partie suivante le
   // remplace ou l'efface d'elle-meme.
@@ -15680,26 +15669,8 @@ export default function Emprise() {
               >
                 <span className="hub-niveau-nombre" aria-hidden="true">{niveauDepuisXp(progression.xpTotal).niveauJoueur}</span>
               </span>
-              {/* La Flamme quotidienne, a cote de la carte de niveau : la flamme au
-                  trait et les jours en Cinzel dore. Eteinte : trait gris, pas de
-                  nombre. Le toucher ouvre le petit panneau qui dit la regle. */}
-              <button
-                className={`hub-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}
-                onClick={() => setActiveModal("flamme")}
-                aria-haspopup="dialog"
-                aria-label={!flamme ? "Flamme"
-                  : flamme.serie > 0
-                    ? `Flamme : ${flamme.serie} jour${flamme.serie > 1 ? "s" : ""}, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}`
-                    : `Flamme éteinte${flamme.record > 0 ? `, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}` : ""}`}
-                title="La Flamme"
-              >
-                <svg className="hub-flamme-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                </svg>
-                {flamme && flamme.serie > 0 && (
-                  <span className="hub-flamme-jours" aria-hidden="true">{flamme.serie}</span>
-                )}
-              </button>
+              {/* La Flamme ne se montre plus au hub -- demande du Commandant du
+                  29/08 : elle vit dans le profil, dont la ligne ouvre son panneau. */}
               <button
                 className="hub-trophees"
                 onClick={() => setActiveModal("pantheon")}
@@ -16632,9 +16603,15 @@ export default function Emprise() {
                     <div><b>{stats.tournoisGagnes || 0}</b><span>tournois</span></div>
                   </div>
                   {/* La serie du mode classe (la Flamme), sous les trois chiffres --
-                      demande du Commandant. Le record est un fait d'armes : il se
-                      lit ici aussi, meme flamme eteinte. */}
-                  <div className={`profil-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}>
+                      demande du Commandant, et SEUL endroit ou elle se montre (le
+                      hub ne la porte plus). Le toucher ouvre son panneau : la
+                      regle et les paliers, par-dessus le profil. */}
+                  <button
+                    className={`profil-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}
+                    onClick={() => setFlammeOuverte(true)}
+                    aria-haspopup="dialog"
+                    title="La Flamme"
+                  >
                     <svg className="profil-flamme-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
                     </svg>
@@ -16643,7 +16620,7 @@ export default function Emprise() {
                     ) : (
                       <>Série classée : éteinte{flamme && flamme.record > 0 ? <> · record {flamme.record} jour{flamme.record > 1 ? "s" : ""}</> : null}</>
                     )}
-                  </div>
+                  </button>
 
                   <div className="profil-section-titre">Le Commandant que vous êtes</div>
                   {profil.titres.length > 0 ? (
@@ -16879,8 +16856,8 @@ export default function Emprise() {
           {/* Serie en cours, record a vie, paliers de pieces -- et la regle dite
               sobrement, sans compte a rebours ni culpabilisation. RIEN a acheter
               ici : la Flamme ne se protege pas, ne se rachete pas. */}
-          {activeModal === "flamme" && (
-            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+          {flammeOuverte && (
+            <div className="info-overlay" onClick={() => setFlammeOuverte(false)}>
               <div className="info-panel settings-panel flamme-panel" onClick={(e) => e.stopPropagation()}>
                 <div className="info-panel-title">La Flamme</div>
                 <div className="flamme-etat">
@@ -16903,7 +16880,7 @@ export default function Emprise() {
                   ))}
                 </div>
                 <p className="flamme-regle">La Flamme grandit chaque jour où vous livrez un duel classé. Un jour sans partie classée l&apos;éteint.</p>
-                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+                <button className="reset-btn" onClick={() => setFlammeOuverte(false)}>Fermer</button>
               </div>
             </div>
           )}
