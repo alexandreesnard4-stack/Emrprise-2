@@ -5674,7 +5674,11 @@ const APP_STYLES = `
         .profil-fiche-code {
           font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
           font-size: 13px; letter-spacing: 0.1em; color: #b8832e;
+          display: inline-flex; align-items: center; gap: 6px;
         }
+        /* Copier et envoyer, en petit, a droite du numero. */
+        .profil-fiche-code .bouton-copier { width: 24px; height: 24px; border-radius: 7px; }
+        .profil-fiche-code .bouton-copier svg { width: 12px; height: 12px; }
         /* Sur SA fiche, le nom reste un bouton : on le change la ou on le lit. .profil-nom
            pese autant que .profil-fiche-pseudo, et sa taille l'emportait -- les deux fiches
            n'affichaient alors pas le meme nom a la meme taille. On accroche les deux
@@ -5687,7 +5691,6 @@ const APP_STYLES = `
         .profil-fiche-pseudo.profil-nom svg { flex: none; width: 13px; height: 13px; fill: var(--gold); }
         /* Le code se lit desormais dans la ligne d'identite : ce bloc ne garde que les
            deux gestes, copier et envoyer. */
-        .profil-fiche-partage { justify-content: center; margin-top: 10px; }
         .profil-fiche-arene {
           font-style: italic; font-size: 11px; color: #b99a5e; letter-spacing: 0.02em;
         }
@@ -16810,28 +16813,32 @@ export default function Emprise() {
                             <path d="M4 17.2V20h2.8L18 8.8 15.2 6 4 17.2zm16-9.6a.9.9 0 0 0 0-1.3l-2.3-2.3a.9.9 0 0 0-1.3 0l-1.5 1.5L17.7 9l1.5-1.4z" />
                           </svg>
                         </button>
-                        {monCodeAmi && <div className="profil-fiche-code">{codeAmiLisible(monCodeAmi)}</div>}
+                        {/* Copier et envoyer vivent a DROITE de l'identifiant --
+                            demande du Commandant. L'envoi ne se montre que la ou
+                            la feuille de partage du telephone existe (https). */}
+                        {monCodeAmi && (
+                          <div className="profil-fiche-code">
+                            {codeAmiLisible(monCodeAmi)}
+                            <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
+                                <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
+                              </svg>
+                            </button>
+                            {PARTAGE_NATIF && <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                              </svg>
+                            </button>}
+                          </div>
+                        )}
                         <div className="profil-fiche-arene">Arène {maLigue.name} · {stats.trophies || 0} trophées</div>
                       </div>
                     </div>
                   )}
 
-                  {/* L'identifiant se copie et s'envoie : c'est par lui qu'on vous ajoute. */}
-                  {monCodeAmi && (
-                    <div className="profil-identifiant profil-fiche-partage">
-                      <button className="bouton-copier" onClick={copierCodeAmi} aria-label="Copier l'identifiant" title="Copier l'identifiant">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
-                          <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
-                        </svg>
-                      </button>
-                      {PARTAGE_NATIF && <button className="bouton-copier" onClick={partagerCodeAmi} aria-label="Envoyer mon identifiant" title="Envoyer mon identifiant">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 12l16-8-3 8 3 8-16-8zm0 0h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-                        </svg>
-                      </button>}
-                    </div>
-                  )}
+                  {/* Le retour de la copie : les boutons vivent desormais sur la
+                      ligne de l'identifiant, seul le message reste ici. */}
                   <div className="code-copie">{codeAmiCopie ? "Identifiant copié" : ""}</div>
 
                   {/* Le niveau de Commandant, et sa jauge vers le suivant. Au plafond, le
