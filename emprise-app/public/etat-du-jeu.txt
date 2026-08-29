@@ -33,6 +33,7 @@ Tutoriel interactif, Mort Subite comprise.
 Deux monnaies : les pièces se gagnent en jouant, les gemmes sont la monnaie rare.
 Niveaux de Commandant de 1 à 50 : chaque partie comptée rapporte de l'XP.
 Les pièces de partie récompensent la manière de jouer : la marge de victoire au score final augmente le versement, jusqu'à un plafond, et une défaite d'un seul point garde une prime ; l'écran de fin détaille le montant.
+Une victoire en ligne par abandon ou forfait sur une partie à peine commencée verse des récompenses réduites, annoncées sur l'écran de fin ; les trophées restent pleins.
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
 Boutique : thèmes de plateau, dos de cartes et bannières de profil, payés en pièces.
 Bannières de prestige à double prix : en pièces ou en gemmes, au choix, jamais réservées aux gemmes.

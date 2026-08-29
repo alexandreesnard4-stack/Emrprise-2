@@ -2027,7 +2027,7 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -2074,14 +2074,23 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     if (victoire && classee) {
       // La ligue APRES la partie : celle ou le joueur vient d'arriver.
       const indexLigue = Math.max(0, LEAGUES.indexOf(getLeague(stats.trophies)));
-      montant = XP_PARTIES.victoireClasseBase + XP_PARTIES.victoireClasseParLigue * indexLigue;
+      // Partie ecourtee (fin forcee, plateau presque vide) : la moitie de la
+      // base, arrondie au superieur, SANS part de ligue. Les pieces, elles,
+      // passent par le meme bareme avec l'ecart nul transmis par l'appelant.
+      montant = partieEcourtee
+        ? Math.ceil(XP_PARTIES.victoireClasseBase / 2)
+        : XP_PARTIES.victoireClasseBase + XP_PARTIES.victoireClasseParLigue * indexLigue;
       const base = PIECES_PARTIES.classe.baseVictoire + PIECES_PARTIES.classe.parLigue * indexLigue;
       piecesDetail = { base, marge: PIECES_PARTIES.classe.parEcart * marge, prime: 0, histoire: 0 };
     } else if (victoire) {
       // L'Histoire est un combat de bot comme un autre : meme table, plus sa prime.
       const table = XP_PARTIES.victoireEcho;
       const duBot = table[difficulteEcho] != null ? table[difficulteEcho] : table.intermediaire;
-      montant = duBot + (partieHistoire ? XP_PARTIES.bonusHistoire : 0);
+      // Ecourtee (amicale en ligne seulement : le hors-ligne ne force jamais
+      // de fin) : la moitie de la base de la table, arrondie au superieur.
+      montant = partieEcourtee
+        ? Math.ceil(duBot / 2)
+        : duBot + (partieHistoire ? XP_PARTIES.bonusHistoire : 0);
       const tableP = PIECES_PARTIES.echo.baseVictoire;
       const base = tableP[difficulteEcho] != null ? tableP[difficulteEcho] : tableP.intermediaire;
       piecesDetail = { base, marge: PIECES_PARTIES.echo.parEcart * marge, prime: 0,
@@ -2102,8 +2111,8 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     // Pose APRES l'ecriture des stats : ce champ voyage vers l'ecran de fin par le
     // setStats de l'appelant, mais ne se sauvegarde jamais. Le detail du versement
     // (base, marge, prime, Histoire) part avec lui : l'ecran de fin doit dire
-    // POURQUOI 90 plutot que 45.
-    stats.xpDePartie = { ...bilan, piecesDetail };
+    // POURQUOI 90 plutot que 45. Et une victoire ecourtee le dit aussi.
+    stats.xpDePartie = { ...bilan, piecesDetail, partieEcourtee: partieEcourtee && victoire };
     // ---------- La Flamme quotidienne ----------
     // Le MEME signal que l'XP classee (classee, soit trophyGain non nul), et la
     // porte du profil en plus : Histoire, Echos, Confluence, tournois solo et
@@ -2643,6 +2652,15 @@ const PIECES_PARTIES = {
 // C'est l'ancien lien pieces-XP, conserve pour ces deux sources seulement (la
 // spec des pieces gele leur economie) -- les parties passent par le bareme.
 const PIECES_SUIVANT_XP = 2;
+// Anti-farm des victoires express (01/09) : une fin FORCEE en ligne (abandon
+// ou forfait, vainqueurForce pose) avec MOINS de ce nombre de cartes posees
+// sur le plateau partage est une partie ECOURTEE. Le vainqueur y touche la
+// moitie de la base d'XP (sans part de ligue) et le bareme des pieces nourri
+// d'un ecart nul (base seule) : deux comptes complices ne peuvent plus
+// enchainer abandon express et victoire express. Les trophees, eux, ne
+// bougent JAMAIS ici : quitter reste une defaite pleine au classement, sinon
+// quitter deviendrait une arme contre la victime.
+const PARTIE_ECOURTEE_COUPS = 4;
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
 // jamais l'inverse. Taux plat, affiche en toutes lettres au joueur.
 const PIECES_PAR_GEMME = 10;
@@ -6311,6 +6329,13 @@ const APP_STYLES = `
         }
         .cer-pieces-detail .piece-icone { width: 11px; height: 11px; }
         .reduced-motion .cer-pieces-detail { animation: none; }
+        /* La victoire ecourtee (fin forcee, plateau presque vide) : une ligne
+           sobre pres du detail des pieces, en fondu opacity seule. */
+        .cer-ecourtee {
+          font-size: 11.5px; color: var(--muted);
+          animation: cer-xp-parait 0.5s ease-out 0.65s both;
+        }
+        .reduced-motion .cer-ecourtee { animation: none; }
         /* L'ordinal en simple lettre reduite : Cinzel n'a pas les exposants
            Unicode, qui retombaient dans la police de secours. */
         .cer-flamme-exp { font-size: 8px; line-height: 1; }
@@ -12951,6 +12976,14 @@ export default function Emprise() {
         });
       }
       const comboKeys = compteAuProfil ? [...suivi.reussis] : [];
+      // La partie ECOURTEE se decide ICI, sur l'etat PARTAGE : une fin forcee
+      // en ligne (vainqueurForce, abandon ou forfait) avec moins de
+      // PARTIE_ECOURTEE_COUPS cartes posees sur le plateau -- les cases non
+      // nulles, derivees du document Firestore, donc identiques sur les deux
+      // appareils. Jamais un compteur local.
+      const finForceeEnLigne = mode === "online" && !!vainqueurForce;
+      const cartesPosees = board.filter(Boolean).length;
+      const partieEcourtee = finForceeEnLigne && cartesPosees < PARTIE_ECOURTEE_COUPS;
       recordGameStats(
         winner, orderKeys, trophyGain, comboKeys, compteAuProfil, monCampCombos,
         // L'Histoire par son signal dedie (la porte du profil l'exclut), et la
@@ -12958,11 +12991,14 @@ export default function Emprise() {
         !!storyChapterKey && !testMode,
         mode === "bot" ? botDifficulty : null,
         // L'ecart de score AFFICHE au joueur (les memes blueScore/redScore que
-        // l'ecran), jamais recalcule. Une fin forcee (abandon, forfait) rend le
-        // plateau muet : pas d'ecart, la base se verse sans marge.
-        mode === "online" && vainqueurForce ? null : Math.abs(blueScore - redScore),
+        // l'ecran), jamais recalcule. Une fin forcee ECOURTEE transmet 0 --
+        // l'ecart d'un plateau presque vide ne mesure rien, la base se verse
+        // seule ; une fin forcee sur partie PLEINE (4 cartes ou plus) garde
+        // sa marge reelle au moment de la fin.
+        partieEcourtee ? 0 : Math.abs(blueScore - redScore),
         // MES deux Ordres, pour le tally des paires (titre L Alchimiste).
-        [...mesOrdresDuJeu()]
+        [...mesOrdresDuJeu()],
+        partieEcourtee
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
@@ -15139,6 +15175,11 @@ export default function Emprise() {
           {b.piecesDetail.histoire > 0 && <> + {b.piecesDetail.histoire} d&apos;Histoire</>}
           <span className="lecteur-seul"> pièces</span>
         </div>
+      )}
+      {/* La victoire ecourtee dit pourquoi le butin est reduit. Deux-points et
+          non tiret cadratin : le Commandant n'en veut aucun en fin de partie. */}
+      {b.partieEcourtee && (
+        <div className="cer-ecourtee">Partie écourtée : récompenses réduites</div>
       )}
       {/* La Flamme, SOUS la ligne d'XP : seulement la premiere partie classee du
           jour la porte. Fondu en opacity seule, comme le reste de l'ecran. */}
