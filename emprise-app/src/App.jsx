@@ -6052,13 +6052,15 @@ const APP_STYLES = `
           text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
         /* La meme carte, en grand, au profil -- a gauche de la ligne de niveau. */
+        /* 40 x 55 (53 x 72 avant) : depuis le rognage de l'image, l'art
+           remplit la boite -- reduite a la demande du Commandant. */
         .profil-niveau-carte {
-          width: 53px; height: 72px; flex: none;
+          width: 40px; height: 55px; flex: none;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
         .profil-niveau-nombre {
-          font-family: 'Cinzel', serif; font-size: 21px; font-weight: 700;
+          font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
           color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center;
           text-shadow: 0 1px 4px rgba(0,0,0,0.9);
@@ -6067,8 +6069,8 @@ const APP_STYLES = `
            reprend l'ancienne colonne, la barre et ses textes n'ont pas bouge. */
         .profil-xp { width: 100%; display: flex; align-items: center; gap: 10px; margin: 2px 0 4px; }
         .profil-xp-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-        .profil-xp-ligne { display: flex; align-items: baseline; justify-content: space-between; }
-        .profil-xp-niveau { font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #f0eaf8; }
+        /* Sans le libelle Niveau N, la mention d'essai reste seule a droite. */
+        .profil-xp-ligne { display: flex; align-items: baseline; justify-content: flex-end; }
         .profil-xp-essai { font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 10px; color: var(--muted); }
         /* La jauge ne s'anime jamais en continu : elle est un etat, pas un spectacle. */
         .profil-xp-jauge {
@@ -16878,8 +16880,10 @@ export default function Emprise() {
                           <span className="profil-niveau-nombre" aria-hidden="true">{nx.niveauJoueur}</span>
                         </span>
                         <div className="profil-xp-corps">
+                        {/* Le libelle Niveau N a vecu (demande du Commandant,
+                            01/09) : la carte le dit deja, au chiffre comme au
+                            lecteur d'ecran. */}
                         <div className="profil-xp-ligne">
-                          <span className="profil-xp-niveau">{nx.xpPourSuivant === null ? "Niveau maximum" : `Niveau ${nx.niveauJoueur}`}</span>
                           <span className="profil-xp-essai">progression d&apos;essai</span>
                         </div>
                         {nx.xpPourSuivant !== null ? (
