@@ -4870,6 +4870,11 @@ const APP_STYLES = `
         .hub-haut-rang {
           display: grid; grid-template-columns: repeat(2, 48px); gap: 12px;
           justify-items: end;
+          /* Remontee de la hauteur de la rangee flamme/trophees plus un gap
+             (30 + 12) : la droite de cette rangee est vide, la grille vient
+             se caler juste sous la pastille des gemmes -- demande du
+             Commandant, 31/08. */
+          margin-top: -42px;
         }
         .hub-haut-rang .hub-amis { grid-column: 2; }
         /* Le solde de gemmes, sous les portes du coin. La meme largeur que les boutons
