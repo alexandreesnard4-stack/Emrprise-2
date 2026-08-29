@@ -4868,7 +4868,7 @@ const APP_STYLES = `
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
           color: var(--gold-bright);
         }
-        /* Son +, dore comme elle : il mene au comptoir Transformer de la Boutique. */
+        /* Son +, dore comme elle : il mene au comptoir du Changeur, a la Boutique. */
         .hub-pieces .hub-gemmes-plus {
           background: linear-gradient(180deg, #f0dcae, #cfa452);
           color: #2a1c08;
@@ -6095,14 +6095,22 @@ const APP_STYLES = `
            l'ombre portee des packs -- ces images portent deja la leur. */
         .conversion-image { width: 86%; height: auto; aspect-ratio: 1 / 1; object-fit: contain; }
         .conversion-carte.eteinte { opacity: 0.45; cursor: default; }
-        .conversion-de, .conversion-vers {
-          display: inline-flex; align-items: center; gap: 4px;
-          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
-          font-variant-numeric: tabular-nums;
+        /* Maquette C du Changeur : le recu (les pieces) en heros dore, la
+           depense (les gemmes) en pilule amethyste MUETTE dessous -- aucun
+           mot, l'etiquette du bouton dit le contre en toutes lettres. */
+        .conversion-recu {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700;
+          color: var(--gold-bright); font-variant-numeric: tabular-nums;
         }
-        .conversion-de { color: #d9c2f5; }
-        .conversion-vers { color: var(--gold-bright); }
-        .conversion-fleche { color: var(--muted); font-size: 12px; }
+        .conversion-recu .piece-icone { width: 14px; height: 14px; }
+        .conversion-pilule {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 0.1em; font-weight: 700;
+          color: #f0e6ff; background: rgba(138, 99, 201, 0.28);
+          border: 1px solid rgba(201, 160, 240, 0.5); border-radius: 999px; padding: 2px 8px;
+        }
+        .conversion-pilule .gemme-icone { width: 11px; height: 11px; }
         .boutique-prix {
           display: inline-flex; align-items: center; gap: 5px;
           font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: #c9a0f0;
@@ -11900,7 +11908,7 @@ export default function Emprise() {
   const HUB_ORDRE_PAGES = ["boutique", "jouer", "ordres"];
   // Le tresor du hub demande a voir un rayon precis de la Boutique : l'onglet
   // s'ouvre d'abord, le defilement suit une fois la page montee, vers le titre
-  // que porte le drapeau ("Gemmes" ou "Transformer"). Le drapeau se consomme --
+  // que porte le drapeau ("Gemmes" ou "Le Changeur"). Le drapeau se consomme --
   // ouvrir la Boutique par l'onglet du bas, ensuite, repart du haut comme toujours.
   const versBoutiqueRef = useRef(null);
   useEffect(() => {
@@ -15807,14 +15815,14 @@ export default function Emprise() {
             </div>
             <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
             {/* Le tresor, en deux pastilles cote a cote et chacune son + : les pieces
-                a gauche menent au comptoir Transformer (le seul chemin vers des pieces
+                a gauche menent au comptoir du Changeur (le seul chemin vers des pieces
                 hors du jeu), les gemmes a droite menent a leurs etals. Il s'affiche
                 sur TOUTES les pages du hub, Ordres comprise -- demande du Commandant ;
                 les portes du coin, elles, laissent la page Ordres respirer. */}
             <span className="hub-tresor">
             <button
               className="hub-gemmes hub-pieces"
-              onClick={() => { versBoutiqueRef.current = "Transformer"; allerPageHub("boutique"); }}
+              onClick={() => { versBoutiqueRef.current = "Le Changeur"; allerPageHub("boutique"); }}
               aria-label={`${bourse.pieces} pièces, transformer des gemmes en pièces`}
               title="Transformer des gemmes en pièces"
             >
@@ -16122,8 +16130,8 @@ export default function Emprise() {
                   {/* La transformation, juste sous le rayon des gemmes : on vient d'en
                       acquerir, voici ce qu'elles deviennent. Sens unique, dit en toutes
                       lettres -- rien, nulle part, ne refait le chemin inverse. */}
-                  <h2 className="boutique-titre second">Transformer</h2>
-                  <p className="boutique-sous">1 gemme devient {PIECES_PAR_GEMME} pièces. L&apos;inverse est impossible : les pièces se gagnent en jouant.</p>
+                  <h2 className="boutique-titre second">Le Changeur</h2>
+                  <p className="boutique-sous">Le Changeur prend vos gemmes et rend des pièces : 1 gemme devient {PIECES_PAR_GEMME} pièces. Jamais l&apos;inverse.</p>
                   <div className="boutique-grille conversion-grille">
                     {CONVERSIONS.map((c) => {
                       const g = c.gemmes;
@@ -16134,14 +16142,16 @@ export default function Emprise() {
                           className={`boutique-carte conversion-carte ${assez ? "" : "eteinte"}`}
                           aria-disabled={!assez}
                           onClick={assez ? () => setConversionEnCours(g) : undefined}
-                          aria-label={`Transformer ${g} gemmes en ${g * PIECES_PAR_GEMME} pièces${assez ? "" : ", solde insuffisant"}`}
+                          aria-label={`Recevoir ${g * PIECES_PAR_GEMME} pièces contre ${g} gemmes${assez ? "" : ", solde insuffisant"}`}
                         >
                           {/* Le visuel du palier, meme traitement que les packs :
                               decoratif, dimensions posees, le texte dit deja tout. */}
                           <img className="conversion-image" src={c.image} alt="" aria-hidden="true" width="512" height="512" loading="lazy" />
-                          <span className="conversion-de"><span className="gemme-icone" aria-hidden="true" />{g}</span>
-                          <span className="conversion-fleche" aria-hidden="true">→</span>
-                          <span className="conversion-vers"><span className="piece-icone" aria-hidden="true" />{g * PIECES_PAR_GEMME}</span>
+                          {/* Maquette C : le RECU en heros, la depense en pilule
+                              muette dessous -- le contre a ete retire a dessein,
+                              c'est l'etiquette du bouton qui le dit en clair. */}
+                          <span className="conversion-recu" aria-hidden="true"><span className="piece-icone" aria-hidden="true" />{g * PIECES_PAR_GEMME}</span>
+                          <span className="conversion-pilule" aria-hidden="true"><span className="gemme-icone" aria-hidden="true" />{g}</span>
                         </button>
                       );
                     })}
