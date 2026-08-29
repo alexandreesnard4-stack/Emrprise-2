@@ -4890,6 +4890,19 @@ const APP_STYLES = `
            masque de la page : sans cette marge, le titre arrivait pile dans l'estompe. */
         .boutique-titre { scroll-margin-top: 34px; }
         /* ---------- Les bannieres de profil ---------- */
+        /* La mini-banniere du hub (maquette A) : un rectangle-bouton au coin
+           haut-gauche, l'image equipee en cover, fond sombre en repli.
+           AUCUNE animation ici. */
+        .hub-banniere {
+          width: 160px; height: 44px; border-radius: 9px;
+          border: 1px solid rgba(203, 164, 86, 0.6); overflow: hidden;
+          padding: 0; cursor: pointer; flex: none;
+          background: linear-gradient(160deg, #241c32, #14101d);
+        }
+        .hub-banniere-image {
+          display: block; width: 100%; height: 100%;
+          background-size: cover; background-position: center;
+        }
         /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
            Toutes les images en cover, dimensions posees (pas de saut), et un
            voile sombre statique quand du texte se pose dessus. */
@@ -15764,6 +15777,28 @@ export default function Emprise() {
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
             <div className="hub-joueur-colonne">
+            {/* La mini-banniere du coin (maquette A) : la banniere equipee en
+                petit rectangle-bouton, le toucher ouvre LA selection existante
+                (celle du profil, rien de duplique). Fond sombre en repli --
+                jamais d'image cassee. L'identite vit juste dessous. */}
+            {(() => {
+              const equipee = banniereDeCle(bourse.banniereEquipee);
+              return (
+                <button
+                  className="hub-banniere"
+                  onClick={() => setSelectionBanniere(true)}
+                  aria-haspopup="dialog"
+                  aria-label={equipee
+                    ? `Bannière équipée : ${equipee.nom}. Toucher pour changer.`
+                    : "Bannière. Toucher pour changer."}
+                  title="Changer de bannière"
+                >
+                  {equipee && (
+                    <span className="hub-banniere-image" style={{ backgroundImage: `url("${equipee.image}")` }} aria-hidden="true" />
+                  )}
+                </button>
+              );
+            })()}
             <div className="hub-joueur">
               {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
                   Il reste en dur pour l'instant, faute de comptes nommes. */}
