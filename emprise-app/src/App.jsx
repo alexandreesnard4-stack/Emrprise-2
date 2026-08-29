@@ -4807,12 +4807,13 @@ const APP_STYLES = `
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         /* Le compteur est desormais un bouton : il ouvre le Pantheon. */
-        /* La flamme et les trophees portent la MEME pilule : hauteur, padding,
-           rayon et gap identiques -- la flamme, meme eteinte, garde la sienne. */
+        /* La flamme et les trophees, jumelles et NUES : plus de fond ni de
+           bordure (demande du Commandant, 30/08) -- meme hauteur, meme gap,
+           alignees sur la marge de la banniere. */
         .hub-flamme, .hub-trophees {
           display: inline-flex; align-items: center; gap: 5px;
-          height: 30px; padding: 0 10px; border-radius: 999px; box-sizing: border-box;
-          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
+          height: 30px; padding: 0; box-sizing: border-box;
+          background: none; border: none;
           font: inherit; cursor: pointer;
         }
         .hub-trophees { transition: transform .12s ease-out, border-color .2s; }
