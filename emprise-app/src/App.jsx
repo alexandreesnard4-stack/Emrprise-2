@@ -4890,19 +4890,48 @@ const APP_STYLES = `
            masque de la page : sans cette marge, le titre arrivait pile dans l'estompe. */
         .boutique-titre { scroll-margin-top: 34px; }
         /* ---------- Les bannieres de profil ---------- */
-        /* La mini-banniere du hub (maquette A) : un rectangle-bouton au coin
-           haut-gauche, l'image equipee en cover, fond sombre en repli.
-           AUCUNE animation ici. */
+        /* La mini-banniere du hub (maquette A, v2) : le rectangle-bouton porte
+           le pseudo sur un voile statique, et la carte de niveau chevauche son
+           bord gauche en debordant vers le bas. L'overflow cache vit sur
+           l'IMAGE et le voile, jamais sur le groupe : le debord de la carte
+           doit se voir. Fond sombre en repli, AUCUNE animation ici. */
+        .hub-banniere-groupe { position: relative; flex: none; }
         .hub-banniere {
-          width: 160px; height: 44px; border-radius: 9px;
-          border: 1px solid rgba(203, 164, 86, 0.6); overflow: hidden;
-          padding: 0; cursor: pointer; flex: none;
+          position: relative; display: block;
+          width: min(212px, calc(100vw - 190px)); height: 48px;
+          border-radius: 9px; border: 1px solid rgba(203, 164, 86, 0.6);
+          padding: 0; cursor: pointer;
           background: linear-gradient(160deg, #241c32, #14101d);
         }
-        .hub-banniere-image {
-          display: block; width: 100%; height: 100%;
-          background-size: cover; background-position: center;
+        .hub-banniere-image, .hub-banniere-voile {
+          position: absolute; inset: 0; border-radius: 8px; overflow: hidden;
         }
+        .hub-banniere-image { background-size: cover; background-position: center; }
+        .hub-banniere-voile {
+          background: linear-gradient(90deg, rgba(8,6,14,0.72), rgba(8,6,14,0.2) 55%, transparent);
+        }
+        /* Le pseudo SUR la banniere, cale sur la moitie basse, a droite de la
+           carte. Adaptatif : 14 px jusqu'a 10 caracteres, 11,5 px au-dela --
+           le pseudo maximal (14 caracteres) tient sans troncature. */
+        .hub-banniere-pseudo {
+          position: absolute; left: 48px; bottom: 5px;
+          font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
+          font-size: 14px; color: var(--bone); white-space: nowrap;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        }
+        .hub-banniere-pseudo.long { font-size: 11.5px; }
+        /* La carte existante, reduite et posee par-dessus : 8 px du bord, un
+           tiers dehors en bas. Ombres STATIQUES (un drop-shadow ne s'anime
+           jamais ici) pour la detacher de l'image ; sa bordure doree est celle
+           de son propre cadre. Elle devient la porte du profil. */
+        .hub-niveau.hub-niveau-sur-banniere {
+          position: absolute; left: 8px; bottom: -15px; z-index: 1;
+          width: 32px; height: 44px; border: none; padding: 0; cursor: pointer;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.65)) drop-shadow(0 0 3px rgba(203,164,86,0.55));
+        }
+        .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 12px; }
+        /* La rangee du dessous (flamme, trophees) laisse passer le debord. */
+        .hub-joueur-decale { margin-left: 48px; }
         /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
            Toutes les images en cover, dimensions posees (pas de saut), et un
            voile sombre statique quand du texte se pose dessus. */
@@ -6000,8 +6029,22 @@ const APP_STYLES = `
         .reduced-motion .cer-xp-niveau, .reduced-motion .cer-xp-gemmes { animation: none; }
 
         /* ---------- La Flamme quotidienne ---------- */
-        /* Elle ne se montre plus au hub (demande du Commandant, 29/08) : sa
-           seule fenetre est la ligne du profil, qui ouvre son panneau. */
+        /* Revenue au hub par la maquette A v2 (qui annule son retrait de la
+           veille) : la flamme vivante en petit, les jours en Cinzel, sous la
+           mini-banniere. Le profil garde sa ligne et le panneau. */
+        .hub-flamme {
+          background: none; border: none; padding: 0; cursor: pointer;
+          display: flex; flex-direction: column; align-items: center; gap: 1px;
+          color: var(--gold-bright); flex: none; font: inherit;
+          transition: transform .35s ease;
+        }
+        .hub-flamme:active { transform: scale(0.94); transition-duration: .1s; }
+        .hub-flamme-icone { width: 22px; height: 22px; }
+        .hub-flamme-jours {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          line-height: 1; font-variant-numeric: tabular-nums;
+        }
+        .hub-flamme.eteinte { color: var(--muted); }
         /* La flamme VIVANTE (correctif du 29/08, qui LEVE l'ancienne consigne
            sans boucle) : trois couches pleines sous un clipPath statique, et
            un vacillement en transform/opacity SEULEMENT -- jamais box-shadow,
@@ -15777,49 +15820,68 @@ export default function Emprise() {
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
           <header className="hub-haut">
             <div className="hub-joueur-colonne">
-            {/* La mini-banniere du coin (maquette A) : la banniere equipee en
-                petit rectangle-bouton, le toucher ouvre LA selection existante
-                (celle du profil, rien de duplique). Fond sombre en repli --
-                jamais d'image cassee. L'identite vit juste dessous. */}
+            {/* La mini-banniere du coin (maquette A, v2) : la banniere equipee en
+                rectangle-bouton, le PSEUDO ecrit dessus (voile statique cote
+                gauche pour la lisibilite, taille adaptative jusqu'a 14
+                caracteres) et la carte de niveau qui chevauche son bord gauche
+                en debordant vers le bas. Le toucher de la banniere ouvre LA
+                selection existante ; la carte devient la porte du profil -- le
+                pseudo, decoratif sur l'image, ne peut plus l'etre. Fond sombre
+                en repli : jamais d'image cassee. */}
             {(() => {
               const equipee = banniereDeCle(bourse.banniereEquipee);
+              const niveauJoueur = niveauDepuisXp(progression.xpTotal).niveauJoueur;
               return (
-                <button
-                  className="hub-banniere"
-                  onClick={() => setSelectionBanniere(true)}
-                  aria-haspopup="dialog"
-                  aria-label={equipee
-                    ? `Bannière équipée : ${equipee.nom}. Toucher pour changer.`
-                    : "Bannière. Toucher pour changer."}
-                  title="Changer de bannière"
-                >
-                  {equipee && (
-                    <span className="hub-banniere-image" style={{ backgroundImage: `url("${equipee.image}")` }} aria-hidden="true" />
-                  )}
-                </button>
+                <div className="hub-banniere-groupe">
+                  <button
+                    className="hub-banniere"
+                    onClick={() => setSelectionBanniere(true)}
+                    aria-haspopup="dialog"
+                    aria-label={`${pseudo}, niveau ${niveauJoueur}, bannière équipée : ${equipee ? equipee.nom : "aucune"}. Toucher pour changer de bannière.`}
+                    title="Changer de bannière"
+                  >
+                    {equipee && (
+                      <span className="hub-banniere-image" style={{ backgroundImage: `url("${equipee.image}")` }} aria-hidden="true" />
+                    )}
+                    <span className="hub-banniere-voile" aria-hidden="true" />
+                    <span className={`hub-banniere-pseudo ${pseudo && pseudo.length > 10 ? "long" : ""}`} aria-hidden="true">{pseudo}</span>
+                  </button>
+                  <button
+                    className="hub-niveau hub-niveau-sur-banniere"
+                    onClick={() => setActiveModal("profil")}
+                    aria-haspopup="dialog"
+                    aria-label={`Voir mon profil. Niveau ${niveauJoueur}.`}
+                    title="Voir mon profil"
+                  >
+                    <span className="hub-niveau-nombre" aria-hidden="true">{niveauJoueur}</span>
+                  </button>
+                </div>
               );
             })()}
-            <div className="hub-joueur">
-              {/* Le pseudo est la porte du profil : on y lit le genre de joueur qu'on est.
-                  Il reste en dur pour l'instant, faute de comptes nommes. */}
-              <button className="hub-pseudo" onClick={() => setActiveModal("profil")} aria-haspopup="dialog" title="Voir mon profil">
-                {pseudo}
-                {titrePrincipal(stats) && <span className="hub-pseudo-titre">{titrePrincipal(stats)}</span>}
-              </button>
-              {/* Le niveau de Commandant : pure fonction du total d'XP, jamais stocke.
-                  Une vignette en forme de carte, le nombre au centre -- demande du
-                  Commandant. Le lecteur d'ecran, lui, entend « Niveau N » en toutes
-                  lettres. */}
-              <span
-                className="hub-niveau"
-                role="img"
-                aria-label={`Niveau ${niveauDepuisXp(progression.xpTotal).niveauJoueur}`}
-                title={`Niveau ${niveauDepuisXp(progression.xpTotal).niveauJoueur}`}
+            <div className="hub-joueur hub-joueur-decale">
+              {/* La Flamme REVIENT au hub -- maquette A v2 du Commandant, qui
+                  annule son retrait de la veille : la vivante, en petit, et le
+                  toucher ouvre toujours son panneau. */}
+              <button
+                className={`hub-flamme ${flamme && flamme.serie > 0 ? "" : "eteinte"}`}
+                onClick={() => setFlammeOuverte(true)}
+                aria-haspopup="dialog"
+                aria-label={!flamme ? "Flamme"
+                  : flamme.serie > 0
+                    ? `Flamme : ${flamme.serie} jour${flamme.serie > 1 ? "s" : ""}, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}`
+                    : `Flamme éteinte${flamme.record > 0 ? `, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}` : ""}`}
+                title="La Flamme"
               >
-                <span className="hub-niveau-nombre" aria-hidden="true">{niveauDepuisXp(progression.xpTotal).niveauJoueur}</span>
-              </span>
-              {/* La Flamme ne se montre plus au hub -- demande du Commandant du
-                  29/08 : elle vit dans le profil, dont la ligne ouvre son panneau. */}
+                <FlammeVivante
+                  allumee={!!(flamme && flamme.serie > 0)}
+                  className="hub-flamme-icone"
+                  remplissage={flammeRemplissage}
+                  onRempli={() => setFlammeRemplissage(false)}
+                />
+                {flamme && flamme.serie > 0 && (
+                  <span className="hub-flamme-jours" aria-hidden="true">{flamme.serie}</span>
+                )}
+              </button>
               <button
                 className="hub-trophees"
                 onClick={() => setActiveModal("pantheon")}

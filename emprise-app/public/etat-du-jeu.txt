@@ -50,7 +50,7 @@ Le médaillon d'une quête fraîchement accomplie se retourne à l'ouverture de 
 Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
-Hub : mini-bannière équipée en coin (un toucher pour en changer), carte de niveau près du pseudo, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
+Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher la bannière pour en changer, la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
 Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie.
