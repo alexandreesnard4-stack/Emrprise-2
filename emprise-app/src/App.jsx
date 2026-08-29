@@ -4783,8 +4783,10 @@ const APP_STYLES = `
         }
         .hub-haut {
           width: 100%; box-sizing: border-box;
-          display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
-          padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+          /* Trois rangees empilees, UN seul rythme vertical (12 px), et la meme
+             marge laterale (16 px) portee par le conteneur, jamais les enfants. */
+          display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+          padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
           /* Ce voile protege le pseudo et les icones, et il est ecrit du temps ou le fond
              etait un aplat sombre : a 0,92 il ne coutait rien. Sur un ciel, il tombe pile
              sur la bande de nuages -- la seule partie de l'image ou il y a quelque chose a
@@ -4795,7 +4797,7 @@ const APP_STYLES = `
           flex: none;
         }
         /* Aligne sur la premiere rangee de boutons, pas sur le milieu du bloc. */
-        .hub-joueur { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 48px; }
+        .hub-joueur { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .hub-pseudo {
           background: none; border: none; padding: 0; cursor: pointer; text-align: left;
           font: inherit;
@@ -4805,13 +4807,15 @@ const APP_STYLES = `
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         /* Le compteur est desormais un bouton : il ouvre le Pantheon. */
-        .hub-trophees {
+        /* La flamme et les trophees portent la MEME pilule : hauteur, padding,
+           rayon et gap identiques -- la flamme, meme eteinte, garde la sienne. */
+        .hub-flamme, .hub-trophees {
           display: inline-flex; align-items: center; gap: 5px;
-          padding: 3px 9px 3px 6px; border-radius: 999px;
+          height: 30px; padding: 0 10px; border-radius: 999px; box-sizing: border-box;
           background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
           font: inherit; cursor: pointer;
-          transition: transform .12s ease-out, border-color .2s;
         }
+        .hub-trophees { transition: transform .12s ease-out, border-color .2s; }
         .hub-trophees:hover { border-color: var(--gold); }
         .hub-trophees:active { transform: scale(0.96); }
         /* La coupe est une illustration detouree : plus haute que large, on ne la rogne
@@ -4826,7 +4830,7 @@ const APP_STYLES = `
         /* Deux rangs : l historique et les reglages en haut, les amis dessous, cales a
            droite pour tomber sous le rouage. L ecart de 10 px entre les rangs laisse a la
            pastille la place de deborder par le haut sans toucher le bouton du dessus. */
-        .hub-haut-boutons { animation: hub-boutons-reviennent 0.26s ease-out both; }
+        .hub-haut-rang { animation: hub-boutons-reviennent 0.26s ease-out both; }
         /* Fondu SEUL, sans glissement. Le translateY(-6px) laissait les trois boutons
            flottant 6 px au-dessus de leur place chaque fois que l animation ne se posait
            pas : onglet en arriere-plan, animations bridees par le systeme, remontage par
@@ -4838,17 +4842,26 @@ const APP_STYLES = `
           to { opacity: 1; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .hub-haut-boutons { animation: none; }
+          .hub-haut-rang { animation: none; }
         }
-        .hub-haut-boutons {
-          display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none;
+        /* Rangee 3 : le parchemin sur la marge gauche, la grille des portes sur
+           la droite -- 2 colonnes regulieres, memes tuiles, memes ecarts, plus
+           d'escalier. Les amis prennent la case droite de la seconde ligne. */
+        .hub-portes { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .hub-haut-rang {
+          display: grid; grid-template-columns: repeat(2, 48px); gap: 12px;
+          justify-items: end;
         }
-        .hub-haut-rang { display: flex; gap: 12px; }
+        .hub-haut-rang .hub-amis { grid-column: 2; }
         /* Le solde de gemmes, sous les portes du coin. La meme largeur que les boutons
            au-dessus : la colonne reste une colonne. Teinte amethyste, comme tout ce qui
            touche aux gemmes -- le dore reste aux pieces et aux trophees. */
         .hub-gemmes {
-          align-self: stretch; padding: 4px 0 5px; flex: none;
+          /* La MEME pastille pour les deux monnaies : hauteur fixe de la rangee
+             (52 px, comme la banniere), largeur minimale commune, contenu
+             centre -- icone, valeur, bouton + identiques des deux cotes. */
+          height: 52px; min-width: 88px; box-sizing: border-box;
+          padding: 0 10px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
           background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
           border-radius: 10px; cursor: pointer;
@@ -4862,8 +4875,9 @@ const APP_STYLES = `
            jamais les deux melangees. */
         /* La meme bande de hauteur que la rangee du joueur en face (86 px, la
            carte de niveau) : pseudo et pastilles se centrent sur la meme ligne. */
-        .hub-tresor { display: flex; gap: 6px; align-self: stretch; align-items: center; min-height: 86px; }
-        .hub-tresor .hub-gemmes { align-self: auto; flex: 1; padding-left: 7px; padding-right: 7px; }
+        /* Rangee 1 : la banniere (souple) et les deux pastilles (fixes) sur la
+           meme ligne, meme hauteur, meme centre, un gap constant. */
+        .hub-tresor { display: flex; gap: 8px; align-items: center; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
           color: var(--gold-bright);
@@ -4895,12 +4909,12 @@ const APP_STYLES = `
            bord gauche en debordant vers le bas. L'overflow cache vit sur
            l'IMAGE et le voile, jamais sur le groupe : le debord de la carte
            doit se voir. Fond sombre en repli, AUCUNE animation ici. */
-        .hub-banniere-groupe { position: relative; flex: none; }
+        .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; }
         .hub-banniere {
           position: relative; display: block;
-          width: min(212px, calc(100vw - 190px)); height: 48px;
+          width: 100%; height: 52px;
           border-radius: 9px; border: 1px solid rgba(203, 164, 86, 0.6);
-          padding: 0; cursor: pointer;
+          padding: 0; cursor: pointer; overflow: visible;
           background: linear-gradient(160deg, #241c32, #14101d);
         }
         .hub-banniere-image, .hub-banniere-voile {
@@ -4910,28 +4924,31 @@ const APP_STYLES = `
         .hub-banniere-voile {
           background: linear-gradient(90deg, rgba(8,6,14,0.72), rgba(8,6,14,0.2) 55%, transparent);
         }
-        /* Le pseudo SUR la banniere, cale sur la moitie basse, a droite de la
-           carte. Adaptatif : 14 px jusqu'a 10 caracteres, 11,5 px au-dela --
-           le pseudo maximal (14 caracteres) tient sans troncature. */
+        /* Le pseudo SUR la banniere : centre dans l'espace restant a droite de
+           la carte (le retrait gauche vaut sa largeur visible plus le gap), une
+           seule ligne, ellipse s'il deborde. 14 px jusqu'a 10 caracteres,
+           11,5 px au-dela. */
         .hub-banniere-pseudo {
-          position: absolute; left: 48px; bottom: 5px;
+          position: absolute; inset: 0; display: block;
+          padding-left: 26px; padding-right: 8px; box-sizing: border-box;
+          line-height: 50px; text-align: center;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
-          font-size: 14px; color: var(--bone); white-space: nowrap;
+          font-size: 14px; color: var(--bone);
           text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
-        .hub-banniere-pseudo.long { font-size: 11.5px; }
-        /* La carte existante, reduite et posee par-dessus : 8 px du bord, un
-           tiers dehors en bas. Ombres STATIQUES (un drop-shadow ne s'anime
-           jamais ici) pour la detacher de l'image ; sa bordure doree est celle
-           de son propre cadre. Elle devient la porte du profil. */
+        .hub-banniere-pseudo.long { font-size: 11px; }
+        /* La carte existante, posee par-dessus le bord gauche et CENTREE sur la
+           hauteur de la banniere : elle mord la marge sans sortir de l'ecran
+           (40 % de 32 px = 12,8 px, la marge en fait 16). Ombres STATIQUES
+           (un drop-shadow ne s'anime jamais ici) ; sa bordure doree est celle
+           de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
-          position: absolute; left: 8px; bottom: -15px; z-index: 1;
+          position: absolute; left: 0; top: 50%; transform: translate(-40%, -50%); z-index: 1;
           width: 32px; height: 44px; border: none; padding: 0; cursor: pointer;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.65)) drop-shadow(0 0 3px rgba(203,164,86,0.55));
         }
         .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 12px; }
-        /* La rangee du dessous (flamme, trophees) laisse passer le debord. */
-        .hub-joueur-decale { margin-left: 48px; }
         /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
            Toutes les images en cover, dimensions posees (pas de saut), et un
            voile sombre statique quand du texte se pose dessus. */
@@ -5949,7 +5966,6 @@ const APP_STYLES = `
            Il vit sous le pseudo, dans la colonne de gauche du bandeau --
            demande du Commandant, apres qu il eut trop charge la colonne de
            droite et ecrase la pastille des modes. */
-        .hub-joueur-colonne { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
         .hub-quetes { position: relative; overflow: visible; }
         /* 58 px dans un bouton de 48 : l'icone DEBORDE volontairement du fond
            noir (overflow visible), qui lui garde son gabarit -- demande du
@@ -6032,10 +6048,10 @@ const APP_STYLES = `
         /* Revenue au hub par la maquette A v2 (qui annule son retrait de la
            veille) : la flamme vivante en petit, les jours en Cinzel, sous la
            mini-banniere. Le profil garde sa ligne et le panneau. */
+        /* La pilule commune (forme, fond, bordure) vit avec .hub-trophees ;
+           ici, seulement ce qui est propre a la flamme. */
         .hub-flamme {
-          background: none; border: none; padding: 0; cursor: pointer;
-          display: flex; flex-direction: column; align-items: center; gap: 1px;
-          color: var(--gold-bright); flex: none; font: inherit;
+          color: var(--gold-bright); flex: none;
           transition: transform .35s ease;
         }
         .hub-flamme:active { transform: scale(0.94); transition-duration: .1s; }
@@ -15818,16 +15834,20 @@ export default function Emprise() {
           {introEtape < 2 && <div className="landing-voile" aria-hidden="true" />}
 
           {/* ---------- Bandeau du haut : joueur, trophées, réglages ---------- */}
+          {/* Trois rangees au meme rythme vertical : la banniere et le tresor
+              sur UNE ligne (52 px, meme centre), la flamme et les trophees en
+              pilules jumelles dessous, puis le parchemin des quetes a gauche
+              face a la grille reguliere des portes a droite. */}
           <header className="hub-haut">
-            <div className="hub-joueur-colonne">
-            {/* La mini-banniere du coin (maquette A, v2) : la banniere equipee en
-                rectangle-bouton, le PSEUDO ecrit dessus (voile statique cote
-                gauche pour la lisibilite, taille adaptative jusqu'a 14
-                caracteres) et la carte de niveau qui chevauche son bord gauche
-                en debordant vers le bas. Le toucher de la banniere ouvre LA
-                selection existante ; la carte devient la porte du profil -- le
-                pseudo, decoratif sur l'image, ne peut plus l'etre. Fond sombre
-                en repli : jamais d'image cassee. */}
+            {/* Rangee 1 -- la banniere (souple) puis les deux pilules du tresor
+                (fixes) : le tresor s'affiche sur TOUTES les pages du hub,
+                Ordres comprise -- demande du Commandant. */}
+            <div className="hub-tresor">
+            {/* La mini-banniere : le PSEUDO ecrit dessus (voile statique cote
+                gauche, ellipse s'il deborde) et la carte de niveau qui
+                chevauche son bord gauche, centree verticalement. Le toucher de
+                la banniere ouvre LA selection existante ; la carte est la porte
+                du profil. Fond sombre en repli : jamais d'image cassee. */}
             {(() => {
               const equipee = banniereDeCle(bourse.banniereEquipee);
               const niveauJoueur = niveauDepuisXp(progression.xpTotal).niveauJoueur;
@@ -15858,7 +15878,30 @@ export default function Emprise() {
                 </div>
               );
             })()}
-            <div className="hub-joueur hub-joueur-decale">
+            <button
+              className="hub-gemmes hub-pieces"
+              onClick={() => { versBoutiqueRef.current = "Le Changeur"; allerPageHub("boutique"); }}
+              aria-label={`${bourse.pieces} pièces, transformer des gemmes en pièces`}
+              title="Transformer des gemmes en pièces"
+            >
+              <span className="piece-icone" aria-hidden="true" />
+              <span className="hub-gemmes-nombre">{bourse.pieces}</span>
+              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
+            </button>
+            <button
+              className="hub-gemmes"
+              onClick={() => { versBoutiqueRef.current = "Gemmes"; allerPageHub("boutique"); }}
+              aria-label={`${bourse.gemmes} gemmes, acheter des gemmes`}
+              title="Acheter des gemmes"
+            >
+              <span className="gemme-icone" aria-hidden="true" />
+              <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
+              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
+            </button>
+            </div>
+            {/* Rangee 2 -- flamme et trophees, pilules jumelles, meme marge
+                gauche que la banniere. */}
+            <div className="hub-joueur">
               {/* La Flamme REVIENT au hub -- maquette A v2 du Commandant, qui
                   annule son retrait de la veille : la vivante, en petit, et le
                   toucher ouvre toujours son panneau. */}
@@ -15893,9 +15936,10 @@ export default function Emprise() {
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </button>
             </div>
-            {/* Les quetes, sous le pseudo -- demande du Commandant. Meme gabarit que
-                les portes du coin (hub-rouage), parchemin au trait dore. La pastille
-                compte les quetes accomplies pas encore vues. */}
+            {/* Rangee 3 -- le parchemin des quetes sur la marge gauche, et la
+                grille reguliere des portes (2 colonnes) sur la marge droite ;
+                la page Ordres garde le parchemin et laisse respirer le reste. */}
+            <div className="hub-portes">
             <button
               className="hub-rouage hub-quetes"
               onClick={ouvrirPageQuetes}
@@ -15909,37 +15953,8 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
               )}
             </button>
-            </div>
-            <span className="hub-haut-boutons" key={"boutons-" + hubPage}>
-            {/* Le tresor, en deux pastilles cote a cote et chacune son + : les pieces
-                a gauche menent au comptoir du Changeur (le seul chemin vers des pieces
-                hors du jeu), les gemmes a droite menent a leurs etals. Il s'affiche
-                sur TOUTES les pages du hub, Ordres comprise -- demande du Commandant ;
-                les portes du coin, elles, laissent la page Ordres respirer. */}
-            <span className="hub-tresor">
-            <button
-              className="hub-gemmes hub-pieces"
-              onClick={() => { versBoutiqueRef.current = "Le Changeur"; allerPageHub("boutique"); }}
-              aria-label={`${bourse.pieces} pièces, transformer des gemmes en pièces`}
-              title="Transformer des gemmes en pièces"
-            >
-              <span className="piece-icone" aria-hidden="true" />
-              <span className="hub-gemmes-nombre">{bourse.pieces}</span>
-              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
-            </button>
-            <button
-              className="hub-gemmes"
-              onClick={() => { versBoutiqueRef.current = "Gemmes"; allerPageHub("boutique"); }}
-              aria-label={`${bourse.gemmes} gemmes, acheter des gemmes`}
-              title="Acheter des gemmes"
-            >
-              <span className="gemme-icone" aria-hidden="true" />
-              <span className="hub-gemmes-nombre">{bourse.gemmes}</span>
-              <span className="hub-gemmes-plus" aria-hidden="true">+</span>
-            </button>
-            </span>
-            {hubPage !== "ordres" && (<>
-            <span className="hub-haut-rang">
+            {hubPage !== "ordres" && (
+            <span className="hub-haut-rang" key={"boutons-" + hubPage}>
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
@@ -15956,11 +15971,10 @@ export default function Emprise() {
             >
               <img className="hub-rouage-img" src="/nav/rouage.webp" alt="" />
             </button>
-            </span>
-            {/* Les amis ont leur propre porte, sous le rouage des reglages. La pastille
-                se pose PAR-DESSUS l'icone, coin superieur droit : bouton en position
-                relative, pastille en absolute, et aucun ancetre qui rogne. L'ecart entre
-                les deux rangs lui laisse la place de deborder sans toucher le rouage. */}
+            {/* Les amis, sous les reglages : la case droite de la seconde ligne
+                de la grille. La pastille se pose PAR-DESSUS l'icone, coin haut
+                droit -- bouton relatif, pastille absolue, aucun ancetre qui
+                rogne. */}
             <button
               className="hub-rouage hub-amis"
               onClick={() => setActiveModal("amis")}
@@ -15975,8 +15989,9 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{pastilleAmis}</span>
               )}
             </button>
-            </>)}
             </span>
+            )}
+            </div>
           </header>
 
           {/* ---------- La page des quetes : plein ecran par-dessus le hub.
