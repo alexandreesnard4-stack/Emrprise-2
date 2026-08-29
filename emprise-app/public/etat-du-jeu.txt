@@ -55,6 +55,7 @@ Lignes des quêtes accomplies sur l'écran de fin de partie.
 Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
+Deux titres de repli après dix parties comptées quand aucun combo ne domine : L'Alchimiste pour une paire d'Ordres fidèle hors catalogue, L'Errant sinon.
 Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie, et se change depuis le profil (pinceau sur le bandeau).
 L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
 Avant-partie : chaque camp sur son territoire — un bandeau d'étendard portant médaillon de l'Ordre favori, pseudo, titre, carte de niveau et trophées, la main et la Réserve posées dessous.

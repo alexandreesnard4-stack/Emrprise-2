@@ -782,6 +782,49 @@ const COMBOS_PARTIES_MIN = 10;
 const COMBOS_SEUIL = 0.3;
 const COMBOS_TITRES_MAX = 3;
 
+// Deux titres de repli, HORS de COMBOS : ils n ont ni signe detectable en
+// partie, ni capsule, ni quete -- ils ne se gagnent qu au bilan, quand aucun
+// combo repertorie ne domine apres 10 parties. L Alchimiste couronne une
+// paire d Ordres fidele hors catalogue, L Errant tout le reste.
+const TITRES_REPLI = {
+  errant: {
+    nom: "L'Errant",
+    recit: "Vous ne jurez fidélité à aucun Ordre. Vos bannières changent au gré des batailles, et nul ne sait sous laquelle vous marcherez demain.",
+  },
+  alchimiste: {
+    nom: "L'Alchimiste",
+    recit: "Vous mariez des Ordres qu'aucun traité ne recommande — et vos mélanges gagnent. Les Scribes cherchent encore un nom pour ce que vous faites.",
+  },
+};
+
+// Resout un nom de titre recu d AILLEURS (document de partie, fiche d ami) :
+// il ne peut valoir qu un titre du jeu -- combo OU repli -- sinon rien. Le
+// reste est ecarte, comme un pseudo etranger.
+function titreDuJeu(nom) {
+  return COMBOS.find((c) => c.nom === nom)
+    || Object.values(TITRES_REPLI).find((t) => t.nom === nom)
+    || null;
+}
+
+// La paire d Ordres la plus fidele HORS catalogue : au moins COMBOS_SEUIL des
+// parties comptees, et aucune entree de COMBOS dont la composition triee egale
+// la paire (les combos a un seul Ordre, comme la Maree Montante, ne bloquent
+// donc pas une paire qui contient cet Ordre). Les sauvegardes d avant le tally
+// n ont pas de paires : null, jamais une invention.
+function paireHorsCatalogue(stats) {
+  const parties = (stats && stats.combosParties) || 0;
+  const paires = (stats && stats.paires) || {};
+  if (!parties) return null;
+  const cataloguees = new Set(COMBOS.map((c) => [...c.ordres].sort().join("+")));
+  let meilleure = null;
+  for (const [cle, n] of Object.entries(paires)) {
+    if (n / parties < COMBOS_SEUIL) continue;
+    if (cataloguees.has(cle)) continue;
+    if (!meilleure || n > meilleure.n) meilleure = { cle, n };
+  }
+  return meilleure;
+}
+
 // Etat de suivi d'UNE partie : ce qu'il faut retenir d'un coup a l'autre pour reconnaitre
 // les combos qui se jouent en plusieurs temps.
 function nouveauSuiviCombos() {
@@ -805,19 +848,30 @@ function titresDuProfil(stats) {
     .filter((t) => t.parties > 0)
     .sort((a, b) => b.taux - a.taux || b.parties - a.parties);
   const assez = parties >= COMBOS_PARTIES_MIN;
+  const titres = assez ? classement.filter((t) => t.taux >= COMBOS_SEUIL).slice(0, COMBOS_TITRES_MAX) : [];
+  // Le repli (01/09), dans l ordre de priorite strict : un combo repertorie
+  // au seuil garde la main ; sinon une paire fidele hors catalogue fait
+  // L Alchimiste ; sinon L Errant. Avant 10 parties : rien, comme avant.
+  let repli = null;
+  if (assez && titres.length === 0) {
+    repli = paireHorsCatalogue(stats) ? TITRES_REPLI.alchimiste : TITRES_REPLI.errant;
+  }
   return {
     pret: assez,
     parties,
     restantes: Math.max(0, COMBOS_PARTIES_MIN - parties),
-    titres: assez ? classement.filter((t) => t.taux >= COMBOS_SEUIL).slice(0, COMBOS_TITRES_MAX) : [],
+    titres,
+    repli,
     classement, // tout, y compris sous le seuil : le profil montre la progression
   };
 }
 
-// Le titre a afficher a cote d'un joueur, ou null s'il n'en a pas encore merite.
+// Le titre a afficher a cote d'un joueur : le combo dominant, sinon le titre
+// de repli, sinon null (moins de 10 parties comptees).
 function titrePrincipal(stats) {
   const t = titresDuProfil(stats);
-  return t.titres.length ? t.titres[0].combo.nom : null;
+  if (t.titres.length) return t.titres[0].combo.nom;
+  return t.repli ? t.repli.nom : null;
 }
 
 // ---------- Pseudo du joueur ----------
@@ -1298,7 +1352,7 @@ function reserveAutomatique(main) {
     .map((c, i) => ({ ...c, id: c.id + "-reserve-" + i }));
 }
 
-const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, tournoisGagnes: 0, tournoisCredites: [], maitriseVersion: MAITRISE_VERSION };
+const DEFAULT_STATS = { gamesPlayed: 0, blueWins: 0, redWins: 0, mesVictoires: 0, orderPlays: {}, trophies: 0, combos: {}, combosParties: 0, paires: {}, tournoisGagnes: 0, tournoisCredites: [], maitriseVersion: MAITRISE_VERSION };
 
 // ---------- Plateaux : la premiere famille de cosmetiques ----------
 // Rien qu'en CSS, sans une seule image : le plateau reste net a toute taille, ne coute
@@ -1939,7 +1993,21 @@ async function loadStats() {
     // Compteur d'une version anterieure (ou sans version) : il melangeait les Ordres d'en
     // face aux miens, on repart de zero. Les autres stats sont gardees telles quelles.
     const orderPlays = parsed.maitriseVersion === MAITRISE_VERSION ? (parsed.orderPlays || {}) : {};
-    return { ...DEFAULT_STATS, ...parsed, orderPlays, combos: parsed.combos || {}, maitriseVersion: MAITRISE_VERSION };
+    // Le tally des paires (titre L Alchimiste), assaini : une cle est deux
+    // Ordres connus, tries, joints par + ; le compte est un entier borne.
+    // Tout le reste est jete. Une vieille sauvegarde sans le champ charge
+    // avec un tally vide, sans erreur.
+    const paires = {};
+    if (parsed.paires && typeof parsed.paires === "object") {
+      for (const [cle, n] of Object.entries(parsed.paires)) {
+        const morceaux = String(cle).split("+");
+        const valide = morceaux.length === 2
+          && morceaux.every((k) => ORDERS.some((o) => o.key === k))
+          && [...morceaux].sort().join("+") === cle;
+        if (valide && Number.isFinite(n)) paires[cle] = Math.max(0, Math.min(1000000, Math.floor(n)));
+      }
+    }
+    return { ...DEFAULT_STATS, ...parsed, orderPlays, combos: parsed.combos || {}, paires, maitriseVersion: MAITRISE_VERSION };
   } catch (e) {
     return { ...DEFAULT_STATS };
   }
@@ -1959,7 +2027,7 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -1967,6 +2035,15 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     stats.combosParties = (stats.combosParties || 0) + 1;
     if (!stats.combos) stats.combos = {};
     comboKeys.forEach((key) => { stats.combos[key] = (stats.combos[key] || 0) + 1; });
+    // Le tally des paires jouees (cle triee, "cendres+poison"), pour le titre
+    // L Alchimiste. Ecrit ICI seulement, et PAS retroactif : les parties
+    // d avant ce champ n y figurent pas. mesOrdres est la liste de MES deux
+    // Ordres -- orderKeys, lui, mele les deux camps et ne peut pas servir.
+    if (Array.isArray(mesOrdres) && mesOrdres.length === 2) {
+      if (!stats.paires) stats.paires = {};
+      const clePaire = [...mesOrdres].sort().join("+");
+      stats.paires[clePaire] = (stats.paires[clePaire] || 0) + 1;
+    }
   }
   if (winner === "blue") stats.blueWins += 1;
   else if (winner === "red") stats.redWins += 1;
@@ -11116,8 +11193,9 @@ export default function Emprise() {
       try {
         const snap = await getDoc(doc(db, "users", u));
         const d = snap.exists() ? snap.data() : {};
-        // Le titre vient de l'autre joueur : il ne peut valoir que l'un des titres du jeu.
-        const titre = COMBOS.some((c) => c.nom === d.titre) ? d.titre : "";
+        // Le titre vient de l'autre joueur : il ne peut valoir que l'un des
+        // titres du jeu, combos OU replis (L'Errant, L'Alchimiste).
+        const titre = titreDuJeu(d.titre) ? d.titre : "";
         // Palmares et combos, lus avec la meme mefiance : un nombre venu d'ailleurs est
         // borne, et une cle de combo qui n'existe pas dans le jeu est jetee. undefined
         // et non zero quand le champ manque -- le panneau doit pouvoir dire "inconnu"
@@ -12677,12 +12755,13 @@ export default function Emprise() {
       ? titresPartie[camp]
       : (onlineRole === camp ? titrePrincipal(stats) : "");
     if (!titre) return null;
-    // Le titre vient du document de partie, donc de l'autre joueur : il ne peut valoir
-    // que l'un des titres du jeu. Tout le reste est ecarte, comme pour son pseudo.
-    const combo = COMBOS.find((c) => c.nom === titre);
-    if (!combo) return null;
+    // Le titre vient du document de partie, donc de l'autre joueur : il ne peut
+    // valoir que l'un des titres du jeu, combos OU replis. Tout le reste est
+    // ecarte, comme pour son pseudo.
+    const connu = titreDuJeu(titre);
+    if (!connu) return null;
     return (
-      <span className="titre-flottant" title={combo.recit}>{combo.nom}</span>
+      <span className="titre-flottant" title={connu.recit}>{connu.nom}</span>
     );
   }
 
@@ -12754,8 +12833,10 @@ export default function Emprise() {
     const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
     const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
     const titreBrut = titresPartie && typeof titresPartie[camp] === "string" ? titresPartie[camp] : "";
-    const comboAdverse = COMBOS.find((c) => c.nom === titreBrut);
-    const titre = camp === monCamp ? titrePrincipal(stats) : (comboAdverse ? comboAdverse.nom : null);
+    // Valide contre COMBOS ET TITRES_REPLI : un adversaire portant L'Errant
+    // ou L'Alchimiste s'affichait vide avec la seule liste des combos.
+    const titreAdverse = titreDuJeu(titreBrut);
+    const titre = camp === monCamp ? titrePrincipal(stats) : (titreAdverse ? titreAdverse.nom : null);
     // Le mien se calcule ici ; celui d'en face arrive par le document de la
     // partie (blueNiveau/redNiveau), assaini par niveauRecu. Absent (partie
     // d'avant le champ, client ancien) : pas de carte, jamais un zero.
@@ -12879,7 +12960,9 @@ export default function Emprise() {
         // L'ecart de score AFFICHE au joueur (les memes blueScore/redScore que
         // l'ecran), jamais recalcule. Une fin forcee (abandon, forfait) rend le
         // plateau muet : pas d'ecart, la base se verse sans marge.
-        mode === "online" && vainqueurForce ? null : Math.abs(blueScore - redScore)
+        mode === "online" && vainqueurForce ? null : Math.abs(blueScore - redScore),
+        // MES deux Ordres, pour le tally des paires (titre L Alchimiste).
+        [...mesOrdresDuJeu()]
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
@@ -17188,27 +17271,31 @@ export default function Emprise() {
                         </span>
                       </div>
                     ))
-                  ) : (
-                    profil.pret ? (
-                      <div className="profil-vide">
-                        Vous jouez de tout, sans manie affirmée. Aucun combo ne revient assez
-                        souvent pour vous donner un titre.
+                  ) : profil.repli ? (
+                    /* Le titre de repli (01/09) : nom et recit, comme un combo.
+                       Ni taux ni Ordres : il n en a pas. Il remplace l ancien
+                       constat vide -- passe 10 parties, un Commandant a
+                       TOUJOURS un titre desormais. */
+                    <div className="profil-titre principal">
+                      <div className="profil-titre-haut">
+                        <span className="profil-titre-nom">{profil.repli.nom}</span>
                       </div>
-                    ) : (
-                      <>
-                        {/* Le seuil n'est pas encore atteint : on dit ce qui manque, et la
-                            jauge le montre. Un constat vide n'apprend rien. */}
-                        <div className="profil-fiche-progres">
-                          Votre style se dessine. Encore {profil.restantes} partie{profil.restantes > 1 ? "s" : ""} avant
-                          qu&apos;un titre vous soit donné. Seules comptent vos parties à deux Ordres,
-                          contre un Écho ou en ligne.
-                        </div>
-                        <div className="profil-fiche-jauge" role="img"
-                             aria-label={`${Math.round(avanceTitre * 100)} pour cent du chemin vers un titre`}>
-                          <span style={{ width: Math.round(avanceTitre * 100) + "%" }} />
-                        </div>
-                      </>
-                    )
+                      <span className="profil-titre-recit">{profil.repli.recit}</span>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Le seuil n'est pas encore atteint : on dit ce qui manque, et la
+                          jauge le montre. Un constat vide n'apprend rien. */}
+                      <div className="profil-fiche-progres">
+                        Votre style se dessine. Encore {profil.restantes} partie{profil.restantes > 1 ? "s" : ""} avant
+                        qu&apos;un titre vous soit donné. Seules comptent vos parties à deux Ordres,
+                        contre un Écho ou en ligne.
+                      </div>
+                      <div className="profil-fiche-jauge" role="img"
+                           aria-label={`${Math.round(avanceTitre * 100)} pour cent du chemin vers un titre`}>
+                        <span style={{ width: Math.round(avanceTitre * 100) + "%" }} />
+                      </div>
+                    </>
                   )}
 
                   {profil.classement.length > 0 && (
