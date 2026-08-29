@@ -1850,6 +1850,10 @@ const ASTUCES = [
 // d'avoir ete lu, c'est ce nombre qu'il faut remonter, rien d'autre.
 const ASTUCE_MS = 7000;
 
+// Le message d attente des Ordres d en face. En constante : l ecran d attente le
+// compare pour basculer en face-a-face, une copie qui divergerait casserait la bascule.
+const ATTENTE_ORDRES_ADVERSES = "En attente que l'adversaire choisisse ses Ordres...";
+
 // ---------- Arenes deja vues ouvertes ----------
 // Au tout premier lancement la cle est absente : on considere alors comme "deja vues"
 // toutes les arenes ouvertes du moment. Sans cela, un joueur qui installe le jeu verrait
@@ -6056,6 +6060,10 @@ const APP_STYLES = `
            remplit la boite -- reduite a la demande du Commandant. */
         .profil-niveau-carte {
           width: 40px; height: 55px; flex: none;
+          /* -14px : l art de la carte s aligne sur le bord gauche de la banniere
+             (mesure : fond a 51,7, rangee XP a 63,7, tampon transparent de 2 px).
+             Le Commandant la voulait franchement a gauche, en deux retouches. */
+          margin-left: -14px;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
@@ -8980,6 +8988,20 @@ const APP_STYLES = `
         .vs-contre {
           font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: var(--gold);
           text-shadow: 0 0 10px rgba(203,164,86,0.45);
+        }
+        /* La main d en face pas encore choisie : deux cartes muettes qui ne disent
+           qu un point d interrogation. Fond et bord empruntes au dos de Reserve,
+           pour rester de la meme famille. Trois classes : .card.hand ne doit pas
+           reprendre son curseur de carte jouable. */
+        .card.hand.carte-mystere {
+          cursor: default;
+          background:
+            radial-gradient(circle at 50% 38%, rgba(203,164,86,0.18) 0%, rgba(203,164,86,0) 62%),
+            linear-gradient(160deg, #2a2138 0%, #14101d 100%);
+          border: 1px solid rgba(203,164,86,0.5);
+          box-shadow: 0 3px 9px rgba(0,0,0,0.55);
+          color: var(--gold-bright); font-size: 24px; font-weight: 700;
+          text-shadow: 0 1px 6px rgba(0,0,0,0.8);
         }
 
         .reserve-panel { max-width: 330px; }
@@ -12607,6 +12629,40 @@ export default function Emprise() {
     );
   }
 
+  // La plaque d un camp dans le face-a-face d avant-partie : banniere de profil en
+  // fond, Ordre favori en medaillon, nom et trophees. Servie par l apercu ET par
+  // l ecran d attente en ligne -- les deux scenes doivent rester identiques.
+  // Une donnee absente (tournoi sans trophees, profil pas encore lu) efface sa
+  // ligne, jamais un zero invente.
+  function plaqueVs(camp, monCamp) {
+    const p = (profilPartie && profilPartie[camp]) || {};
+    const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
+    const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
+    const nomPlaque = camp === monCamp ? (pseudo || "Vous") : (pseudosPartie[camp] || "Votre adversaire");
+    // La banniere de profil, DERRIERE le nom : la mienne est l equipee ;
+    // l adversaire distant porte Le Drap de Nuit tant que son profil ne
+    // transporte pas la sienne (le champ viendra avec le chantier multijoueur).
+    const etendard = camp === monCamp
+      ? (banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI))
+      : banniereDeCle(BANNIERE_REPLI);
+    return (
+      <div className={`vs-plaque ${camp}`}>
+        {etendard && (
+          <span className="vs-plaque-fond" style={{ backgroundImage: `url("${etendard.image}")` }} aria-hidden="true" />
+        )}
+        <span
+          className={`vs-banniere ${ordre ? "" : "neutre"}`}
+          style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+          aria-hidden="true"
+        />
+        <span className="vs-nom">{nomPlaque}</span>
+        {trophees !== null && (
+          <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
+        )}
+      </div>
+    );
+  }
+
   function mainCamp(camp) {
     const main = camp === "red" ? redHand : blueHand;
     // La rangee reste montee tant qu'il reste une Reserve : sinon elle disparaissait au
@@ -13664,7 +13720,7 @@ export default function Emprise() {
         if (!iAmReady && data.blueUid && data.redUid) {
           setPhase((p) => (p === "online-waiting" ? "select-blue" : p));
         }
-        setOnlineStatus(iAmReady ? "En attente que l'adversaire choisisse ses Ordres..." : "");
+        setOnlineStatus(iAmReady ? ATTENTE_ORDRES_ADVERSES : "");
       }
     });
     return unsub;
@@ -14576,7 +14632,7 @@ export default function Emprise() {
       // Abouti : l'ecran de Reserve a fini son office, on lui reprend sa selection.
       setReserveChoix([]);
       setReserveSource([]);
-      setOnlineStatus("En attente que l'adversaire choisisse ses Ordres...");
+      setOnlineStatus(ATTENTE_ORDRES_ADVERSES);
       // Si l'adversaire avait deja tout envoye, l'ecouteur a bascule en "play" PENDANT
       // l'await : Firestore declenche l'ecouteur des l'ecriture locale, avant que la
       // promesse ne se resolve. Le forcer ici renverrait le second joueur a l'ecran
@@ -14610,7 +14666,21 @@ export default function Emprise() {
     return [a, b];
   }
 
+  // Le de remplit la selection sans lancer la partie : le joueur voit son tirage,
+  // peut relancer ou retoucher, et c est Confirmer qui a le dernier mot (demande
+  // du Commandant, 01/09). Les Herauts coches pour un Ordre ecarte du tirage
+  // partent avec lui, comme lors d une deselection a la main.
   function chooseRandomOrders() {
+    const deux = pickRandomTwoOrders();
+    const cles = deux.map((o) => o.key);
+    setHeroChoice((h) => (cles.includes(h) ? h : null));
+    setHerautsCoches((h) => h.filter((k) => cles.includes(k)));
+    setPickerChoice(deux);
+  }
+
+  // Le lancement direct, sans passer par Confirmer : reserve au minuteur en ligne,
+  // qui tire au sort a zero seconde -- la, plus personne n attend une validation.
+  function lancerOrdresAleatoires() {
     if (mode === "online") { commencerReserveEnLigne(pickRandomTwoOrders()); return; }
     applyOrderChoice(pickRandomTwoOrders());
   }
@@ -15669,6 +15739,13 @@ export default function Emprise() {
   // Minuteur du choix des Ordres. Reserve au jeu en ligne : en solo, personne n'attend
   // en face, et imposer une horloge la ou le joueur reflechit tranquillement n'aurait
   // aucun sens.
+  // L attente des Ordres d en face ne se montre plus en illustration plein ecran :
+  // elle bascule en face-a-face (VS, ma main, des ? sur l inconnu) des que MON choix
+  // est fait (demande du Commandant, 01/09). Le message d etat sert de verrou : il
+  // n est pose que lorsque je suis pret et que lui ne l est pas.
+  const attenteOrdresAdverses = phase === "online-waiting" && !fileAttente && !defiEnvoye
+    && !!onlineRole && onlineStatus === ATTENTE_ORDRES_ADVERSES;
+
   const minuteurOrdresActif = mode === "online" && phase === "select-blue" && !gameOver;
   useEffect(() => {
     if (!minuteurOrdresActif) { setTempsOrdres(ORDRES_SECONDS); ordresAutoRef.current = false; return; }
@@ -15678,7 +15755,7 @@ export default function Emprise() {
       // On respecte le choix en cours s'il est complet, sinon on tire au sort : mieux
       // vaut une main choisie au hasard qu'une partie qui ne demarre jamais.
       if (pickerChoice.length === 2) confirmOrders();
-      else chooseRandomOrders();
+      else lancerOrdresAleatoires();
       return;
     }
     const t = setTimeout(() => setTempsOrdres((n) => n - 1), 1000);
@@ -18435,8 +18512,9 @@ export default function Emprise() {
           )}
           {/* Meme illustration plein ecran que la recherche d'adversaire : attendre qu'un
               ami choisisse ses Ordres, c'est attendre aussi. Elle est decorative, le titre
-              de l'ecran dit deja ce qu'on fait la. */}
-          {!fileAttente && (
+              de l'ecran dit deja ce qu'on fait la. Des que MON choix est fait, le
+              face-a-face ci-dessous la remplace (demande du Commandant, 01/09). */}
+          {!fileAttente && !attenteOrdresAdverses && (
             <div className="attente-plein" aria-hidden="true">
               <img className="attente-plein-img" src={imageAttente} alt="" width="1440" height="2105" />
               <div className="attente-brume" />
@@ -18444,14 +18522,66 @@ export default function Emprise() {
               <div className="attente-voile" />
             </div>
           )}
+          {/* L'attente de ses Ordres, en face-a-face : la meme scene que l'apercu
+              d'avant-partie, avec des ? sur tout ce que l'adversaire n'a pas encore
+              choisi. Ma main, elle, est connue : je viens de la composer. */}
+          {attenteOrdresAdverses && (() => {
+            const monCamp = onlineRole;
+            const campAdverse = monCamp === "blue" ? "red" : "blue";
+            const maMain = monCamp === "red" ? redHand : blueHand;
+            const vus = new Set();
+            const apercu = maMain.filter((c) => { if (vus.has(c.ability)) return false; vus.add(c.ability); return true; });
+            const mienne = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
+            return (
+              <>
+                <div className="sub" style={{ marginTop: 10 }}>{onlineStatus}</div>
+                <div className="vs-bandeau">
+                  {plaqueVs(monCamp, monCamp)}
+                  <span className="vs-contre" aria-hidden="true">VS</span>
+                  {plaqueVs(campAdverse, monCamp)}
+                </div>
+                <div className="sub">Sa main</div>
+                <div className="main-et-reserve">
+                  <div className="hand-row" style={{ maxWidth: 320 }}>
+                    <span className="card hand carte-mystere" aria-hidden="true">?</span>
+                    <span className="card hand carte-mystere" aria-hidden="true">?</span>
+                    <span className="lecteur-seul">Ses cartes ne sont pas encore choisies.</span>
+                  </div>
+                  {/* Sa Reserve aussi reste un mystere : les dos neutres, et un ?
+                      la ou l'apercu affichera le compte. */}
+                  <span className="reserve-pile grande" aria-label="Sa Réserve : pas encore composée" title="Réserve pour la Mort Subite">
+                    <span className="reserve-dos d0" aria-hidden="true" />
+                    <span className="reserve-dos d1" aria-hidden="true" />
+                    <span className="reserve-compte" aria-hidden="true">?</span>
+                  </span>
+                </div>
+                {mienne ? (
+                  <div className="vs-etendard mienne" style={{ backgroundImage: `url("${mienne.image}")`, marginTop: 16 }}>
+                    <span>Votre main</span>
+                  </div>
+                ) : (
+                  <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
+                )}
+                <div className="main-et-reserve">
+                  <div className="hand-row" style={{ maxWidth: 320 }}>
+                    {apercu.map((card) => (
+                      <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                    ))}
+                  </div>
+                  {pileDeReserve(reserveDe(monCamp), true)}
+                </div>
+              </>
+            );
+          })()}
           {/* « Connexion... » sous un defi envoye n'a aucun sens : rien ne se connecte, on
               attend une personne. Et c'est precisement ce mot qui faisait croire a un
               chargement de partie. Le bloc du dessus dit deja ce qu'on attend, et de qui. */}
-          {!fileAttente && !defiEnvoye && <div className="sub attente-sur-image" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
+          {!fileAttente && !defiEnvoye && !attenteOrdresAdverses && <div className="sub attente-sur-image" style={{ marginTop: 14 }}>{onlineStatus || "Connexion..."}</div>}
           {/* Meuble les secondes d'attente : recherche d'adversaire, ou attente de ses
               Ordres. Masque des qu'un compte a rebours de forfait s'affiche, pour ne pas
-              detourner l'attention d'une information qui, elle, demande une decision. */}
-          {!fileAttente && !defiEnvoye && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} pleinEcran />}
+              detourner l'attention d'une information qui, elle, demande une decision. Le
+              face-a-face, lui, meuble tout seul : pas d'astuce par-dessus. */}
+          {!fileAttente && !defiEnvoye && !attenteOrdresAdverses && <RecitsAttente actif={attentePreMatch <= TURN_SECONDS} pleinEcran />}
           {attentePreMatch > TURN_SECONDS && (
             <div className="sub attente-sur-image">{
               // Hors tournoi, ce compte a rebours n'accorde aucune victoire : la partie est
@@ -18878,52 +19008,19 @@ export default function Emprise() {
                   const campAdverse = monCamp === "blue" ? "red" : "blue";
                   const mainAdverse = campAdverse === "red" ? redHand : blueHand;
                   const maMain = monCamp === "red" ? redHand : blueHand;
-                  const nomAdverse = enLigne ? pseudosPartie[campAdverse] : "";
                   return (
                     <>
                       {/* Le face-a-face : la banniere de chacun -- l'Ordre qu'il joue le
                           plus -- son nom et ses trophees. Tout vient du document de la
-                          partie : les deux ecrans montrent la meme scene. Une donnee
-                          absente (tournoi sans trophees, profil pas encore lu) efface sa
-                          ligne, jamais un zero invente. */}
-                      {enLigne && (() => {
-                        const plaque = (camp) => {
-                          const p = (profilPartie && profilPartie[camp]) || {};
-                          const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
-                          const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
-                          const nomPlaque = camp === monCamp ? (pseudo || "Vous") : (nomAdverse || "Votre adversaire");
-                          // La banniere de profil, DERRIERE le nom : la mienne est
-                          // l'equipee ; l'adversaire distant porte Le Drap de Nuit
-                          // tant que son profil ne transporte pas la sienne (le
-                          // champ viendra avec le chantier multijoueur, pas ici).
-                          const etendard = camp === monCamp
-                            ? (banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI))
-                            : banniereDeCle(BANNIERE_REPLI);
-                          return (
-                            <div className={`vs-plaque ${camp}`}>
-                              {etendard && (
-                                <span className="vs-plaque-fond" style={{ backgroundImage: `url("${etendard.image}")` }} aria-hidden="true" />
-                              )}
-                              <span
-                                className={`vs-banniere ${ordre ? "" : "neutre"}`}
-                                style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
-                                aria-hidden="true"
-                              />
-                              <span className="vs-nom">{nomPlaque}</span>
-                              {trophees !== null && (
-                                <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
-                              )}
-                            </div>
-                          );
-                        };
-                        return (
-                          <div className="vs-bandeau">
-                            {plaque(monCamp)}
-                            <span className="vs-contre" aria-hidden="true">VS</span>
-                            {plaque(campAdverse)}
-                          </div>
-                        );
-                      })()}
+                          partie : les deux ecrans montrent la meme scene, et la plaque
+                          est partagee avec l'ecran d'attente en ligne. */}
+                      {enLigne && (
+                        <div className="vs-bandeau">
+                          {plaqueVs(monCamp, monCamp)}
+                          <span className="vs-contre" aria-hidden="true">VS</span>
+                          {plaqueVs(campAdverse, monCamp)}
+                        </div>
+                      )}
                       {/* L'Echo porte l'Etendard de sa difficulte : l'adversaire
                           bot a toujours une banniere coherente. En duel local,
                           l'etiquette reste nue -- on ne connait pas l'autre. */}

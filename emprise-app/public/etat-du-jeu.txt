@@ -10,6 +10,7 @@ Dix Ordres jouables, chacun avec sa capacité propre (échange de rangs, attract
 Hérauts : des capacités supérieures activables dans certains duels.
 Mort Subite : à égalité parfaite, les Réserves des deux camps départagent sur les cases restantes.
 Réserve composée avant la partie : deux cartes gardées de côté, une par Ordre.
+Choix des deux Ordres avant le duel : à la main ou au dé, et le tirage du dé se confirme ou se relance avant de jouer.
 Minuteur de coup en partie classée et en ligne, avec coup automatique à expiration.
 Repentir (annuler son coup) et Augure (conseil du meilleur coup), en option contre l'Écho.
 
@@ -50,10 +51,11 @@ Le médaillon d'une quête fraîchement accomplie se retourne à l'ouverture de 
 Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
-Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher la bannière pour en changer, la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
+Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
-Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie.
+Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie, et se change depuis le profil (pinceau sur le bandeau).
+L'attente des Ordres adverses en ligne montre le face-à-face : les deux Commandants, votre main, et des points d'interrogation sur ce que l'adversaire n'a pas encore choisi.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
 Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.
