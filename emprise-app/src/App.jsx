@@ -4959,7 +4959,7 @@ const APP_STYLES = `
            gauche de la carte, une ligne, ellipse s'il deborde. */
         .hub-banniere-pseudo-zone {
           position: absolute; inset: 0;
-          padding-left: 8px; padding-right: 29px; box-sizing: border-box;
+          padding-left: 8px; padding-right: 24px; box-sizing: border-box;
           display: flex; align-items: center; justify-content: center;
           pointer-events: none;
         }
@@ -4981,12 +4981,13 @@ const APP_STYLES = `
           /* A DROITE de la banniere desormais (demande du Commandant, 30/08) :
              le miroir exact du chevauchement gauche. */
           position: absolute; right: 0; top: 50%; transform: translate(40%, -50%); z-index: 1;
-          /* 38 x 52 (32 x 44 avant) : la place de DEUX chiffres, demande du
-             Commandant -- la pleine hauteur de la banniere, jamais plus bas. */
-          width: 38px; height: 52px; border: none; padding: 0; cursor: pointer;
+          /* 26 x 36 : depuis que l'image est rognee, l'art remplit sa boite --
+             a 38 x 52 la carte etait devenue trop grosse (dit le Commandant).
+             Toujours la place de deux chiffres, toujours centree. */
+          width: 26px; height: 36px; border: none; padding: 0; cursor: pointer;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.65)) drop-shadow(0 0 3px rgba(203,164,86,0.55));
         }
-        .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 14px; }
+        .hub-niveau-sur-banniere .hub-niveau-nombre { font-size: 11px; }
         /* AUCUNE animation sur les bannieres : ni parallax, ni zoom, nulle part.
            Toutes les images en cover, dimensions posees (pas de saut), et un
            voile sombre statique quand du texte se pose dessus. */
