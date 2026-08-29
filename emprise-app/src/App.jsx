@@ -2027,7 +2027,7 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false, adversaireClasse = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -2053,6 +2053,11 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
   // Plancher à 0 : une série de défaites ne peut jamais faire passer le total en négatif.
   stats.trophies = Math.max(0, (stats.trophies || 0) + trophyGain);
   await writeStatsRaw(JSON.stringify(stats));
+  // La rencontre classee du jour se compte ICI, partie TERMINEE -- declassee
+  // et abandon compris : la 5e et la 6e restent amicales jusqu a demain. Le
+  // forfait d avant-match ne passe jamais par cette fonction : une partie
+  // jamais jouee ne brule pas de rencontre.
+  if (adversaireClasse) await compterRencontre(adversaireClasse);
   // ---------- L'XP de la partie ----------
   // La MEME porte que le profil (compteAuProfil et monCamp), plus l'Histoire par son
   // signal dedie : le bac a sable, le mode test, les duels locaux et le bot-contre-bot
@@ -2661,6 +2666,82 @@ const PIECES_SUIVANT_XP = 2;
 // bougent JAMAIS ici : quitter reste une defaite pleine au classement, sinon
 // quitter deviendrait une arme contre la victime.
 const PARTIE_ECOURTEE_COUPS = 4;
+
+// ---------- Rencontres classees du jour ----------
+// Anti-complices (01/09) : deux joueurs ne doivent pas pouvoir se nourrir en
+// trophees. Au-dela de ce nombre de parties classees TERMINEES le meme jour
+// contre le MEME adversaire, la rencontre suivante se joue et se paie en
+// AMICALE -- zero trophee des deux cotes, tarifs non classes, Flamme non
+// nourrie. On ne bloque JAMAIS la rencontre elle-meme : la salle d attente
+// n a qu une place, un refus affamerait toute la file.
+const RENCONTRES_CLASSEES_JOUR = 3;
+const DEFAUT_RENCONTRES = { jour: "", parAdversaire: {} };
+let memoryRencontres = null;
+
+async function readRencontresRaw() {
+  if (typeof window !== "undefined" && window.storage && window.storage.get) {
+    try {
+      const res = await window.storage.get("emprise-rencontres");
+      return res && res.value != null ? res.value : null;
+    } catch (e) { /* pont en panne : on tente les couches locales */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      const v = localStorage.getItem("emprise-rencontres");
+      if (v != null) return v;
+    }
+  } catch (e) { /* stockage bloque */ }
+  return memoryRencontres;
+}
+
+async function writeRencontresRaw(str) {
+  if (typeof window !== "undefined" && window.storage && window.storage.set) {
+    try { await window.storage.set("emprise-rencontres", str); return; } catch (e) { /* on tente la suite */ }
+  }
+  try {
+    if (typeof localStorage !== "undefined") { localStorage.setItem("emprise-rencontres", str); return; }
+  } catch (e) { /* stockage bloque */ }
+  memoryRencontres = str;
+}
+
+// Relecture assainie : un jour different d aujourd hui (le jour LOCAL, celui
+// de la Flamme) remet tout a zero ; une cle vide ou demesuree est jetee ; un
+// compte est un entier borne 0..1000.
+async function loadRencontres() {
+  const propre = { ...DEFAUT_RENCONTRES, jour: dateLocaleJour(), parAdversaire: {} };
+  try {
+    const raw = await readRencontresRaw();
+    if (!raw) return propre;
+    const lu = JSON.parse(raw);
+    if (!lu || lu.jour !== propre.jour) return propre;
+    if (lu.parAdversaire && typeof lu.parAdversaire === "object") {
+      for (const [uid, n] of Object.entries(lu.parAdversaire)) {
+        if (!uid || typeof uid !== "string" || uid.length > 128) continue;
+        if (!Number.isFinite(n)) continue;
+        propre.parAdversaire[uid] = Math.max(0, Math.min(1000, Math.floor(n)));
+      }
+    }
+    return propre;
+  } catch (e) {
+    return propre;
+  }
+}
+
+// Combien de classees deja TERMINEES aujourd hui contre cet adversaire precis.
+async function rencontresContre(uid) {
+  if (!uid) return 0;
+  const r = await loadRencontres();
+  return r.parAdversaire[uid] || 0;
+}
+
+// Une classee TERMINEE de plus contre cet adversaire -- declassee comprise :
+// la 5e et la 6e restent amicales jusqu a demain.
+async function compterRencontre(uid) {
+  if (!uid) return;
+  const r = await loadRencontres();
+  r.parAdversaire[uid] = Math.min(1000, (r.parAdversaire[uid] || 0) + 1);
+  await writeRencontresRaw(JSON.stringify(r));
+}
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
 // jamais l'inverse. Taux plat, affiche en toutes lettres au joueur.
 const PIECES_PAR_GEMME = 10;
@@ -9146,6 +9227,12 @@ const APP_STYLES = `
           display: flex; flex-direction: column; gap: 12px;
           width: min(340px, 92vw); margin: 0 auto;
         }
+        /* La partie declassee se dit avant de jouer, en or : une ligne sobre
+           au-dessus des territoires, sans animation. */
+        .declassee-avis {
+          font-size: 12.5px; color: var(--gold-bright); text-align: center;
+          max-width: min(340px, 92vw); margin: 0 auto;
+        }
         /* Ligne VS resserree (line-height 1, marges -3), heritee de la
            disposition B ou elle sauvait le 375x667 : gardee, l ecart visuel
            entre les camps reste genereux. */
@@ -11701,6 +11788,9 @@ export default function Emprise() {
   // notification (champ abandonPar), donc toujours cohérent entre les deux appareils.
   const [vainqueurForce, setVainqueurForce] = useState(null);
   const [finMotif, setFinMotif] = useState(null); // "abandon" | "forfait" | null
+  // Rencontres classees deja TERMINEES aujourd hui entre ces deux joueurs :
+  // le MAX des deux declarations du document de partie (anti-complices).
+  const [rencontresPartie, setRencontresPartie] = useState(0);
   // Secondes d'attente du coup adverse en ligne — alimente l'avertissement de forfait.
   const [attenteAdv, setAttenteAdv] = useState(0);
   // Avant-match : présence de l'adversaire (les deux sièges pris) et état de son choix
@@ -12673,6 +12763,14 @@ export default function Emprise() {
        || (blueScore === redScore ? secondJoueur : (blueScore > redScore ? "blue" : "red")))
     : null;
 
+  // La partie DECLASSEE (anti-complices, 01/09) : au-dela de
+  // RENCONTRES_CLASSEES_JOUR classees terminees aujourd hui contre le meme
+  // adversaire, la rencontre se joue en amicale -- zero trophee des deux
+  // cotes, tarifs non classes. La regle se lit du MEME document sur les deux
+  // appareils (rencontresPartie est le max des deux declarations) : le
+  // complice qui efface son stockage local est trahi par le compteur d en face.
+  const partieDeclassee = partieClassee && rencontresPartie >= RENCONTRES_CLASSEES_JOUR;
+
   // ---------- Perspective : chacun joue EN BAS de son écran ----------
   // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
   // l'adversaire". Les deux sections (étiquette + main) sont donc pilotées par le camp
@@ -12959,7 +13057,11 @@ export default function Emprise() {
       // Victoire +30, défaite -15 ; le total ne peut jamais descendre sous 0 (plancher dans
       // recordGameStats). En ligne on peut jouer Azur OU Écarlate, d'où la comparaison avec
       // onlineRole et non avec "blue" : sinon un joueur Écarlate serait crédité à l'envers.
-      const trophyGain = partieClassee && onlineRole
+      // Une partie DECLASSEE (anti-complices) ne verse ni ne coute RIEN : le
+      // zero ici suffit a tout -- XP et pieces retombent d eux-memes sur les
+      // tarifs non classes dans recordGameStats, et la Flamme n est pas
+      // nourrie (son signal est trophyGain non nul).
+      const trophyGain = partieClassee && !partieDeclassee && onlineRole
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
       // Combos de la partie : ceux reconnus coup par coup, plus le Rempart Vicie qui ne
@@ -12998,14 +13100,17 @@ export default function Emprise() {
         partieEcourtee ? 0 : Math.abs(blueScore - redScore),
         // MES deux Ordres, pour le tally des paires (titre L Alchimiste).
         [...mesOrdresDuJeu()],
-        partieEcourtee
+        partieEcourtee,
+        // L uid adverse d une partie d appariement : la rencontre du jour se
+        // compte, declassee comprise.
+        partieClassee && adversaireUid ? adversaireUid : null
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
         // visuel, arme par la MEME porte que nourrirFlamme (classee ET
         // comptant au profil -- ni Histoire, ni Echos, ni Confluence, ni
         // tournoi solo, ni bac a sable, ni partie disqualifiee).
-        if (partieClassee && compteAuProfil) setFlammeRemplissage(true);
+        if (partieClassee && !partieDeclassee && compteAuProfil) setFlammeRemplissage(true);
         // L'Etendard d'Echo fraichement gagne : l'ecran de fin l'annonce, la
         // bourse rechargee par rafraichirProgression porte deja la possession.
         if (st.banniereDebloquee) {
@@ -13189,6 +13294,7 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
+    setRencontresPartie(0);
     setAdversaireUid(null); setDefiEnvoye(null); setAmitieAvis("");
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
     // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
@@ -13839,6 +13945,11 @@ export default function Emprise() {
         setTurn(data.turn); setFirstPlayer(data.firstPlayer || "blue");
         setTrophesPartie({ blue: data.blueTrophees, red: data.redTrophees });
         setTitresPartie({ blue: data.blueTitre || "", red: data.redTitre || "" });
+        // Le verrou anti-complices : le MAX des deux declarations de
+        // rencontres du jour, assainies (entier 0..1000, champ absent --
+        // vieux client, vieille partie -- vaut 0 : la partie reste pleine).
+        const rencontresRecues = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000, Math.floor(v))) : 0);
+        setRencontresPartie(Math.max(rencontresRecues(data.blueRencontres), rencontresRecues(data.redRencontres)));
         // Borne les compteurs et jette les cles de combo inconnues : ces valeurs viennent
         // de l'appareil d'en face, comme son pseudo, et se traitent avec la meme mefiance.
         const entierRecu = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1000000, Math.floor(v))) : undefined);
@@ -14179,7 +14290,10 @@ export default function Emprise() {
         statsRecordedRef.current = true;
         // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
         const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
-        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, TROPHEES_DEFAITE, [], false, onlineRole).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
+        // Une partie DECLASSEE abandonnee ne coute rien non plus (zero des
+        // deux cotes), mais elle COMPTE une rencontre du jour, comme chez le
+        // vainqueur : l uid adverse part en dernier argument.
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, partieDeclassee ? 0 : TROPHEES_DEFAITE, [], false, onlineRole, false, null, null, null, false, adversaireUid || null).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
         // Une partie abandonnee ne fait avancer aucune quete, et l ecran de fin
         // ne doit pas rejouer les accomplissements de la partie d avant.
         setQuetesDernierePartie(null);
@@ -14877,6 +14991,11 @@ export default function Emprise() {
     const hand = onlineRole === "blue" ? blueHand : redHand;
     if (hand.length !== 8) return;
     const moi = profilPublic();
+    // La declaration anti-complices : combien de classees deja TERMINEES
+    // aujourd hui contre CET adversaire, lue de MA sauvegarde locale. Meme
+    // porte que le niveau : a cet instant on est participant, tout champ est
+    // permis, rien a republier (verifie dans firestore.rules).
+    const rencontresJour = partieClassee && adversaireUid ? await rencontresContre(adversaireUid) : 0;
     const field = onlineRole === "blue"
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
           blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos,
@@ -14888,13 +15007,15 @@ export default function Emprise() {
           blueTrophees: tropheesPublics(),
           // Le niveau du Commandant, par la meme porte que le reste du profil :
           // l'adversaire l'affiche sur sa carte du face-a-face (demande du 01/09).
-          blueNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur }
+          blueNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur,
+          blueRencontres: rencontresJour }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
           redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties,
           redTournois: tournoisPublics(),
           redTrophees: tropheesPublics(),
-          redNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur };
+          redNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur,
+          redRencontres: rencontresJour };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
@@ -15121,7 +15242,7 @@ export default function Emprise() {
   // en fin de course -- les derniers points se lisent un a un.
   const [bilanAffiche, setBilanAffiche] = useState(0);
   useEffect(() => {
-    if (!ceremonieFin || !partieClassee || !onlineRole) { setBilanAffiche(0); return; }
+    if (!ceremonieFin || !partieClassee || partieDeclassee || !onlineRole) { setBilanAffiche(0); return; }
     const cible = Math.abs(winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE);
     // Le toucher qui saute la ceremonie saute AUSSI le compte : sans cela, le panneau
     // surgissait avec un badge vide pendant deux secondes et demie. Sauter, c est sauter.
@@ -15140,7 +15261,7 @@ export default function Emprise() {
     }, depart);
     return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ceremonieFin, cerPose, partieClassee, onlineRole, winner, reducedMotion]);
+  }, [ceremonieFin, cerPose, partieClassee, partieDeclassee, onlineRole, winner, reducedMotion]);
 
   // L'XP de la partie qui vient de finir : le gain, le niveau franchi s'il y en a un,
   // les gemmes de palier s'il y en a. Rien de plus -- pas de nouvel ecran.
@@ -15219,6 +15340,9 @@ export default function Emprise() {
 
   function bilanTrophees() {
     if (!partieClassee || !onlineRole || !gameOver) return null;
+    // Une partie declassee n a AUCUNE ligne de trophees : rien n a bouge, et
+    // afficher un faux plus ou moins ferait croire a un bug.
+    if (partieDeclassee) return null;
     const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
     return (
       <div className={`cer-trophees ${gain >= 0 ? "gain" : "perte"}`} aria-label={`${gain >= 0 ? "Gain" : "Perte"} de ${Math.abs(gain)} trophées`}>
@@ -19305,6 +19429,13 @@ export default function Emprise() {
                   // vient de la composer. Celle d en face est de dos, elle ne
                   // revele donc rien.
                   return (
+                    <>
+                    {/* La partie declassee se dit AVANT de jouer : le joueur ne
+                        doit jamais croire a un bug. Deux-points, jamais de
+                        tiret cadratin. */}
+                    {partieDeclassee && (
+                      <div className="declassee-avis">Vous vous connaissez bien : cette partie ne comptera pas au classement.</div>
+                    )}
                     <div className="territoires">
                       {territoireVs(campAdverse, monCamp, nomAdverse, fondAdverse,
                         apercuParOrdre(mainAdverse).map((card) => (
@@ -19318,6 +19449,7 @@ export default function Emprise() {
                         )),
                         pileDeReserve(reserveDe(monCamp), true))}
                     </div>
+                    </>
                   );
                 })()}
               </>
