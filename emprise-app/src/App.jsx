@@ -4938,7 +4938,10 @@ const APP_STYLES = `
              dit le Commandant), meme centre vertical par la rangee, largeur
              minimale commune, contenu centre. */
           height: 38px; min-width: 78px; box-sizing: border-box;
-          padding: 0 10px; flex: none;
+          /* 6 px (10 avant) : les icones agrandies mangent de la largeur, la
+             pastille rend un peu de rembourrage pour ne pas etrangler la
+             banniere en 375 px. */
+          padding: 0 6px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
           background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
           border-radius: 10px; cursor: pointer;
@@ -4964,12 +4967,22 @@ const APP_STYLES = `
           background: linear-gradient(180deg, #f0dcae, #cfa452);
           color: #2a1c08;
         }
-        /* 28 px (24 avant) : a taille egale la piece ronde parait plus petite
-           que le cristal haut, le Commandant l'a donc voulue un cran au-dessus. */
-        .hub-pieces .piece-icone { width: 28px; height: 28px; flex: none; }
-        /* 24 px (10, 16 puis 20 avant lui). Une seule image de gemme partout
-           (gemme-icone.png, le cristal d'amethyste) : pas d'exception ici. */
-        .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
+        /* 44 px dans une pastille de 38 : l'icone DEBORDE volontairement du
+           fond, 3 px en haut et 3 px en bas, comme posee dessus -- le meme
+           geste que le parchemin des quetes (debord, overflow visible, ombre
+           portee qui vend le detachement). La piece reste un cran au-dessus
+           de la gemme : a taille egale la ronde parait plus petite que le
+           cristal haut. */
+        .hub-pieces .piece-icone {
+          width: 44px; height: 44px; flex: none;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
+        /* 40 px pour le cristal, meme debord de 1 px par bord. Une seule image
+           de gemme partout (gemme-icone.png) : pas d'exception ici. */
+        .hub-gemmes .gemme-icone {
+          width: 40px; height: 40px; flex: none;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
@@ -6091,7 +6104,8 @@ const APP_STYLES = `
            rien ne bouge au passage du niveau 10. */
         .hub-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
-          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          /* Blanc os (01/09), jumeau du profil et de l avant-partie. */
+          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center;
           text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
@@ -6100,16 +6114,18 @@ const APP_STYLES = `
            remplit la boite -- reduite a la demande du Commandant. */
         .profil-niveau-carte {
           width: 40px; height: 55px; flex: none;
-          /* -14px : l art de la carte s aligne sur le bord gauche de la banniere
-             (mesure : fond a 51,7, rangee XP a 63,7, tampon transparent de 2 px).
-             Le Commandant la voulait franchement a gauche, en deux retouches. */
-          margin-left: -14px;
+          /* Revenue DANS le bandeau, entiere (decision du Commandant, 01/09,
+             qui annule le -14 d avant) : la carte ne chevauche plus la bordure
+             doree, la respiration vient du padding de la rangee. */
+          margin-left: 0;
           display: flex; align-items: center; justify-content: center;
           background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
         }
         .profil-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
-          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          /* Blanc os (01/09), comme le pseudo sur les bannieres -- l ombre
+             portee garde la lisibilite sur le panneau central de la carte. */
+          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center;
           text-shadow: 0 1px 4px rgba(0,0,0,0.9);
         }
@@ -6233,11 +6249,12 @@ const APP_STYLES = `
            Unicode, qui retombaient dans la police de secours. */
         .cer-flamme-exp { font-size: 8px; line-height: 1; }
         .reduced-motion .cer-flamme { animation: none; }
-        /* Le panneau : serie, record, paliers, la regle dite sobrement. Rien de
-           culpabilisant, aucun compte a rebours, et RIEN a y acheter. */
+        /* Le panneau : serie et paliers, la regle dite sobrement. Rien de
+           culpabilisant, aucun compte a rebours, et RIEN a y acheter. La
+           mention du record a vecu (demande du Commandant, 01/09 : frustrante
+           pour les joueurs) -- la donnee, elle, reste gardee en silence. */
         .flamme-panel { max-width: 320px; }
         .flamme-etat { font-size: 14px; }
-        .flamme-record { font-size: 12px; color: var(--muted); }
         .flamme-paliers { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
         .flamme-palier {
           display: flex; justify-content: space-between; align-items: center;
@@ -9101,7 +9118,8 @@ const APP_STYLES = `
         }
         .territoire-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
-          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          /* Blanc os (01/09), jumeau du hub et du profil. */
+          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
 
@@ -17414,7 +17432,6 @@ export default function Emprise() {
                     <>La Flamme est éteinte.</>
                   )}
                 </div>
-                <div className="flamme-record">Record : {flamme ? flamme.record : 0} jour{flamme && flamme.record > 1 ? "s" : ""}</div>
                 <div className="flamme-paliers">
                   {FLAMME_PALIERS.map((p) => (
                     <div key={p.jours} className={`flamme-palier ${flamme && flamme.palierVerseSerie >= p.jours ? "atteint" : ""}`}>
