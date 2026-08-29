@@ -5055,6 +5055,21 @@ const APP_STYLES = `
         .profil-banniere .profil-xp-ligne span, .profil-banniere .profil-xp-detail {
           text-shadow: 0 1px 3px rgba(0,0,0,0.95);
         }
+        /* Le pinceau du bandeau : un rond au vocabulaire de .hub-trophees, en
+           bas a droite, decoratif -- les touchers filent au fond-bouton (la
+           regle des enfants lui donne deja pointer-events: none). */
+        /* Deux classes : la regle generique des enfants du bandeau (0-2-0)
+           imposerait sinon son position relative a la place de l'absolute. */
+        .profil-banniere .profil-banniere-pinceau {
+          position: absolute; right: 6px; bottom: 6px;
+          width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box;
+          background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.5);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .profil-banniere-pinceau img {
+          height: 14px; width: auto; object-fit: contain; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* La croix du profil repasse AU-DESSUS du bandeau qui la chevauche. */
         .profil-fiche .profil-fiche-croix { z-index: 2; }
         /* Pas de zoom herite de .boutique-carte : une banniere ne s'anime pas. */
@@ -16765,6 +16780,15 @@ export default function Emprise() {
                       aria-label={`Bannière équipée : ${equipee.nom}. Changer de bannière.`}
                       title="Changer de bannière"
                     />
+                  )}
+                  {/* Le pinceau : l'affordance du bandeau -- il DIT au joueur
+                      que la banniere se change ici. Decoratif (un span, jamais
+                      un bouton dans un bouton) : les touchers filent au
+                      fond-bouton dessous. AUCUNE animation. */}
+                  {equipee && (
+                    <span className="profil-banniere-pinceau" aria-hidden="true">
+                      <img src="/nav/pinceau.webp" alt="" />
+                    </span>
                   )}
                   {/* Le nom se change ici, la ou on le lit : le toucher ouvre le champ,
                       pre-rempli du nom actuel pour le corriger plutot que le retaper. */}
