@@ -2309,6 +2309,12 @@ async function chargerQuetesDuMoment() {
   return q;
 }
 
+// EN DEVELOPPEMENT SEULEMENT : relances illimitees, pour faire defiler les
+// tirages et verifier les icones de quetes (demande du Commandant, 31/08).
+// Vite met DEV a false au build : la production garde sa relance unique par
+// periode, meme si ce drapeau part en ligne tel quel.
+const RELANCES_ILLIMITEES = import.meta.env.DEV;
+
 // La relance : une par jour pour les journalieres, une par semaine pour les
 // hebdomadaires. Remplace par une quete d une AUTRE famille (la remplacee est
 // dans la liste d exclusion), progression a zero, et consomme la relance.
@@ -2317,7 +2323,7 @@ async function relancerQuete(periode, cle) {
   const changea = completeTirages(q);
   const auJour = periode === "jour";
   const liste = auJour ? q.quetesJour : q.quetesSemaine;
-  const consommee = auJour ? q.rerollJour : q.rerollSemaine;
+  const consommee = RELANCES_ILLIMITEES ? false : (auJour ? q.rerollJour : q.rerollSemaine);
   const i = liste.findIndex((a) => a.cle === cle);
   if (i === -1 || liste[i].faite || consommee) {
     if (changea) await writeQuetesRaw(JSON.stringify(q));
@@ -2327,7 +2333,7 @@ async function relancerQuete(periode, cle) {
   const t = tirageQuete(auJour ? QUETES_JOUR : QUETES_SEMAINE, exclusion);
   if (t) {
     liste[i] = t;
-    if (auJour) q.rerollJour = true; else q.rerollSemaine = true;
+    if (!RELANCES_ILLIMITEES) { if (auJour) q.rerollJour = true; else q.rerollSemaine = true; }
   }
   await writeQuetesRaw(JSON.stringify(q));
   return q;
@@ -16038,7 +16044,7 @@ export default function Emprise() {
                     if (!def) return null;
                     return (
                       <div key={a.cle} className={`boutique-carte quete-carte ${a.faite ? "choisi faite" : ""}`}>
-                        {!a.faite && !quetes.rerollJour && (
+                        {!a.faite && (RELANCES_ILLIMITEES || !quetes.rerollJour) && (
                           <button
                             className="quete-relance"
                             onClick={() => relancerLaQuete("jour", a.cle)}
@@ -16087,7 +16093,7 @@ export default function Emprise() {
                         <span className="quete-ligne-haut">
                           <span className="quete-nom">{libelleDeQuete(def, a)}</span>
                           <span className="quete-condition">{conditionDeQuete(def, a)}</span>
-                          {!a.faite && !quetes.rerollSemaine && (
+                          {!a.faite && (RELANCES_ILLIMITEES || !quetes.rerollSemaine) && (
                             <button
                               className="quete-relance en-ligne"
                               onClick={() => relancerLaQuete("semaine", a.cle)}
