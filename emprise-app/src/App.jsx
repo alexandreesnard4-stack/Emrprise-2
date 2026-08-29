@@ -12709,10 +12709,13 @@ export default function Emprise() {
   // d'avant-partie et les deux rangees de jeu s'en servent toutes les trois.
   function pileDeReserve(cartes, grande, campRevisible) {
     if (!cartes || cartes.length === 0) return null;
+    // Sans pastille de compte (demande du Commandant, 01/09) : les dos disent
+    // deja combien il en reste, et l'aria-label garde le nombre pour le
+    // lecteur d'ecran. Seule l'attente en ligne garde sa pastille, un ? qui
+    // dit autre chose : la Reserve d'en face n'est pas encore composee.
     const contenu = (
       <>
         {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} style={dosDeCarte(c)} aria-hidden="true" />))}
-        <span className="reserve-compte" aria-hidden="true">{cartes.length}</span>
       </>
     );
     // Sa PROPRE Reserve se rouvre d'un toucher : on l'a composee huit coups plus tot,
