@@ -411,6 +411,54 @@ function VagueMaitrise({ order, taux, grand }) {
   );
 }
 
+// ---------- La flamme vivante ----------
+// UNE seule flamme pour la ligne du profil et le panneau : le contour au trait
+// d'origine, un clipPath STATIQUE en silhouette (pose une fois, jamais anime),
+// et trois couches pleines qui vacillent -- transform et opacity SEULEMENT,
+// la regle de performance absolue du projet. Eteinte : couches masquees,
+// contour gris, parfaitement immobile. remplissage : les couches remontent de
+// sous la base une fois (cascade puis micro-rebond), et le vacillement suit.
+// onRempli previent l'appelant quand le remplissage A ETE VU, pour qu'il ne
+// rejoue pas a la prochaine ouverture.
+const FLAMME_TRAIT = "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z";
+const FLAMME_MOYENNE = "M12 6.2c1.5 2 3.4 3.9 3.4 6.4a3.4 4.4 0 1 1-6.8 0c0-2.1 1.9-4.2 3.4-6.4z";
+const FLAMME_COEUR = "M12 10c.9 1.3 1.9 2.3 1.9 3.8a1.9 2.4 0 1 1-3.8 0c0-1.3 1-2.5 1.9-3.8z";
+let flammeClipCompteur = 0;
+function FlammeVivante({ allumee, className, remplissage, onRempli }) {
+  // Un id de clip unique par instance : le profil et le panneau peuvent
+  // montrer la flamme en meme temps sans se voler le clip.
+  const clipIdRef = useRef("flamme-clip-" + (++flammeClipCompteur));
+  // Le remplissage se joue quand l'element est A L'ECRAN : on previent
+  // l'appelant apres la fin de la cascade et du rebond (~1,2 s).
+  useEffect(() => {
+    if (!remplissage || !onRempli) return;
+    const t = setTimeout(onRempli, 1400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remplissage]);
+  return (
+    <svg
+      className={`flamme-vive ${allumee ? "allumee" : ""} ${allumee && remplissage ? "remplit" : ""} ${className || ""}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <defs>
+        <clipPath id={clipIdRef.current}>
+          <path d={FLAMME_TRAIT} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipIdRef.current})`}>
+        <g className="flamme-remplissage">
+          <path className="flamme-couche flamme-sombre" d={FLAMME_TRAIT} fill="#8a6a2c" />
+          <path className="flamme-couche flamme-or" d={FLAMME_MOYENNE} fill="var(--gold)" />
+          <path className="flamme-couche flamme-coeur" d={FLAMME_COEUR} fill="var(--gold-bright)" />
+        </g>
+      </g>
+      <path className="flamme-contour" d={FLAMME_TRAIT} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function ComingSoonThumb({ order }) {
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef(null);
@@ -5941,6 +5989,52 @@ const APP_STYLES = `
         /* ---------- La Flamme quotidienne ---------- */
         /* Elle ne se montre plus au hub (demande du Commandant, 29/08) : sa
            seule fenetre est la ligne du profil, qui ouvre son panneau. */
+        /* La flamme VIVANTE (correctif du 29/08, qui LEVE l'ancienne consigne
+           sans boucle) : trois couches pleines sous un clipPath statique, et
+           un vacillement en transform/opacity SEULEMENT -- jamais box-shadow,
+           jamais filter, jamais de clip anime. Les amplitudes sont petites :
+           une flamme vacille, elle ne gigote pas. */
+        .flamme-vive .flamme-couche {
+          transform-box: fill-box; transform-origin: 50% 100%; opacity: 0;
+        }
+        .flamme-vive .flamme-contour { color: var(--muted); }
+        .flamme-vive.allumee .flamme-contour { color: var(--gold-bright); }
+        .flamme-vive.allumee .flamme-couche { opacity: 1; }
+        .flamme-vive.allumee .flamme-sombre { animation: flamme-sombre-vacille 2.3s ease-in-out infinite alternate; }
+        .flamme-vive.allumee .flamme-or { animation: flamme-or-vacille 1.6s ease-in-out 0.4s infinite alternate; }
+        .flamme-vive.allumee .flamme-coeur { animation: flamme-coeur-vacille 1.1s ease-in-out 0.2s infinite alternate; }
+        @keyframes flamme-sombre-vacille {
+          from { transform: scaleY(1) translateY(0); opacity: 0.85; }
+          to { transform: scaleY(1.06) translateY(-0.5px); opacity: 1; }
+        }
+        @keyframes flamme-or-vacille {
+          from { transform: skewX(-2deg) scaleY(1); }
+          to { transform: skewX(2deg) scaleY(1.09); }
+        }
+        @keyframes flamme-coeur-vacille {
+          from { transform: scale(0.96); opacity: 0.7; }
+          to { transform: scale(1.05); opacity: 1; }
+        }
+        /* Le remplissage, a l'allumage : les couches remontent de sous la base
+           (DANS le clip statique, rien ne deborde), en cascade, puis un
+           micro-rebond du groupe -- et le vacillement prend le relais. Ces
+           regles arrivent APRES celles du vacillement : a l'allumage elles
+           gagnent, puis la classe remplit tombe et le vacillement seul reste. */
+        .flamme-vive.remplit .flamme-sombre { animation: flamme-remonte 0.6s ease-out both, flamme-sombre-vacille 2.3s ease-in-out 0.9s infinite alternate; }
+        .flamme-vive.remplit .flamme-or { animation: flamme-remonte 0.6s ease-out 0.12s both, flamme-or-vacille 1.6s ease-in-out 1s infinite alternate; }
+        .flamme-vive.remplit .flamme-coeur { animation: flamme-remonte 0.6s ease-out 0.24s both, flamme-coeur-vacille 1.1s ease-in-out 1.1s infinite alternate; }
+        .flamme-vive.remplit .flamme-remplissage {
+          transform-box: fill-box; transform-origin: 50% 100%;
+          animation: flamme-rebond 0.25s ease-out 0.95s both;
+        }
+        @keyframes flamme-remonte { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes flamme-rebond { 0% { transform: scale(1); } 50% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        /* Mouvement reduit : flamme allumee statique en or, eteinte en gris --
+           ni vacillement ni remplissage. */
+        .reduced-motion .flamme-vive .flamme-couche,
+        .reduced-motion .flamme-vive .flamme-remplissage { animation: none; }
+        /* La meme flamme en grand, au-dessus de l'etat du panneau. */
+        .flamme-panneau-icone { width: 40px; height: 40px; align-self: center; }
         /* La ligne de fin de partie : fondu en opacity seule, apres les gemmes. */
         .cer-flamme {
           display: inline-flex; align-items: center; gap: 4px;
@@ -11491,6 +11585,18 @@ export default function Emprise() {
   // Son panneau s'ouvre depuis la ligne du profil et se pose PAR-DESSUS lui :
   // un etat a part, pour ne pas fermer le profil en l'ouvrant.
   const [flammeOuverte, setFlammeOuverte] = useState(false);
+  // Le remplissage de la flamme vivante : arme quand la serie vient de grandir
+  // (0 -> 1 comme N -> N+1). Le DECLENCHEUR (la serie d'avant) vit dans une
+  // ref ; le drapeau arme atteint le rendu, et la flamme AFFICHEE le consomme
+  // (onRempli) -- il ne rejoue donc pas a chaque ouverture du profil.
+  const flammeSerieVueRef = useRef(null);
+  const [flammeRemplissage, setFlammeRemplissage] = useState(false);
+  useEffect(() => {
+    if (!flamme) return;
+    const avant = flammeSerieVueRef.current;
+    flammeSerieVueRef.current = flamme.serie;
+    if (avant !== null && flamme.serie > avant) setFlammeRemplissage(true);
+  }, [flamme]);
   // La progression : l'XP totale, dont le niveau se recalcule toujours. Le bilan de la
   // DERNIERE partie voyage a part : l'ecran de fin le lit, et la partie suivante le
   // remplace ou l'efface d'elle-meme.
@@ -16612,9 +16718,12 @@ export default function Emprise() {
                     aria-haspopup="dialog"
                     title="La Flamme"
                   >
-                    <svg className="profil-flamme-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                    </svg>
+                    <FlammeVivante
+                      allumee={!!(flamme && flamme.serie > 0)}
+                      className="profil-flamme-icone"
+                      remplissage={flammeRemplissage}
+                      onRempli={() => setFlammeRemplissage(false)}
+                    />
                     {flamme && flamme.serie > 0 ? (
                       <>Série classée : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b> · record {flamme.record}</>
                     ) : (
@@ -16860,6 +16969,14 @@ export default function Emprise() {
             <div className="info-overlay" onClick={() => setFlammeOuverte(false)}>
               <div className="info-panel settings-panel flamme-panel" onClick={(e) => e.stopPropagation()}>
                 <div className="info-panel-title">La Flamme</div>
+                {/* La MEME flamme vivante qu'au profil, en grand : un seul
+                    systeme, deux tailles. */}
+                <FlammeVivante
+                  allumee={!!(flamme && flamme.serie > 0)}
+                  className="flamme-panneau-icone"
+                  remplissage={flammeRemplissage}
+                  onRempli={() => setFlammeRemplissage(false)}
+                />
                 <div className="flamme-etat">
                   {flamme && flamme.serie > 0 ? (
                     <>Série en cours : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b></>
