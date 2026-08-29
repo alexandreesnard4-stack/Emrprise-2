@@ -4934,14 +4934,13 @@ const APP_STYLES = `
         .boutique-titre { scroll-margin-top: 34px; }
         /* ---------- Les bannieres de profil ---------- */
         /* La mini-banniere du hub (maquette A, v2) : le rectangle-bouton porte
-           le pseudo sur un voile statique, et la carte de niveau chevauche son
-           bord gauche en debordant vers le bas. L'overflow cache vit sur
-           l'IMAGE et le voile, jamais sur le groupe : le debord de la carte
-           doit se voir. Fond sombre en repli, AUCUNE animation ici. */
-        /* La marge droite complete le gap de la rangee : la carte, qui deborde
-           de 40 % de ses 38 px, retombe dans cet espace sans mordre la
-           pastille des pieces. */
-        .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+           le pseudo sur un voile statique, et la carte de niveau vit ENTIEREMENT
+           a l'interieur de l'etoffe, calee au bord droit. Fond sombre en repli,
+           AUCUNE animation ici. */
+        /* Plus rien ne deborde de la banniere (le debord d'antan est annule) :
+           la marge droite qui l'accueillait tombe a 0, le gap de la rangee
+           separe deja l'etoffe de la pastille des pieces. */
+        .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 0; }
         /* La banniere est INERTE : elle se change au profil. Aucun curseur. */
         .hub-banniere {
           position: relative; display: block;
@@ -4963,7 +4962,7 @@ const APP_STYLES = `
            gauche de la carte, une ligne, ellipse s'il deborde. */
         .hub-banniere-pseudo-zone {
           position: absolute; inset: 0;
-          padding-left: 8px; padding-right: 24px; box-sizing: border-box;
+          padding-left: 8px; padding-right: 38px; box-sizing: border-box;
           display: flex; align-items: center; justify-content: center;
           pointer-events: none;
         }
@@ -4976,15 +4975,14 @@ const APP_STYLES = `
           text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
         .hub-banniere-pseudo.long { font-size: 11px; }
-        /* La carte existante, posee par-dessus le bord gauche et CENTREE sur la
-           hauteur de la banniere : elle mord la marge sans sortir de l'ecran
-           (40 % de 32 px = 12,8 px, la marge en fait 16). Ombres STATIQUES
+        /* La carte, ENTIEREMENT A L'INTERIEUR de la banniere (demande du
+           Commandant, 01/09, qui annule le chevauchement d'avant) : calee a
+           8 px du bord droit et centree sur la hauteur -- 52 de banniere pour
+           36 de carte, soit 8 px en haut comme en bas. Ombres STATIQUES
            (un drop-shadow ne s'anime jamais ici) ; sa bordure doree est celle
            de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
-          /* A DROITE de la banniere desormais (demande du Commandant, 30/08) :
-             le miroir exact du chevauchement gauche. */
-          position: absolute; right: 0; top: 50%; transform: translate(40%, -50%); z-index: 1;
+          position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1;
           /* 26 x 36 : depuis que l'image est rognee, l'art remplit sa boite --
              a 38 x 52 la carte etait devenue trop grosse (dit le Commandant).
              Toujours la place de deux chiffres, toujours centree. */
@@ -16041,7 +16039,7 @@ export default function Emprise() {
             {/* La mini-banniere, INERTE (demande du Commandant, 31/08) : elle
                 se change depuis le PROFIL, plus depuis le hub. Le pseudo ecrit
                 dessus est un bouton qui ouvre le profil ; la carte de niveau,
-                qui chevauche le bord droit, y mene aussi. Fond sombre en
+                posee dans l'etoffe au bord droit, y mene aussi. Fond sombre en
                 repli : jamais d'image cassee. */}
             {(() => {
               const equipee = banniereDeCle(bourse.banniereEquipee);
