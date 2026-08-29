@@ -8965,35 +8965,44 @@ const APP_STYLES = `
           text-shadow: 0 1px 6px rgba(0,0,0,0.8);
         }
         /* ---------- L'avant-partie en deux territoires ---------- */
-        /* Chaque camp est UN bloc : sa banniere de profil couvre tout le fond,
-           identite ET cartes posees dessus. AUCUNE animation ici : les bannieres
-           ne bougent jamais, dimensions posees, pas de saut au chargement. */
+        /* Disposition A (01/09) : la banniere est un BANDEAU qui ne porte que
+           l identite ; les cartes et la Reserve vivent DESSOUS, sur le fond de
+           l ecran. AUCUNE animation ici : les bannieres ne bougent jamais,
+           dimensions posees, pas de saut au chargement. */
         .territoires {
           display: flex; flex-direction: column; gap: 12px;
           width: min(340px, 92vw); margin: 0 auto;
         }
-        /* Ligne VS resserree (line-height 1, marges -3) : les 6 px qui faisaient
-           defiler le 375x667. L ecart visuel entre les blocs reste genereux. */
+        /* Ligne VS resserree (line-height 1, marges -3), heritee de la
+           disposition B ou elle sauvait le 375x667 : gardee, l ecart visuel
+           entre les camps reste genereux. */
         .territoires .vs-contre { align-self: center; line-height: 1; margin: -3px 0; }
+        /* UN enfant par camp dans .territoires : le bandeau, puis les cartes. */
+        .camp-vs { display: flex; flex-direction: column; }
+        .camp-vs .main-et-reserve { margin-top: 10px; gap: 8px; align-items: flex-start; }
         .territoire {
-          position: relative; border-radius: 14px; overflow: hidden;
-          /* border-box : les 250 px de la maquette COMPRENNENT le padding, sans
-             quoi chaque bloc en faisait 276 et l ecran 375x667 defilait. */
-          box-sizing: border-box;
-          padding: 12px; border: 1px solid rgba(203,164,86,0.55);
-          min-height: 250px; display: flex; flex-direction: column; gap: 12px;
+          position: relative; height: 104px; width: 100%;
+          border-radius: 12px; overflow: hidden; box-sizing: border-box;
+          border: 1px solid rgba(203,164,86,0.65);
           background-size: cover; background-position: center;
           background-color: #14101d;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+          box-shadow: 0 4px 18px rgba(0,0,0,0.55);
         }
+        /* Voile HORIZONTAL : la moitie droite de la banniere respire, le texte
+           de gauche reste lisible. */
         .territoire-voile {
           position: absolute; inset: 0;
-          background: linear-gradient(180deg, rgba(8,6,14,0.78), rgba(8,6,14,0.35) 45%, rgba(8,6,14,0.7));
+          background: linear-gradient(90deg, rgba(8,6,14,0.85), rgba(8,6,14,0.3) 60%, rgba(8,6,14,0.1));
         }
-        /* La tete et la rangee de cartes passent au-dessus du voile par z-index 1 ;
-           le voile, lui, reste sans z-index. */
-        .territoire-tete, .territoire .main-et-reserve { position: relative; z-index: 1; }
-        .territoire-tete { display: flex; align-items: center; gap: 9px; }
+        /* La tete couvre le bandeau, au-dessus du voile (lui reste sans z-index). */
+        .territoire-tete {
+          position: absolute; inset: 0; z-index: 1;
+          display: flex; align-items: center; gap: 9px; padding: 0 12px;
+        }
+        /* Le niveau A GAUCHE des trophees, en paire calee a droite : sans
+           niveau (camp adverse), les trophees ne se decalent pas. Dans le
+           flux, sur la meme ligne mediane que le reste de la tete. */
+        .territoire-paire { display: inline-flex; align-items: center; gap: 8px; flex: none; }
         .territoire-medaillon {
           width: 46px; height: 46px; flex: none; border-radius: 50%;
           background-color: #241c32; background-size: cover; background-position: center;
@@ -12668,27 +12677,39 @@ export default function Emprise() {
     const comboAdverse = COMBOS.find((c) => c.nom === titreBrut);
     const titre = camp === monCamp ? titrePrincipal(stats) : (comboAdverse ? comboAdverse.nom : null);
     const niveau = camp === monCamp ? niveauDepuisXp(progression.xpTotal).niveauJoueur : null;
+    // Disposition A (01/09) : le bandeau ne porte que l identite, les cartes
+    // se posent DESSOUS, sur le fond de l ecran -- fini le probleme de
+    // contraste des cartes sur la banniere. Le conteneur .camp-vs garde UN
+    // enfant par camp dans .territoires, jamais un fragment nu.
     return (
-      <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
-        <div className="territoire-voile" aria-hidden="true" />
-        <div className="territoire-tete">
-          <span
-            className={`territoire-medaillon ${ordre ? "" : "neutre"}`}
-            style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
-            aria-hidden="true"
-          />
-          <div className="territoire-identite">
-            <span className="territoire-pseudo">{nom}<span className="lecteur-seul">{camp === monCamp ? " — votre camp" : " — camp adverse"}</span></span>
-            {titre && <span className="territoire-titre">{titre}</span>}
+      <div className="camp-vs">
+        <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
+          <div className="territoire-voile" aria-hidden="true" />
+          <div className="territoire-tete">
+            <span
+              className={`territoire-medaillon ${ordre ? "" : "neutre"}`}
+              style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+              aria-hidden="true"
+            />
+            <div className="territoire-identite">
+              <span className="territoire-pseudo">{nom}<span className="lecteur-seul">{camp === monCamp ? " (votre camp)" : " (camp adverse)"}</span></span>
+              {titre && <span className="territoire-titre">{titre}</span>}
+            </div>
+            {/* Le niveau et les trophees forment une PAIRE calee a droite :
+                sans niveau (camp adverse), les trophees restent en place. */}
+            {(niveau !== null || trophees !== null) && (
+              <span className="territoire-paire">
+                {niveau !== null && (
+                  <span className="territoire-niveau" aria-label={`Niveau ${niveau}`}>
+                    <span className="territoire-niveau-nombre" aria-hidden="true">{niveau}</span>
+                  </span>
+                )}
+                {trophees !== null && (
+                  <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
+                )}
+              </span>
+            )}
           </div>
-          {niveau !== null && (
-            <span className="territoire-niveau" aria-label={`Niveau ${niveau}`}>
-              <span className="territoire-niveau-nombre" aria-hidden="true">{niveau}</span>
-            </span>
-          )}
-          {trophees !== null && (
-            <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
-          )}
         </div>
         <div className="main-et-reserve">
           <div className="hand-row" style={{ maxWidth: 320 }}>{cartes}</div>
@@ -14952,7 +14973,7 @@ export default function Emprise() {
       <div className="cer-quetes">
         {quetesDernierePartie.map((a) => (
           <div key={a.cle} className="cer-quete-ligne">
-            Quête accomplie — {a.libelle} : +{a.xp} XP
+            Quête accomplie : {a.libelle} · +{a.xp} XP
           </div>
         ))}
       </div>
@@ -14963,7 +14984,7 @@ export default function Emprise() {
   // lignes existantes. Fondu en opacity seule, comme le reste de l'ecran.
   function bilanBanniereDePartie() {
     if (!banniereAnnonce || !gameOver) return null;
-    return <div className="cer-banniere">Bannière débloquée — {banniereAnnonce}</div>;
+    return <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>;
   }
 
   function bilanTrophees() {
@@ -17984,7 +18005,7 @@ export default function Emprise() {
             {/* L'Etendard du chapitre, fraichement possede : l'Histoire n'a pas
                 de ceremonie de fin de partie, l'annonce vit donc ICI. */}
             {banniereAnnonce && (
-              <div className="cer-banniere">Bannière débloquée — {banniereAnnonce}</div>
+              <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>
             )}
             <button
               className="reset-btn"
