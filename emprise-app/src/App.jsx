@@ -3685,9 +3685,12 @@ const ICONES_QUETES = {
   victoire1: "/quetes/icone-triomphe.png",
   parties3: "/quetes/icone-le-commandant-a-l-oeuvre.png",
 };
-const GLYPHES_QUETES = {
-  ordres: "/quetes/glyphe-ordres.png",
-};
+// Les glyphes PAR FAMILLE, quand une image existe. L'entree "ordres" pointait
+// vers un fichier jamais livre (glyphe-ordres.png, absent du disque comme de
+// l'historique) : une balise img cassee sur telephone. Retiree le 31/08 -- le
+// repli SVG au trait (l'etendard, dans glypheDeQuete) prend le relais, et la
+// vraie image se rebranchera ici le jour ou elle sera generee.
+const GLYPHES_QUETES = {};
 
 function glypheDeQuete(def, faite) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
