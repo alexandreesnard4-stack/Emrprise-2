@@ -11675,18 +11675,12 @@ export default function Emprise() {
   // Son panneau s'ouvre depuis la ligne du profil et se pose PAR-DESSUS lui :
   // un etat a part, pour ne pas fermer le profil en l'ouvrant.
   const [flammeOuverte, setFlammeOuverte] = useState(false);
-  // Le remplissage de la flamme vivante : arme quand la serie vient de grandir
-  // (0 -> 1 comme N -> N+1). Le DECLENCHEUR (la serie d'avant) vit dans une
-  // ref ; le drapeau arme atteint le rendu, et la flamme AFFICHEE le consomme
-  // (onRempli) -- il ne rejoue donc pas a chaque ouverture du profil.
-  const flammeSerieVueRef = useRef(null);
+  // Le remplissage de la flamme vivante : arme apres CHAQUE partie classee
+  // comptee (la meme porte que nourrirFlamme -- classee ET comptant au
+  // profil), que la serie ait grandi ou non. Seule la flamme du HUB le joue
+  // et le consomme (onRempli) ; un drapeau arme ne se perime pas : il attend
+  // la prochaine venue au hub, revanche enchainee comprise.
   const [flammeRemplissage, setFlammeRemplissage] = useState(false);
-  useEffect(() => {
-    if (!flamme) return;
-    const avant = flammeSerieVueRef.current;
-    flammeSerieVueRef.current = flamme.serie;
-    if (avant !== null && flamme.serie > avant) setFlammeRemplissage(true);
-  }, [flamme]);
   // La progression : l'XP totale, dont le niveau se recalcule toujours. Le bilan de la
   // DERNIERE partie voyage a part : l'ecran de fin le lit, et la partie suivante le
   // remplace ou l'efface d'elle-meme.
@@ -12641,6 +12635,11 @@ export default function Emprise() {
         mode === "bot" ? botDifficulty : null
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
+        // La flamme du hub se remplira a la prochaine venue au hub : purement
+        // visuel, arme par la MEME porte que nourrirFlamme (classee ET
+        // comptant au profil -- ni Histoire, ni Echos, ni Confluence, ni
+        // tournoi solo, ni bac a sable, ni partie disqualifiee).
+        if (partieClassee && compteAuProfil) setFlammeRemplissage(true);
         // L'Etendard d'Echo fraichement gagne : l'ecran de fin l'annonce, la
         // bourse rechargee par rafraichirProgression porte deja la possession.
         if (st.banniereDebloquee) {
@@ -16851,11 +16850,11 @@ export default function Emprise() {
                     aria-haspopup="dialog"
                     title="La Flamme"
                   >
+                    {/* Sans remplissage : l'animation d'allumage est reservee
+                        au hub, le profil montre l'etat, rien de plus. */}
                     <FlammeVivante
                       allumee={!!(flamme && flamme.serie > 0)}
                       className="profil-flamme-icone"
-                      remplissage={flammeRemplissage}
-                      onRempli={() => setFlammeRemplissage(false)}
                     />
                     {flamme && flamme.serie > 0 ? (
                       <>Série classée : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b> · record {flamme.record}</>
@@ -17103,12 +17102,11 @@ export default function Emprise() {
               <div className="info-panel settings-panel flamme-panel" onClick={(e) => e.stopPropagation()}>
                 <div className="info-panel-title">La Flamme</div>
                 {/* La MEME flamme vivante qu'au profil, en grand : un seul
-                    systeme, deux tailles. */}
+                    systeme, deux tailles. Sans remplissage : il n'appartient
+                    qu'au hub, le panneau ne le joue ni ne le consomme. */}
                 <FlammeVivante
                   allumee={!!(flamme && flamme.serie > 0)}
                   className="flamme-panneau-icone"
-                  remplissage={flammeRemplissage}
-                  onRempli={() => setFlammeRemplissage(false)}
                 />
                 <div className="flamme-etat">
                   {flamme && flamme.serie > 0 ? (
