@@ -55,7 +55,7 @@ Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher 
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
 Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie, et se change depuis le profil (pinceau sur le bandeau).
-L'attente des Ordres adverses en ligne montre le face-à-face : les deux Commandants, votre main, et des points d'interrogation sur ce que l'adversaire n'a pas encore choisi.
+L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
 Avant-partie : chaque camp sur son territoire — sa bannière en fond de bloc, médaillon de l'Ordre favori, pseudo, titre, carte de niveau et trophées, la main et la Réserve posées dessus.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
