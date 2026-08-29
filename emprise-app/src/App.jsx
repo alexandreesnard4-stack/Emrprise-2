@@ -4857,10 +4857,11 @@ const APP_STYLES = `
            au-dessus : la colonne reste une colonne. Teinte amethyste, comme tout ce qui
            touche aux gemmes -- le dore reste aux pieces et aux trophees. */
         .hub-gemmes {
-          /* La MEME pastille pour les deux monnaies : hauteur fixe de la rangee
-             (52 px, comme la banniere), largeur minimale commune, contenu
-             centre -- icone, valeur, bouton + identiques des deux cotes. */
-          height: 52px; min-width: 88px; box-sizing: border-box;
+          /* La MEME pastille pour les deux monnaies : hauteur commune plus
+             legere que la banniere (38 px -- les fonds a 52 etaient trop gros,
+             dit le Commandant), meme centre vertical par la rangee, largeur
+             minimale commune, contenu centre. */
+          height: 38px; min-width: 78px; box-sizing: border-box;
           padding: 0 10px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
           background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
