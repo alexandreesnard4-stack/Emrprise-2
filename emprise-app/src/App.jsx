@@ -8940,14 +8940,16 @@ const APP_STYLES = `
         /* Les plaques vs-bandeau, vs-plaque, vs-banniere et vs-nom sont mortes
            le 01/09 : l'apercu ET l'attente en ligne vivent dans les
            territoires. Seuls restent les trophees et le VS, qu'ils reprennent. */
+        /* Grossis le 01/09 (demande du Commandant) : trophees 11 vers 13 px,
+           VS 15 vers 18. */
         .vs-trophees {
           display: inline-flex; align-items: center; gap: 4px;
-          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: var(--gold-bright);
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: var(--gold-bright);
           font-variant-numeric: tabular-nums;
         }
-        .vs-trophees img { width: 11px; height: 15px; object-fit: contain; display: block; }
+        .vs-trophees img { width: 13px; height: 18px; object-fit: contain; display: block; }
         .vs-contre {
-          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 700; color: var(--gold);
+          font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700; color: var(--gold);
           text-shadow: 0 0 10px rgba(203,164,86,0.45);
         }
         /* La main d en face pas encore choisie : deux cartes muettes qui ne disent
@@ -8980,6 +8982,11 @@ const APP_STYLES = `
         /* UN enfant par camp dans .territoires : le bandeau, puis les cartes. */
         .camp-vs { display: flex; flex-direction: column; }
         .camp-vs .main-et-reserve { margin-top: 10px; gap: 8px; align-items: flex-start; }
+        /* MON camp en miroir (demande du Commandant, 01/09) : mes cartes juste
+           SOUS le VS, mon bandeau en bas. Les deux mains se font face autour
+           du VS, les bandeaux aux extremites. */
+        .camp-vs.mien { flex-direction: column-reverse; }
+        .camp-vs.mien .main-et-reserve { margin-top: 0; margin-bottom: 10px; }
         .territoire {
           position: relative; height: 104px; width: 100%;
           border-radius: 12px; overflow: hidden; box-sizing: border-box;
@@ -12676,13 +12683,16 @@ export default function Emprise() {
     const titreBrut = titresPartie && typeof titresPartie[camp] === "string" ? titresPartie[camp] : "";
     const comboAdverse = COMBOS.find((c) => c.nom === titreBrut);
     const titre = camp === monCamp ? titrePrincipal(stats) : (comboAdverse ? comboAdverse.nom : null);
-    const niveau = camp === monCamp ? niveauDepuisXp(progression.xpTotal).niveauJoueur : null;
+    // Le mien se calcule ici ; celui d'en face arrive par le document de la
+    // partie (blueNiveau/redNiveau), assaini par niveauRecu. Absent (partie
+    // d'avant le champ, client ancien) : pas de carte, jamais un zero.
+    const niveau = camp === monCamp ? niveauDepuisXp(progression.xpTotal).niveauJoueur : (p.niveau || null);
     // Disposition A (01/09) : le bandeau ne porte que l identite, les cartes
     // se posent DESSOUS, sur le fond de l ecran -- fini le probleme de
     // contraste des cartes sur la banniere. Le conteneur .camp-vs garde UN
     // enfant par camp dans .territoires, jamais un fragment nu.
     return (
-      <div className="camp-vs">
+      <div className={`camp-vs ${camp === monCamp ? "mien" : ""}`}>
         <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
           <div className="territoire-voile" aria-hidden="true" />
           <div className="territoire-tete">
@@ -13640,13 +13650,16 @@ export default function Emprise() {
           .filter((k) => COMBOS.some((c) => c.key === k)).slice(0, 3);
         // Une cle d'Ordre venue d'ailleurs se verifie comme le reste.
         const ordreRecu = (v) => (ORDERS.some((o) => o.key === v) ? v : "");
+        // Le niveau d'en face : un entier de 1 au plafond, sinon rien -- une
+        // partie d'avant ce champ, ou un client ancien, n'affiche pas de carte.
+        const niveauRecu = (v) => (Number.isFinite(v) && v >= 1 ? Math.min(NIVEAU_MAX, Math.floor(v)) : undefined);
         setProfilPartie({
           blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
                   ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties),
-                  tournois: entierRecu(data.blueTournois) },
+                  tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau) },
           red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
                  ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties),
-                 tournois: entierRecu(data.redTournois) },
+                 tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -14676,12 +14689,16 @@ export default function Emprise() {
           // Les trophees pour le face-a-face d'avant-partie. ICI et pas a la prise du
           // siege : a cet instant on est participant, donc tout champ est permis. En
           // Classe l'appariement les a deja ecrits, on repose la meme valeur.
-          blueTrophees: tropheesPublics() }
+          blueTrophees: tropheesPublics(),
+          // Le niveau du Commandant, par la meme porte que le reste du profil :
+          // l'adversaire l'affiche sur sa carte du face-a-face (demande du 01/09).
+          blueNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
           redOrdreFavori: moi.ordreFavori, redCombosParties: moi.combosParties,
           redTournois: tournoisPublics(),
-          redTrophees: tropheesPublics() };
+          redTrophees: tropheesPublics(),
+          redNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
       await updateDoc(doc(db, "games", onlineGameId), field);
