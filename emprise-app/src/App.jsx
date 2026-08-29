@@ -4938,10 +4938,7 @@ const APP_STYLES = `
              dit le Commandant), meme centre vertical par la rangee, largeur
              minimale commune, contenu centre. */
           height: 38px; min-width: 78px; box-sizing: border-box;
-          /* 6 px (10 avant) : les icones agrandies mangent de la largeur, la
-             pastille rend un peu de rembourrage pour ne pas etrangler la
-             banniere en 375 px. */
-          padding: 0 6px; flex: none;
+          padding: 0 10px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
           background: rgba(30, 18, 48, 0.65); border: 1px solid rgba(146, 86, 207, 0.45);
           border-radius: 10px; cursor: pointer;
@@ -4967,22 +4964,14 @@ const APP_STYLES = `
           background: linear-gradient(180deg, #f0dcae, #cfa452);
           color: #2a1c08;
         }
-        /* 44 px dans une pastille de 38 : l'icone DEBORDE volontairement du
-           fond, 3 px en haut et 3 px en bas, comme posee dessus -- le meme
-           geste que le parchemin des quetes (debord, overflow visible, ombre
-           portee qui vend le detachement). La piece reste un cran au-dessus
-           de la gemme : a taille egale la ronde parait plus petite que le
-           cristal haut. */
-        .hub-pieces .piece-icone {
-          width: 44px; height: 44px; flex: none;
-          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
-        }
-        /* 40 px pour le cristal, meme debord de 1 px par bord. Une seule image
-           de gemme partout (gemme-icone.png) : pas d'exception ici. */
-        .hub-gemmes .gemme-icone {
-          width: 40px; height: 40px; flex: none;
-          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
-        }
+        /* 28 px (24 avant) : a taille egale la piece ronde parait plus petite
+           que le cristal haut, le Commandant l'a donc voulue un cran au-dessus.
+           Le faux 3D du 01/09 (44 px debordants, ombre portee) a vecu le jour
+           meme : moche sur telephone, dit le Commandant. */
+        .hub-pieces .piece-icone { width: 28px; height: 28px; flex: none; }
+        /* 24 px (10, 16 puis 20 avant lui). Une seule image de gemme partout
+           (gemme-icone.png, le cristal d'amethyste) : pas d'exception ici. */
+        .hub-gemmes .gemme-icone { width: 24px; height: 24px; flex: none; }
         /* Le +, pastille pleine : c'est lui qui dit « on peut en acheter ». */
         .hub-gemmes-plus {
           width: 13px; height: 13px; flex: none; border-radius: 50%;
@@ -16220,8 +16209,8 @@ export default function Emprise() {
                 aria-haspopup="dialog"
                 aria-label={!flamme ? "Flamme"
                   : flamme.serie > 0
-                    ? `Flamme : ${flamme.serie} jour${flamme.serie > 1 ? "s" : ""}, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}`
-                    : `Flamme éteinte${flamme.record > 0 ? `, record ${flamme.record} jour${flamme.record > 1 ? "s" : ""}` : ""}`}
+                    ? `Flamme : ${flamme.serie} jour${flamme.serie > 1 ? "s" : ""}`
+                    : "Flamme éteinte"}
                 title="La Flamme"
               >
                 <FlammeVivante
@@ -17173,10 +17162,12 @@ export default function Emprise() {
                       allumee={!!(flamme && flamme.serie > 0)}
                       className="profil-flamme-icone"
                     />
+                    {/* Plus aucune mention du record, nulle part (demande du
+                        Commandant, 01/09) : la donnee reste gardee en silence. */}
                     {flamme && flamme.serie > 0 ? (
-                      <>Série classée : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b> · record {flamme.record}</>
+                      <>Série classée : <b>{flamme.serie} jour{flamme.serie > 1 ? "s" : ""}</b></>
                     ) : (
-                      <>Série classée : éteinte{flamme && flamme.record > 0 ? <> · record {flamme.record} jour{flamme.record > 1 ? "s" : ""}</> : null}</>
+                      <>Série classée : éteinte</>
                     )}
                   </button>
 
@@ -17411,9 +17402,9 @@ export default function Emprise() {
           )}
 
           {/* ---------- Le panneau de la Flamme ---------- */}
-          {/* Serie en cours, record a vie, paliers de pieces -- et la regle dite
-              sobrement, sans compte a rebours ni culpabilisation. RIEN a acheter
-              ici : la Flamme ne se protege pas, ne se rachete pas. */}
+          {/* Serie en cours et paliers de pieces -- et la regle dite sobrement,
+              sans compte a rebours ni culpabilisation. RIEN a acheter ici : la
+              Flamme ne se protege pas, ne se rachete pas. */}
           {flammeOuverte && (
             <div className="info-overlay" onClick={() => setFlammeOuverte(false)}>
               <div className="info-panel settings-panel flamme-panel" onClick={(e) => e.stopPropagation()}>
