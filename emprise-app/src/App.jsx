@@ -15930,7 +15930,10 @@ export default function Emprise() {
                   remplissage={flammeRemplissage}
                   onRempli={() => setFlammeRemplissage(false)}
                 />
-                {flamme && flamme.serie > 0 && (
+                {/* Le nombre de la serie TOUJOURS visible, meme a zero -- le
+                    Commandant veut lire son compte d'un coup d'oeil ; eteint,
+                    il herite du gris de la pilule. */}
+                {flamme && (
                   <span className="hub-flamme-jours" aria-hidden="true">{flamme.serie}</span>
                 )}
               </button>
