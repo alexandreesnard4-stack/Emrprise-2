@@ -56,6 +56,7 @@ Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pi
 Profil : niveau sur carte d'apparat, jauge d'XP, statistiques, titres de style de jeu, tournois en ligne remportés.
 Bannières de profil : un choix offert au premier lancement, des Étendards gagnés en terminant les chapitres d'Histoire et en battant chaque Écho, la bannière équipée habille le profil et l'avant-partie, et se change depuis le profil (pinceau sur le bandeau).
 L'attente des Ordres adverses en ligne montre le face-à-face : les deux Commandants, votre main, et des points d'interrogation sur ce que l'adversaire n'a pas encore choisi.
+Avant-partie : chaque camp sur son territoire — sa bannière en fond de bloc, médaillon de l'Ordre favori, pseudo, titre, carte de niveau et trophées, la main et la Réserve posées dessus.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
 Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.

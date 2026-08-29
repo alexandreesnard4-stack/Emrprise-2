@@ -9003,6 +9003,67 @@ const APP_STYLES = `
           color: var(--gold-bright); font-size: 24px; font-weight: 700;
           text-shadow: 0 1px 6px rgba(0,0,0,0.8);
         }
+        /* ---------- L'avant-partie en deux territoires ---------- */
+        /* Chaque camp est UN bloc : sa banniere de profil couvre tout le fond,
+           identite ET cartes posees dessus. AUCUNE animation ici : les bannieres
+           ne bougent jamais, dimensions posees, pas de saut au chargement. */
+        .territoires {
+          display: flex; flex-direction: column; gap: 12px;
+          width: min(340px, 92vw); margin: 0 auto;
+        }
+        /* Ligne VS resserree (line-height 1, marges -3) : les 6 px qui faisaient
+           defiler le 375x667. L ecart visuel entre les blocs reste genereux. */
+        .territoires .vs-contre { align-self: center; line-height: 1; margin: -3px 0; }
+        .territoire {
+          position: relative; border-radius: 14px; overflow: hidden;
+          /* border-box : les 250 px de la maquette COMPRENNENT le padding, sans
+             quoi chaque bloc en faisait 276 et l ecran 375x667 defilait. */
+          box-sizing: border-box;
+          padding: 12px; border: 1px solid rgba(203,164,86,0.55);
+          min-height: 250px; display: flex; flex-direction: column; gap: 12px;
+          background-size: cover; background-position: center;
+          background-color: #14101d;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        .territoire-voile {
+          position: absolute; inset: 0;
+          background: linear-gradient(180deg, rgba(8,6,14,0.78), rgba(8,6,14,0.35) 45%, rgba(8,6,14,0.7));
+        }
+        /* La tete et la rangee de cartes passent au-dessus du voile par z-index 1 ;
+           le voile, lui, reste sans z-index. */
+        .territoire-tete, .territoire .main-et-reserve { position: relative; z-index: 1; }
+        .territoire-tete { display: flex; align-items: center; gap: 9px; }
+        .territoire-medaillon {
+          width: 46px; height: 46px; flex: none; border-radius: 50%;
+          background-color: #241c32; background-size: cover; background-position: center;
+          border: 2px solid var(--gold); box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+        }
+        /* Sans Ordre favori connu, le meme degrade sombre que la plaque : jamais
+           une image cassee. */
+        .territoire-medaillon.neutre { background-image: linear-gradient(160deg, #2a2138 0%, #14101d 100%); }
+        .territoire-identite { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .territoire-pseudo {
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.85);
+        }
+        .territoire-titre {
+          font-style: italic; font-size: 9.5px; color: var(--gold-bright);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+        }
+        /* La carte de niveau au gabarit de celle du hub : meme image, 26 x 36,
+           chiffre a 11 px, deux chiffres reserves d'office. */
+        .territoire-niveau {
+          width: 26px; height: 36px; flex: none;
+          display: flex; align-items: center; justify-content: center;
+          background: url("/niveaux/carte-niveau.png") center / contain no-repeat;
+        }
+        .territoire-niveau-nombre {
+          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+          color: var(--gold-bright); line-height: 1; font-variant-numeric: tabular-nums;
+          min-width: 2ch; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+        }
 
         .reserve-panel { max-width: 330px; }
         .reserve-panel-sous { text-align: center; line-height: 1.5; margin-top: -2px; }
@@ -19008,66 +19069,81 @@ export default function Emprise() {
                   const campAdverse = monCamp === "blue" ? "red" : "blue";
                   const mainAdverse = campAdverse === "red" ? redHand : blueHand;
                   const maMain = monCamp === "red" ? redHand : blueHand;
+                  // Chaque camp est UN territoire : sa banniere couvre tout le bloc,
+                  // identite ET cartes posees dessus (refonte du 01/09). L'adversaire
+                  // distant garde Le Drap de Nuit tant que son profil ne transporte
+                  // pas sa banniere ; l'Echo garde l'Etendard de sa difficulte.
+                  const fondMien = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
+                  const fondAdverse = enLigne
+                    ? banniereDeCle(BANNIERE_REPLI)
+                    : (botDifficulty ? banniereDeDifficulte(botDifficulty) : banniereDeCle(BANNIERE_REPLI));
+                  const nomAdverse = enLigne
+                    ? (pseudosPartie && pseudosPartie[campAdverse]) || "Votre adversaire"
+                    : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label || "L'Écho";
+                  // Le titre d'un camp : le mien par titrePrincipal, celui d'en face
+                  // par le document de la partie -- valide contre COMBOS, comme dans
+                  // pucesTitre. Absent : pas de ligne, jamais un titre invente.
+                  const titreDe = (camp) => {
+                    if (camp === monCamp) return titrePrincipal(stats);
+                    const titre = titresPartie && typeof titresPartie[camp] === "string" ? titresPartie[camp] : "";
+                    const combo = COMBOS.find((c) => c.nom === titre);
+                    return combo ? combo.nom : null;
+                  };
+                  // Le territoire d'un camp : la tete (medaillon de l'Ordre favori,
+                  // pseudo, titre, carte de niveau, trophees), puis la main et la
+                  // Reserve, le tout pose sur la banniere. Une donnee absente EFFACE
+                  // sa ligne. Le niveau d'en face n'est transporte nulle part
+                  // aujourd'hui : pas de carte de niveau cote adverse.
+                  const territoire = (camp, nom, fond, cartes) => {
+                    const p = (profilPartie && profilPartie[camp]) || {};
+                    const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
+                    const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
+                    const titre = titreDe(camp);
+                    const niveau = camp === monCamp ? niveauDepuisXp(progression.xpTotal).niveauJoueur : null;
+                    return (
+                      <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
+                        <div className="territoire-voile" aria-hidden="true" />
+                        <div className="territoire-tete">
+                          <span
+                            className={`territoire-medaillon ${ordre ? "" : "neutre"}`}
+                            style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+                            aria-hidden="true"
+                          />
+                          <div className="territoire-identite">
+                            <span className="territoire-pseudo">{nom}<span className="lecteur-seul">{camp === monCamp ? " — votre camp" : " — camp adverse"}</span></span>
+                            {titre && <span className="territoire-titre">{titre}</span>}
+                          </div>
+                          {niveau !== null && (
+                            <span className="territoire-niveau" aria-label={`Niveau ${niveau}`}>
+                              <span className="territoire-niveau-nombre" aria-hidden="true">{niveau}</span>
+                            </span>
+                          )}
+                          {trophees !== null && (
+                            <span className="vs-trophees"><img src="/nav/trophee.webp" alt="" />{trophees}<span className="lecteur-seul"> trophées</span></span>
+                          )}
+                        </div>
+                        {/* La Reserve figure des l'apercu, a cote de la main : le
+                            joueur vient de la composer. Celle d'en face est de dos,
+                            elle ne revele donc rien. */}
+                        <div className="main-et-reserve">
+                          <div className="hand-row" style={{ maxWidth: 320 }}>{cartes}</div>
+                          {pileDeReserve(reserveDe(camp), true)}
+                        </div>
+                      </div>
+                    );
+                  };
                   return (
-                    <>
-                      {/* Le face-a-face : la banniere de chacun -- l'Ordre qu'il joue le
-                          plus -- son nom et ses trophees. Tout vient du document de la
-                          partie : les deux ecrans montrent la meme scene, et la plaque
-                          est partagee avec l'ecran d'attente en ligne. */}
-                      {enLigne && (
-                        <div className="vs-bandeau">
-                          {plaqueVs(monCamp, monCamp)}
-                          <span className="vs-contre" aria-hidden="true">VS</span>
-                          {plaqueVs(campAdverse, monCamp)}
-                        </div>
-                      )}
-                      {/* L'Echo porte l'Etendard de sa difficulte : l'adversaire
-                          bot a toujours une banniere coherente. En duel local,
-                          l'etiquette reste nue -- on ne connait pas l'autre. */}
-                      {(() => {
-                        const etiquette = enLigne ? "Sa main" : DIFFICULTIES.find((d) => d.key === botDifficulty)?.label;
-                        const etendardAdverse = !enLigne && botDifficulty ? banniereDeDifficulte(botDifficulty) : null;
-                        return etendardAdverse ? (
-                          <div className="vs-etendard" style={{ backgroundImage: `url("${etendardAdverse.image}")` }}>
-                            <span>{etiquette}</span>
-                          </div>
-                        ) : (
-                          <div className="sub">{etiquette}</div>
-                        );
-                      })()}
-                      {/* La Reserve figure des l'apercu, a cote de la main : le joueur
-                          vient de la composer, il doit la retrouver la ou il la verra
-                          pendant toute la partie. Celle d'en face est de dos elle aussi,
-                          elle ne revele donc rien. */}
-                      <div className="main-et-reserve">
-                        <div className="hand-row" style={{ maxWidth: 320 }}>
-                          {apercuParOrdre(mainAdverse).map((card) => (
-                            <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
-                          ))}
-                        </div>
-                        {pileDeReserve(reserveDe(campAdverse), true)}
-                      </div>
-                      {/* Ma banniere sous celle d'en face : la mienne en bas,
-                          la sienne en haut, comme les mains. */}
-                      {(() => {
-                        const mienne = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
-                        return mienne ? (
-                          <div className="vs-etendard mienne" style={{ backgroundImage: `url("${mienne.image}")`, marginTop: 16 }}>
-                            <span>Votre main</span>
-                          </div>
-                        ) : (
-                          <div className="sub" style={{ color: "var(--blue-bright)", marginTop: 16 }}>Votre main</div>
-                        );
-                      })()}
-                      <div className="main-et-reserve">
-                        <div className="hand-row" style={{ maxWidth: 320 }}>
-                          {apercuParOrdre(maMain).map((card) => (
-                            <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
-                          ))}
-                        </div>
-                        {pileDeReserve(reserveDe(monCamp), true)}
-                      </div>
-                    </>
+                    <div className="territoires">
+                      {territoire(campAdverse, nomAdverse, fondAdverse,
+                        apercuParOrdre(mainAdverse).map((card) => (
+                          <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
+                        )))}
+                      <span className="vs-contre" aria-hidden="true">VS</span>
+                      {territoire(monCamp, pseudo || "Vous", fondMien,
+                        apercuParOrdre(maMain).map((card) => (
+                          <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                        )))}
+                    </div>
                   );
                 })()}
               </>
