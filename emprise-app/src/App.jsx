@@ -4933,11 +4933,12 @@ const APP_STYLES = `
            de 40 % de ses 38 px, retombe dans cet espace sans mordre la
            pastille des pieces. */
         .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+        /* La banniere est INERTE : elle se change au profil. Aucun curseur. */
         .hub-banniere {
           position: relative; display: block;
           width: 100%; height: 52px;
           border-radius: 9px; border: 1px solid rgba(203, 164, 86, 0.6);
-          padding: 0; cursor: pointer; overflow: visible;
+          padding: 0; overflow: visible;
           background: linear-gradient(160deg, #241c32, #14101d);
         }
         .hub-banniere-image, .hub-banniere-voile {
@@ -4947,14 +4948,19 @@ const APP_STYLES = `
         .hub-banniere-voile {
           background: linear-gradient(90deg, rgba(8,6,14,0.72), rgba(8,6,14,0.2) 55%, transparent);
         }
-        /* Le pseudo SUR la banniere : centre dans l'espace restant a droite de
-           la carte (le retrait gauche vaut sa largeur visible plus le gap), une
-           seule ligne, ellipse s'il deborde. 14 px jusqu'a 10 caracteres,
-           11,5 px au-dela. */
-        .hub-banniere-pseudo {
-          position: absolute; inset: 0; display: block;
+        /* Le pseudo SUR la banniere, seul BOUTON de l'etoffe : il ouvre le
+           profil. Sa zone de centrage laisse filer les touchers (la banniere
+           reste inerte), seul le texte les retient. Centre dans l'espace a
+           gauche de la carte, une ligne, ellipse s'il deborde. */
+        .hub-banniere-pseudo-zone {
+          position: absolute; inset: 0;
           padding-left: 8px; padding-right: 29px; box-sizing: border-box;
-          line-height: 50px; text-align: center;
+          display: flex; align-items: center; justify-content: center;
+          pointer-events: none;
+        }
+        .hub-banniere-pseudo {
+          pointer-events: auto; background: none; border: none; cursor: pointer;
+          padding: 2px 4px; max-width: 100%;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
           font-size: 14px; color: var(--bone);
@@ -6033,7 +6039,6 @@ const APP_STYLES = `
           min-width: 2ch; text-align: center;
           text-shadow: 0 1px 4px rgba(0,0,0,0.9);
         }
-        .quetes-titre-parchemin { width: 22px; height: 22px; flex: none; object-fit: contain; }
         /* La carte a gauche, le corps (ligne, jauge, compte) a droite : le corps
            reprend l'ancienne colonne, la barre et ses textes n'ont pas bouge. */
         .profil-xp { width: 100%; display: flex; align-items: center; gap: 10px; margin: 2px 0 4px; }
@@ -15869,29 +15874,34 @@ export default function Emprise() {
                 (fixes) : le tresor s'affiche sur TOUTES les pages du hub,
                 Ordres comprise -- demande du Commandant. */}
             <div className="hub-tresor">
-            {/* La mini-banniere : le PSEUDO ecrit dessus (voile statique cote
-                gauche, ellipse s'il deborde) et la carte de niveau qui
-                chevauche son bord gauche, centree verticalement. Le toucher de
-                la banniere ouvre LA selection existante ; la carte est la porte
-                du profil. Fond sombre en repli : jamais d'image cassee. */}
+            {/* La mini-banniere, INERTE (demande du Commandant, 31/08) : elle
+                se change depuis le PROFIL, plus depuis le hub. Le pseudo ecrit
+                dessus est un bouton qui ouvre le profil ; la carte de niveau,
+                qui chevauche le bord droit, y mene aussi. Fond sombre en
+                repli : jamais d'image cassee. */}
             {(() => {
               const equipee = banniereDeCle(bourse.banniereEquipee);
               const niveauJoueur = niveauDepuisXp(progression.xpTotal).niveauJoueur;
               return (
                 <div className="hub-banniere-groupe">
-                  <button
+                  <div
                     className="hub-banniere"
-                    onClick={() => setSelectionBanniere(true)}
-                    aria-haspopup="dialog"
-                    aria-label={`${pseudo}, niveau ${niveauJoueur}, bannière équipée : ${equipee ? equipee.nom : "aucune"}. Toucher pour changer de bannière.`}
-                    title="Changer de bannière"
+                    role="img"
+                    aria-label={`Bannière équipée : ${equipee ? equipee.nom : "aucune"}`}
                   >
                     {equipee && (
                       <span className="hub-banniere-image" style={{ backgroundImage: `url("${equipee.image}")` }} aria-hidden="true" />
                     )}
                     <span className="hub-banniere-voile" aria-hidden="true" />
-                    <span className={`hub-banniere-pseudo ${pseudo && pseudo.length > 10 ? "long" : ""}`} aria-hidden="true">{pseudo}</span>
-                  </button>
+                    <span className="hub-banniere-pseudo-zone">
+                      <button
+                        className={`hub-banniere-pseudo ${pseudo && pseudo.length > 10 ? "long" : ""}`}
+                        onClick={() => setActiveModal("profil")}
+                        aria-haspopup="dialog"
+                        title="Voir mon profil"
+                      >{pseudo}</button>
+                    </span>
+                  </div>
                   <button
                     className="hub-niveau hub-niveau-sur-banniere"
                     onClick={() => setActiveModal("profil")}
@@ -16032,7 +16042,6 @@ export default function Emprise() {
                 <button className="quetes-retour" onClick={() => setPageQuetes(false)} aria-label="Retour au hub">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
                 </button>
-                <img className="quetes-titre-parchemin" src="/quetes/parchemin.png" alt="" aria-hidden="true" width="22" height="22" />
                 <h2 className="quetes-titre">QUÊTES</h2>
               </header>
               <div className="quetes-corps">
