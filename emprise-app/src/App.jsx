@@ -5161,6 +5161,27 @@ const APP_STYLES = `
         /* Un defilement commande vers un titre s'arrete SOUS la lisiere fondue par le
            masque de la page : sans cette marge, le titre arrivait pile dans l'estompe. */
         .boutique-titre { scroll-margin-top: 34px; }
+        /* ---------- L auvent de la Boutique (02/09) ---------- */
+        /* La devanture : sticky dans le SEUL conteneur qui defile, les rayons
+           passent dessous et se voient entre les festons. Immobile, aucune
+           animation -- comme les bannieres. Marges laterales negatives : il
+           touche les deux bords de la page, le max-width de 540 borne tout.
+           z-index 3 : au-dessus des cartes (sans z), tres loin sous les
+           popups d achat (info-overlay, 90, en fixed). pointer-events none :
+           un feston ne doit jamais voler le toucher d une carte qui passe
+           dessous. */
+        .boutique-auvent {
+          position: sticky; top: 0; z-index: 3; flex: none;
+          display: block; width: calc(100% + 36px); height: auto;
+          margin: 0 -18px -2px;
+          pointer-events: none;
+        }
+        /* Les ancres du tresor comptent la hauteur AFFICHEE de l auvent :
+           largeur de page (100vw bornee a 540) fois 280/1472, plus 12 px
+           d air -- sinon Gemmes et Le Changeur atterrissaient caches
+           derriere. Les 34 px au-dessus restent pour la page des Quetes,
+           qui partage la classe sans jamais defiler vers ses titres. */
+        .page-boutique .boutique-titre { scroll-margin-top: calc(min(100vw, 540px) * 0.19022 + 12px); }
         /* ---------- Les bannieres de profil ---------- */
         /* La mini-banniere du hub (maquette A, v2) : le rectangle-bouton porte
            le pseudo sur un voile statique, et la carte de niveau vit ENTIEREMENT
@@ -5495,9 +5516,10 @@ const APP_STYLES = `
              chevauchement qui justifiait ce fondu du haut n'existe plus : le
              bandeau du hub s'arrete 10 px AU-DESSUS du bord du defilement
              depuis ses reamenagements. Le fondu du haut a donc vecu ; celui du
-             bas reste. padding-top 2 (4 herite de .hub-page avant) : le titre
-             commence net, a 14 px du bandeau. */
-          padding-top: 2px;
+             bas reste. padding-top 0 (02/09, l auvent) : le clamp du sticky
+             plafonne l auvent au bord du padding -- a zero, la traverse d or
+             touche le bandeau, et c est elle qui donne son air au titre. */
+          padding-top: 0;
           /* Le bas (02/09) : le dernier rayon s arretait 12 px au-dessus du
              fondu de 16 px -- juste, mais sans reserve pour les navigateurs de
              telephone dont la barre d outils fait bouger la fenetre. 24 px
@@ -16705,6 +16727,12 @@ export default function Emprise() {
           >
             {hubPage === "boutique" && (
               <section key="boutique" className={`hub-page page-boutique hub-glisse-${hubSens}`} aria-label="Boutique">
+                {/* L auvent-devanture (02/09) : traverse d or et festons, pose
+                    sous le bandeau, accroche en haut du defilement -- les
+                    rayons glissent dessous. Decoratif et intouchable au doigt
+                    (pointer-events none). width/height HTML : la place est
+                    reservee d avance, aucun saut de mise en page. */}
+                <img className="boutique-auvent" src="/boutique/auvent.webp" alt="" aria-hidden="true" width="1472" height="280" />
                 <div className="boutique-page">
                   {/* Plus de soldes en tete d'etal : le tresor du hub les affiche
                       deja, les popups d'achat disent le solde au moment de payer --
