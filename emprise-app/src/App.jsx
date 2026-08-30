@@ -730,7 +730,7 @@ const COMBOS = [
   },
   {
     key: "rancon", nom: "La Rançon", ordres: ["maudits", "eveil"],
-    recit: "Vous laissez l'adversaire vous prendre un Maudit — il en sort plus fort — puis vous le rachetez.",
+    recit: "Vous laissez l'adversaire vous prendre un Maudit : il en sort plus fort, puis vous le rachetez.",
     signe: "Un Maudit perdu, puis repris dans la même partie.",
   },
   {
@@ -793,7 +793,7 @@ const TITRES_REPLI = {
   },
   alchimiste: {
     nom: "L'Alchimiste",
-    recit: "Vous mariez des Ordres qu'aucun traité ne recommande — et vos mélanges gagnent. Les Scribes cherchent encore un nom pour ce que vous faites.",
+    recit: "Vous mariez des Ordres qu'aucun traité ne recommande, et vos mélanges gagnent. Les Scribes cherchent encore un nom pour ce que vous faites.",
   },
 };
 
