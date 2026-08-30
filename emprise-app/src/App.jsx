@@ -13025,19 +13025,25 @@ export default function Emprise() {
   // Cela ne revele RIEN a l'adversaire : les deux mains sont publiques et l'apercu les
   // montre, et la Reserve tient une carte par Ordre -- ses deux Ordres etaient donc deja
   // connus. Ce qui reste cache, et qui seul compte, c'est l'orientation de ses rangs.
-  // Le dos ACHETE n'habille que MES cartes (demande du Commandant, 02/09) :
-  // rien ne transporte le cosmetique d en face, et voir l adversaire porter
-  // le mien faisait croire a un achat partage. Son camp garde le dos par
-  // defaut. En duel local, deux humains partagent le profil : personne ne le
-  // porte, comme le veut monCampCombos qui y est nul.
+  // Chaque camp porte SON dos (decision du 02/09 au soir, qui ANNULE celle
+  // du meme jour ou l adversaire retombait toujours sur le defaut, prise
+  // quand rien ne transportait son choix) : le dos equipe voyage desormais
+  // par le document de partie -- blueDos/redDos, ecrits a l envoi des Ordres,
+  // la meme porte que le niveau et le titre -- et lu assaini par dosRecu (une
+  // cle hors catalogue tombe, et dosDe retombe sur le defaut : jamais un
+  // plantage). Champ absent -- vieille partie, vieux client -- : defaut.
+  // Hors ligne, le defaut reste en face : un Echo n achete rien, l Histoire
+  // non plus, et le duel local partage un seul profil.
   // composeMien : l ecran de composition de la Reserve est TOUJOURS le mien
   // -- personne d autre ne le voit -- et il doit montrer le dos choisi en
   // boutique dans tous les modes, duel local compris (demande du Commandant,
   // 02/09 : meme quand on selectionne la Reserve, on voit le dos choisi).
   function dosDeCarte(c, camp, composeMien = false) {
     const mien = composeMien || (camp != null && camp === monCampCombos);
+    const transporte = mode === "online" && camp && profilPartie && profilPartie[camp]
+      ? profilPartie[camp].dos : undefined;
     return {
-      ...variablesDos(mien ? cosmetiques.dos : DOS_DEFAUT),
+      ...variablesDos(mien ? cosmetiques.dos : (transporte || DOS_DEFAUT)),
       "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none",
     };
   }
@@ -13054,8 +13060,9 @@ export default function Emprise() {
     // deja combien il en reste, et l'aria-label garde le nombre pour le
     // lecteur d'ecran. Seule l'attente en ligne garde sa pastille, un ? qui
     // dit autre chose : la Reserve d'en face n'est pas encore composee.
-    // campProprio : a qui est la pile -- le dos cosmetique n habille que la
-    // mienne, jamais celle d en face.
+    // campProprio : a qui est la pile -- chaque camp porte son dos (02/09) :
+    // le mien vient de la boutique locale, celui d en face du document de la
+    // partie, et le defaut habille tout le reste.
     const contenu = (
       <>
         {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} style={dosDeCarte(c, campProprio)} aria-hidden="true" />))}
@@ -14113,13 +14120,16 @@ export default function Emprise() {
         // Le niveau d'en face : un entier de 1 au plafond, sinon rien -- une
         // partie d'avant ce champ, ou un client ancien, n'affiche pas de carte.
         const niveauRecu = (v) => (Number.isFinite(v) && v >= 1 ? Math.min(NIVEAU_MAX, Math.floor(v)) : undefined);
+        // Le dos vient d un autre appareil : seule une cle du catalogue passe,
+        // tout le reste (champ absent, vieille partie, valeur inconnue) tombe.
+        const dosRecu = (v) => (typeof v === "string" && DOS_CARTES.some((d) => d.cle === v) ? v : undefined);
         setProfilPartie({
           blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
                   ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties),
-                  tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau) },
+                  tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau), dos: dosRecu(data.blueDos) },
           red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
                  ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties),
-                 tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau) },
+                 tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau), dos: dosRecu(data.redDos) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -15161,6 +15171,9 @@ export default function Emprise() {
           // Le niveau du Commandant, par la meme porte que le reste du profil :
           // l'adversaire l'affiche sur sa carte du face-a-face (demande du 01/09).
           blueNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur,
+          // Le dos equipe, par la meme porte (02/09) : l adversaire habille
+          // mes cartes de MON cosmetique, comme je vois le sien.
+          blueDos: cosmetiques.dos,
           blueRencontres: rencontresJour }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
@@ -15168,6 +15181,7 @@ export default function Emprise() {
           redTournois: tournoisPublics(),
           redTrophees: tropheesPublics(),
           redNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur,
+          redDos: cosmetiques.dos,
           redRencontres: rencontresJour };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {

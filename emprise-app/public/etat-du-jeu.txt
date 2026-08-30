@@ -37,7 +37,7 @@ Une victoire en ligne par abandon ou forfait sur une partie à peine commencée 
 Au-delà de trois parties classées dans la journée contre le même adversaire, les suivantes se jouent en amicales, annoncées avant la partie : aucun trophée ne circule plus entre eux jusqu'au lendemain.
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
 Boutique : thèmes de plateau, dos de cartes et bannières de profil, payés en pièces.
-Le dos de cartes choisi n'habille que vos cartes — l'adversaire garde le dos de base — et se voit dès la composition de la Réserve.
+Le dos de cartes choisi habille vos cartes et se voit dès la composition de la Réserve ; en ligne, chacun voit aussi le dos choisi par l'adversaire.
 Bannières de prestige à double prix : en pièces ou en gemmes, au choix, jamais réservées aux gemmes.
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
 Le Changeur : les gemmes deviennent des pièces, à sens unique, chaque palier illustré (pile, bourse, coffret).
