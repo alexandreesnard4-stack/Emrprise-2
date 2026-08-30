@@ -5111,8 +5111,8 @@ const APP_STYLES = `
         .hub-gemmes {
           /* La MEME pastille pour les deux monnaies : hauteur commune plus
              legere que la banniere (38 px -- les fonds a 52 etaient trop gros,
-             dit le Commandant), meme centre vertical par la rangee, largeur
-             minimale commune, contenu centre. */
+             dit le Commandant), le haut cale sur celui de la banniere par la
+             rangee, largeur minimale commune, contenu centre. */
           height: 38px; min-width: 78px; box-sizing: border-box;
           padding: 0 10px; flex: none;
           display: flex; align-items: center; justify-content: center; gap: 4px;
@@ -5130,7 +5130,10 @@ const APP_STYLES = `
            carte de niveau) : pseudo et pastilles se centrent sur la meme ligne. */
         /* Rangee 1 : la banniere (souple) et les deux pastilles (fixes) sur la
            meme ligne, meme hauteur, meme centre, un gap constant. */
-        .hub-tresor { display: flex; gap: 8px; align-items: center; }
+        /* flex-start (02/09) : les pastilles se calent sur le HAUT de la
+           banniere, plus sur son centre -- centrees, elles paraissaient
+           descendues de 8 px, dit le Commandant. */
+        .hub-tresor { display: flex; gap: 8px; align-items: flex-start; }
         .hub-pieces {
           background: rgba(48, 36, 14, 0.6); border-color: rgba(203,164,86,0.45);
           color: var(--gold-bright);
