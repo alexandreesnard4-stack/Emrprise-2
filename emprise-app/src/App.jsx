@@ -6072,9 +6072,29 @@ const APP_STYLES = `
         /* Demande partie : eteinte, non interactive -- la ligne d etat le dit. */
         .profil-adverse-ami.eteinte { opacity: 0.5; cursor: default; }
         .profil-adverse-ami.eteinte:active { transform: none; }
+        /* L ajout d ami de l ecran de fin (02/09) : la meme icone que la
+           fiche adverse, centree dans la colonne du bilan. */
+        .cer-ami-bloc {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+        }
+        .cer-ami {
+          position: relative;
+          width: 44px; height: 44px; border-radius: 50%; padding: 0;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
+          cursor: pointer;
+          transition: transform .12s ease-out;
+        }
+        .cer-ami:active { transform: scale(0.94); }
+        .cer-ami img {
+          width: 30px; height: 30px; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
+        .cer-ami-avis { font-size: 11.5px; }
         /* Il m a demande : une pastille doree pleine attire l oeil sur les
            gantelets -- l attente est de son cote, le toucher accepte. Le plus
-           d AJOUTER vit dans l image des casques, jamais en pastille. */
+           d AJOUTER vit dans l image des casques, jamais en pastille. La
+           pastille sert la fiche adverse ET l ecran de fin. */
         .profil-adverse-ami-pastille {
           position: absolute; top: -2px; right: -2px;
           width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box;
@@ -11694,12 +11714,26 @@ export default function Emprise() {
     // bouton sur un refus definitif.
     if (demandesEnvoyees[adversaireUid]) return <div className="revanche-attente" key="am">Demande d'ami envoyée</div>;
     const ilDemande = demandesRecues.some((d) => d.uid === adversaireUid);
+    // Le grand bouton texte a vecu (demande du Commandant, 02/09) : le meme
+    // vocabulaire d icones que la fiche adverse -- les casques au plus d or
+    // pour AJOUTER, les gantelets qui se serrent (et la pastille pleine) pour
+    // ACCEPTER. L erreur se dit dans une ligne sous l icone, SANS tiret
+    // cadratin : plus aucun n a le droit de vivre en fin de partie.
     return (
-      <button key="am" className={`reset-btn revanche-btn ${ilDemande && !amitieAvis ? "revanche-invite" : ""}`}
-              onClick={() => { setAmitieAvis(""); (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
-                .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}>
-        {amitieAvis || (ilDemande ? "Accepter en ami" : "Ajouter en ami")}
-      </button>
+      <div className="cer-ami-bloc" key="am">
+        <button
+          type="button"
+          className="cer-ami"
+          onClick={() => { setAmitieAvis(""); (ilDemande ? accepterDemande(adversaireUid) : envoyerDemande(adversaireUid))
+            .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible, réessayer")); }}
+          aria-label={ilDemande ? "Accepter en ami" : "Ajouter en ami"}
+          title={ilDemande ? "Accepter en ami" : "Ajouter en ami"}
+        >
+          <img src={ilDemande ? "/icones/accepter-ami-fiche.webp" : "/icones/ajouter-ami-fiche.webp"} alt="" width="30" height="30" />
+          {ilDemande && <span className="profil-adverse-ami-pastille" aria-hidden="true" />}
+        </button>
+        {amitieAvis && <div className="revanche-attente cer-ami-avis">{amitieAvis}</div>}
+      </div>
     );
   }
   // La section Amis du profil, rendue aussi en version courte sur l'ecran « Affrontement
