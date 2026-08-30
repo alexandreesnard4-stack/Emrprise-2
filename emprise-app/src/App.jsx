@@ -2934,8 +2934,12 @@ const BANNIERES = [
   { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
   { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
 ];
-// La banniere que porte un adversaire distant tant que son profil n'en
-// transporte pas (le champ viendra avec le chantier multijoueur).
+// La banniere de repli : celle d un adversaire dont la partie ne transporte
+// pas le choix. Depuis le 02/09, l appariement Classe le transporte
+// (waitingBanniere au salon, blueBanniere/redBanniere au document, la
+// Revanche echange) : le repli ne sert plus qu aux vieilles parties, aux
+// defis par code (qui ne transportent ni titre ni trophees non plus) et aux
+// cles hors catalogue.
 const BANNIERE_REPLI = "depart-nuit";
 function banniereDeCle(cle) { return BANNIERES.find((b) => b.cle === cle) || null; }
 function banniereDeDifficulte(diff) { return BANNIERES.find((b) => b.source === "echo" && b.difficulte === diff) || banniereDeCle(BANNIERE_REPLI); }
@@ -14123,13 +14127,19 @@ export default function Emprise() {
         // Le dos vient d un autre appareil : seule une cle du catalogue passe,
         // tout le reste (champ absent, vieille partie, valeur inconnue) tombe.
         const dosRecu = (v) => (typeof v === "string" && DOS_CARTES.some((d) => d.cle === v) ? v : undefined);
+        // La banniere pareil (02/09) : une cle que banniereDeCle reconnait,
+        // sinon rien -- l affichage retombera sur le repli, jamais une image
+        // cassee.
+        const banniereRecue = (v) => (typeof v === "string" && banniereDeCle(v) ? v : undefined);
         setProfilPartie({
           blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
                   ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties),
-                  tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau), dos: dosRecu(data.blueDos) },
+                  tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau), dos: dosRecu(data.blueDos),
+                  banniere: banniereRecue(data.blueBanniere) },
           red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
                  ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties),
-                 tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau), dos: dosRecu(data.redDos) },
+                 tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau), dos: dosRecu(data.redDos),
+                 banniere: banniereRecue(data.redBanniere) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -14312,6 +14322,9 @@ export default function Emprise() {
             // Le titre suit le meme chemin que les trophees : recopie dans le document de
             // la partie, il s'affiche a l'identique sur les deux ecrans.
             waitingTitre: titrePrincipal(stats) || "",
+            // La banniere equipee aussi (02/09) : connue DES l appariement,
+            // l ecran d attente peut deja habiller le bloc d en face.
+            waitingBanniere: bourse.banniereEquipee || "",
             waitingPseudo: pseudo || "",
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
@@ -14346,6 +14359,8 @@ export default function Emprise() {
           redTrophees: stats.trophies || 0,
           blueTitre: lobby.waitingTitre || "",
           redTitre: titrePrincipal(stats) || "",
+          blueBanniere: lobby.waitingBanniere || "",
+          redBanniere: bourse.banniereEquipee || "",
           // Ce n'est pas son propre nom qu'on inscrit ici, c'est celui de l'adversaire,
           // ramasse dans le salon : donnee etrangere en transit, a assainir comme telle.
           // Le nom refuse n'est ainsi jamais recopie dans le document de partie.
@@ -14587,6 +14602,7 @@ export default function Emprise() {
               bluePseudo: pseudoAffichable(ancienne.redPseudo), redPseudo: pseudoAffichable(ancienne.bluePseudo),
               blueTrophees: ancienne.redTrophees ?? null, redTrophees: ancienne.blueTrophees ?? null,
               blueTitre: ancienne.redTitre || "", redTitre: ancienne.blueTitre || "",
+              blueBanniere: ancienne.redBanniere || "", redBanniere: ancienne.blueBanniere || "",
               blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
               board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
@@ -19139,16 +19155,21 @@ export default function Emprise() {
             const vus = new Set();
             const apercu = maMain.filter((c) => { if (vus.has(c.ability)) return false; vus.add(c.ability); return true; });
             const fondMien = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
-            // La meme scene que l apercu d avant-partie, par territoireVs : le
-            // bloc d en face garde Le Drap de Nuit en fond, ses cartes sont des
-            // ? et sa Reserve des dos neutres au compte ? -- on n invente rien.
+            // La meme scene que l apercu d avant-partie, par territoireVs.
+            // Sa banniere est connue DES l appariement (waitingBanniere,
+            // 02/09) : le bloc d en face la porte deja pendant l attente ;
+            // sans elle (vieille partie, defi par code), Le Drap de Nuit.
+            // Ses cartes restent des ? et sa Reserve des dos neutres au
+            // compte ? -- elles, il ne les a pas encore choisies.
+            const fondAdverse = (profilPartie && profilPartie[campAdverse] && banniereDeCle(profilPartie[campAdverse].banniere))
+              || banniereDeCle(BANNIERE_REPLI);
             return (
               <>
                 <div className="sub" style={{ marginTop: 10 }}>{onlineStatus}</div>
                 <div className="territoires">
                   {territoireVs(campAdverse, monCamp,
                     (pseudosPartie && pseudosPartie[campAdverse]) || "Votre adversaire",
-                    banniereDeCle(BANNIERE_REPLI),
+                    fondAdverse,
                     <>
                       <span className="card hand carte-mystere" aria-hidden="true">?</span>
                       <span className="card hand carte-mystere" aria-hidden="true">?</span>
@@ -19606,11 +19627,14 @@ export default function Emprise() {
                   const maMain = monCamp === "red" ? redHand : blueHand;
                   // Chaque camp est UN territoire : sa banniere couvre tout le bloc,
                   // identite ET cartes posees dessus (refonte du 01/09). L'adversaire
-                  // distant garde Le Drap de Nuit tant que son profil ne transporte
-                  // pas sa banniere ; l'Echo garde l'Etendard de sa difficulte.
+                  // distant porte SA banniere depuis le 02/09 (transportee par
+                  // l appariement, assainie par banniereRecue) ; sans elle --
+                  // vieille partie, defi par code -- Le Drap de Nuit ; l'Echo
+                  // garde l'Etendard de sa difficulte.
                   const fondMien = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
                   const fondAdverse = enLigne
-                    ? banniereDeCle(BANNIERE_REPLI)
+                    ? ((profilPartie && profilPartie[campAdverse] && banniereDeCle(profilPartie[campAdverse].banniere))
+                       || banniereDeCle(BANNIERE_REPLI))
                     : (botDifficulty ? banniereDeDifficulte(botDifficulty) : banniereDeCle(BANNIERE_REPLI));
                   const nomAdverse = enLigne
                     ? (pseudosPartie && pseudosPartie[campAdverse]) || "Votre adversaire"
