@@ -5495,6 +5495,12 @@ const APP_STYLES = `
              bas reste. padding-top 2 (4 herite de .hub-page avant) : le titre
              commence net, a 14 px du bandeau. */
           padding-top: 2px;
+          /* Le bas (02/09) : le dernier rayon s arretait 12 px au-dessus du
+             fondu de 16 px -- juste, mais sans reserve pour les navigateurs de
+             telephone dont la barre d outils fait bouger la fenetre. 24 px
+             d air : le dernier produit s arrete net, le fondu ne mange que du
+             vide. La nav du hub est DANS le flux, rien ne passe dessous. */
+          padding-bottom: 24px;
           -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 16px), transparent 100%);
           mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 16px), transparent 100%);
         }
