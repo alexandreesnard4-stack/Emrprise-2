@@ -5510,6 +5510,20 @@ const APP_STYLES = `
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
+          /* Le fond d echoppe (02/09), pose sur l element qui DEFILE : un
+             background y reste naturellement fixe pendant que le contenu
+             glisse -- le mur ne bouge pas, les rayons defilent devant, sans
+             un div de plus et sans background-attachment fixed (casse sur
+             iOS). Deux couches : le voile sombre puis le mur ; en repli
+             (fichier absent ou pas encore charge), la couleur pleine garde
+             la page sombre et propre. */
+          background-color: #100c1a;
+          background-image:
+            linear-gradient(180deg, rgba(10,8,15,0.55), rgba(10,8,15,0.35) 40%, rgba(10,8,15,0.6)),
+            url("/boutique/fond-boutique.webp");
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
           /* La bande morte du haut, diagnostiquee (01/09) : le titre PLATEAUX
              demarrait DANS la zone fondue du masque (fondu de 26 px), l'oeil
              voyait des pixels laves et un titre a moitie fantome. Or le
