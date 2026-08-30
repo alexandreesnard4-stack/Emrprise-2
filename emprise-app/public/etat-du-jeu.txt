@@ -64,7 +64,7 @@ Avant-partie : chaque camp sur son territoire — un bandeau d'étendard portant
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 Panthéon : l'écran du classement des meilleurs Commandants.
 Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.
-Écran de fin : score, trophées animés, XP et pièces de la partie, gains de tournoi.
+Écran de fin : score, trophées animés, XP et pièces de la partie, la Flamme du jour portée par son icône, gains de tournoi.
 Partage des codes de partie et de tournoi (copie, et envoi quand l'appareil le permet).
 Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
 Préférence système d'animations réduites respectée.

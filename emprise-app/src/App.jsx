@@ -6416,6 +6416,9 @@ const APP_STYLES = `
           animation: cer-xp-parait 0.5s ease-out 0.8s both;
         }
         .cer-flamme .piece-icone { width: 12px; height: 12px; }
+        /* L'icone vivante a la place du mot Flamme : a peine plus grande que
+           la ligne, le contour herite de l'or du texte. */
+        .cer-flamme-icone { width: 14px; height: 14px; flex: none; }
         /* Le detail du versement de pieces (base + marge + prime), sous la
            ligne d'XP : discret, en fondu opacity seule comme ses voisines. */
         .cer-pieces-detail {
@@ -15318,10 +15321,15 @@ export default function Emprise() {
         <div className="cer-ecourtee">Partie écourtée : récompenses réduites</div>
       )}
       {/* La Flamme, SOUS la ligne d'XP : seulement la premiere partie classee du
-          jour la porte. Fondu en opacity seule, comme le reste de l'ecran. */}
+          jour la porte. Fondu en opacity seule, comme le reste de l'ecran.
+          L'icone vivante remplace le mot (demande du Commandant, 02/09) : la
+          meme flamme qu'au hub dit deja de quoi on parle, le lecteur d'ecran
+          garde le mot. */}
       {b.flamme && (
         <div className="cer-flamme">
-          Flamme : {b.flamme.jour}<sup className="cer-flamme-exp">{b.flamme.jour === 1 ? "er" : "e"}</sup> jour
+          <FlammeVivante allumee className="cer-flamme-icone" />
+          <span className="lecteur-seul">Flamme : </span>
+          {b.flamme.jour}<sup className="cer-flamme-exp">{b.flamme.jour === 1 ? "er" : "e"}</sup> jour
           {b.flamme.pieces > 0 && (
             <> · <span className="piece-icone" aria-hidden="true" />+{b.flamme.pieces}<span className="lecteur-seul"> pièces</span></>
           )}
