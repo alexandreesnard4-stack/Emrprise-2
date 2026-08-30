@@ -6047,6 +6047,11 @@ const APP_STYLES = `
         /* L ajout d ami, en icone d en-tete (02/09) : le grand bandeau dore a
            vecu. Un rond au vocabulaire des portes du hub, 44 px de cible
            tactile, cale a droite de la ligne du nom, sous la croix. */
+        /* La rangee d identite de la fiche ADVERSE garde une hauteur plancher :
+           la place de l icone d ami ne depend plus du nombre de lignes (sans
+           code ami ni niveau, la rangee raccourcissait et l icone remontait
+           mordre la croix de 2 px -- mesure). */
+        .profil-adverse .profil-fiche-identite { min-height: 72px; }
         .profil-adverse-ami {
           flex: none; margin-left: auto; position: relative;
           /* Cale en BAS de la rangee d identite : centre, l icone mordait la
@@ -6060,21 +6065,23 @@ const APP_STYLES = `
           transition: transform .12s ease-out;
         }
         .profil-adverse-ami:active { transform: scale(0.94); }
-        .profil-adverse-ami img { width: 28px; height: 28px; display: block; }
+        .profil-adverse-ami img {
+          width: 30px; height: 30px; display: block;
+          filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+        }
         /* Demande partie : eteinte, non interactive -- la ligne d etat le dit. */
         .profil-adverse-ami.eteinte { opacity: 0.5; cursor: default; }
         .profil-adverse-ami.eteinte:active { transform: none; }
+        /* Il m a demande : une pastille doree pleine attire l oeil sur les
+           gantelets -- l attente est de son cote, le toucher accepte. Le plus
+           d AJOUTER vit dans l image des casques, jamais en pastille. */
         .profil-adverse-ami-pastille {
-          position: absolute; top: -3px; right: -3px;
-          width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 12px; font-weight: 700; line-height: 1;
-          background: linear-gradient(180deg, #f0dcae, #cfa452); color: #2a1c08;
+          position: absolute; top: -2px; right: -2px;
+          width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box;
+          background: var(--gold-bright);
           border: 1px solid rgba(42,28,8,0.5);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.6);
         }
-        /* Il m a demande : la pastille doree pleine, sans signe -- l attente
-           est de son cote, le toucher accepte. */
-        .profil-adverse-ami-pastille.pleine { background: var(--gold-bright); }
         .profil-adverse-etat { margin-top: 14px; }
 
         /* Dix pixels au moins entre eux et le bouton : ces deux mots ne doivent jamais
@@ -20353,8 +20360,12 @@ export default function Emprise() {
                 {/* L ajout d ami, en icone d en-tete (02/09) : le grand bandeau
                     dore a vecu. Meme logique qu avant, seuls les habits
                     changent -- envoyer, ou accepter si l autre a deja demande,
-                    l echec rejouable. Deja amis : pas d icone, la ligne d etat
-                    le dit. Demande partie : icone eteinte, non interactive. */}
+                    l echec rejouable. L image dit l etat : les casques au plus
+                    d or pour AJOUTER (le plus est dans l image, aucune
+                    pastille), les gantelets qui se serrent pour ACCEPTER, avec
+                    une pastille doree pleine pour attirer l oeil. Deja amis :
+                    pas d icone, la ligne d etat le dit. Demande partie : les
+                    casques eteints, non interactifs. */}
                 {!dejaAmi && (
                   <button
                     type="button"
@@ -20370,9 +20381,9 @@ export default function Emprise() {
                       : ilMaDemande ? `Accepter la demande de ${profilAdverse.nom}`
                       : `Ajouter ${profilAdverse.nom} en ami`}
                   >
-                    <img src="/icones/amis.webp" alt="" width="28" height="28" />
-                    {!envoyee && (
-                      <span className={`profil-adverse-ami-pastille ${ilMaDemande ? "pleine" : ""}`} aria-hidden="true">{ilMaDemande ? "" : "+"}</span>
+                    <img src={!envoyee && ilMaDemande ? "/icones/accepter-ami-fiche.webp" : "/icones/ajouter-ami-fiche.webp"} alt="" width="30" height="30" />
+                    {!envoyee && ilMaDemande && (
+                      <span className="profil-adverse-ami-pastille" aria-hidden="true" />
                     )}
                   </button>
                 )}
