@@ -2944,6 +2944,32 @@ const BANNIERE_REPLI = "depart-nuit";
 function banniereDeCle(cle) { return BANNIERES.find((b) => b.cle === cle) || null; }
 function banniereDeDifficulte(diff) { return BANNIERES.find((b) => b.source === "echo" && b.difficulte === diff) || banniereDeCle(BANNIERE_REPLI); }
 
+// ---------- Un fond par famille d ecrans (02/09) ----------
+// La table est la seule source de verite : la phase y figure, son fond se
+// pose en PREMIERE couche par-dessus le ciel d orage ; absente, le ciel
+// reste seul. Cinq fichiers de la collection arrivent PLUS TARD sous ces
+// noms deja connus : le repli en deuxieme couche couvre l attente (une
+// image en 404 ne rend rien, la couche du dessous s affiche) et chaque
+// fond s allumera de lui-meme a son depot -- NE PAS retirer les entrees.
+const FONDS_ECRANS = {
+  "select-difficulty": "/fonds/fond-echo.webp",
+  "tourney-online-menu": "/fonds/fond-tournoi.webp",
+  "tourney-online": "/fonds/fond-tournoi.webp",
+  "tourney-menu": "/fonds/fond-tournoi-solo.webp",
+  "tourney-ban": "/fonds/fond-tournoi-solo.webp",
+  "tourney-bracket": "/fonds/fond-tournoi-solo.webp",
+  "tourney-champion": "/fonds/fond-tournoi-solo.webp",
+  "tourney-eliminated": "/fonds/fond-tournoi-solo.webp",
+  "select-blue": "/fonds/fond-ordres.webp",
+  "select-red": "/fonds/fond-ordres.webp",
+  "select-assist": "/fonds/fond-ordres.webp",
+  "select-reserve-blue": "/fonds/fond-ordres.webp",
+  "select-reserve-red": "/fonds/fond-ordres.webp",
+  "confluence-draft": "/fonds/fond-confluence.webp",
+  "online-menu": "/fonds/fond-defis.webp",
+  "tutorial": "/fonds/fond-tutoriel.webp",
+};
+
 const BOURSE_ESSAI = 1000;
 const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "" };
 let memoryBourse = null;
@@ -4809,7 +4835,12 @@ const APP_STYLES = `
           position: fixed; inset: 0; z-index: -1;
           background-color: #0a0810;
           background-image: url("/fonds/ciel-orage.jpg");
+          /* Les valeurs uniques valent pour TOUTES les couches : quand une
+             phase de FONDS_ECRANS pose son fond en premiere couche, il est
+             couvert, centre et sans repetition comme le ciel du dessous.
+             Jamais background-attachment fixed : casse sur iOS. */
           background-size: cover; background-position: center;
+          background-repeat: no-repeat;
         }
         /* Le vignettage se fait en CSS et non dans l'image : il se regle sans rien
            reexporter, et il garantit la lisibilite meme si un export futur revient plus
@@ -16467,8 +16498,18 @@ export default function Emprise() {
       {/* Le fond commun. Il est pose ICI, une seule fois, a la racine : applique ecran
           par ecran, il serait demonte et remonte a chaque navigation, et l'image
           sauterait visiblement entre le hub, un menu et le profil. Purement decoratif,
-          donc invisible au lecteur d'ecran. */}
-      <div className="fond-app" aria-hidden="true" />
+          donc invisible au lecteur d'ecran.
+          Quand la phase figure dans FONDS_ECRANS (02/09), son fond se pose en
+          premiere couche par-dessus le ciel d orage : une image absente rend
+          la couche du dessous, aucun trou, aucune logique d existence -- et
+          rien ne s anime, la phase change, le fond change, sec. */}
+      <div
+        className="fond-app"
+        aria-hidden="true"
+        style={FONDS_ECRANS[phase]
+          ? { backgroundImage: `url("${FONDS_ECRANS[phase]}"), url("/fonds/ciel-orage.jpg")` }
+          : undefined}
+      />
 
       {/* Premiere ouverture : on demande son nom avant toute chose. L'ecran recouvre tout
           (z-index au-dessus de l'accueil) et ne se ferme qu'une fois un nom donne : le
