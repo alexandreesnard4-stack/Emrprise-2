@@ -20355,7 +20355,12 @@ export default function Emprise() {
                 <div className="profil-fiche-qui">
                   <div className="profil-fiche-pseudo">{profilAdverse.nom}</div>
                   {f.codeAmi && <div className="profil-fiche-code">{codeAmiLisible(f.codeAmi)}</div>}
-                  <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées{typeof f.niveau === "number" ? ` · Niveau ${f.niveau}` : ""}</div>
+                  <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées</div>
+                  {/* Le niveau va a la ligne (demande du Commandant, 02/09) :
+                      la ligne d arene n enfle plus, le niveau se lit seul. */}
+                  {typeof f.niveau === "number" && (
+                    <div className="profil-fiche-arene">Niveau {f.niveau}</div>
+                  )}
                 </div>
                 {/* L ajout d ami, en icone d en-tete (02/09) : le grand bandeau
                     dore a vecu. Meme logique qu avant, seuls les habits
