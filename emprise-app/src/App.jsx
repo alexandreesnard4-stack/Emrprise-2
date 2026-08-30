@@ -9771,6 +9771,32 @@ const APP_STYLES = `
         }
         /* L'astuce, en bas de l'ecran entier. Meme hauteur reservee que sur le portrait,
            pour que le bloc ne saute pas entre une astuce courte et une longue. */
+        /* La proposition d Echo apres 45 s de file (02/09) : une offre sobre
+           dans le flux, sous le titre de la recherche -- les recits fixes en
+           bas ne peuvent pas la toucher. Fondu en opacity SEULE, joue une
+           fois, sans boucle : rien ne clignote, la recherche continue. */
+        .attente-propose-echo {
+          position: relative; z-index: 1;
+          display: flex; flex-direction: column; align-items: center; gap: 9px;
+          margin-top: 16px;
+          animation: attente-propose-parait 0.5s ease-out both;
+        }
+        @keyframes attente-propose-parait { from { opacity: 0; } to { opacity: 1; } }
+        .reduced-motion .attente-propose-echo { animation: none; }
+        .attente-propose-ligne {
+          font-size: 12.5px; color: var(--muted);
+          text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+        }
+        /* Un bouton SECONDAIRE : jamais le grand dore, l offre ne s impose pas. */
+        .attente-propose-bouton {
+          padding: 9px 16px; border-radius: 10px; cursor: pointer;
+          background: rgba(8,6,12,0.72); border: 1px solid rgba(203,164,86,0.4);
+          color: var(--gold-bright);
+          font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700;
+          letter-spacing: 0.06em;
+          transition: transform .12s ease-out;
+        }
+        .attente-propose-bouton:active { transform: scale(0.97); }
         .recit-attente.plein-ecran {
           position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
           width: auto; max-width: none; margin: 0;
@@ -11952,6 +11978,15 @@ export default function Emprise() {
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
+  // Les secondes passees en file d appariement : elles nourrissent la
+  // proposition d Echo. L interval vit avec la file et se nettoie avec elle
+  // (abandon, appariement, demontage) ; rentrer en file repart de zero.
+  const [secondesEnFile, setSecondesEnFile] = useState(0);
+  useEffect(() => {
+    if (!fileAttente) { setSecondesEnFile(0); return; }
+    const t = setInterval(() => setSecondesEnFile((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [fileAttente]);
   // Ordre mis en avant pendant la recherche : tire au hasard a chaque entree en file,
   // pour que l'attente montre tantot les Cendres, tantot les Chimeres...
   const [imageAttente, setImageAttente] = useState(() => IMAGES_ATTENTE[Math.floor(Math.random() * IMAGES_ATTENTE.length)]);
@@ -14338,6 +14373,10 @@ export default function Emprise() {
   // joueur en attente + requête). C'est aussi là que l'ELO se greffera le jour venu :
   // au lieu de prendre le premier venu, on filtrera sur une fourchette de score.
   const ATTENTE_PERIMEE_MS = 60000; // au-delà, l'inscription est considérée abandonnée
+  // Au bout de ce delai en file, l ecran PROPOSE de defier un Echo en
+  // attendant : une offre, jamais un automatisme -- la recherche continue
+  // tant que le bouton n est pas touche, et jamais un bot deguise en humain.
+  const ATTENTE_PROPOSE_ECHO_S = 45;
 
   async function chercherAdversaire() {
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
@@ -19153,6 +19192,28 @@ export default function Emprise() {
                 <div className="attente-voile" />
               </div>
               <RecitsAttente actif pleinEcran />
+              {/* Apres ATTENTE_PROPOSE_ECHO_S secondes sans appariement : une
+                  OFFRE, jamais un automatisme. La recherche CONTINUE tant que
+                  le bouton n est pas touche, et l appariement qui survient
+                  efface la proposition avec la file. Le bouton dit Echo et
+                  mene a l ecran des Echos : jamais un bot deguise en humain.
+                  Toucher = le MEME nettoyage que l abandon de recherche
+                  (annulerRecherche retire waitingUid du salon), puis le
+                  chemin ordinaire vers le choix de la difficulte. */}
+              {secondesEnFile >= ATTENTE_PROPOSE_ECHO_S && (
+                <div className="attente-propose-echo">
+                  <div className="attente-propose-ligne">Aucun Commandant en vue pour l&apos;instant.</div>
+                  <button
+                    type="button"
+                    className="attente-propose-bouton"
+                    onClick={() => {
+                      annulerRecherche();
+                      setPartieClassee(false);
+                      chooseMode("bot");
+                    }}
+                  >Défier un Écho en attendant</button>
+                </div>
+              )}
             </>
           )}
           {/* Ni en Classe, ni en tournoi : l'adversaire y est APPARIE, il n'a pas de code

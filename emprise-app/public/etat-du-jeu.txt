@@ -21,6 +21,7 @@ Duel local : deux joueurs sur le même appareil.
 Confluence : huit Ordres draftés, la même main pour les deux camps (contre l'Écho ou en local).
 Bac à sable : tous les Ordres en main pour essayer librement.
 Partie classée en ligne : appariement automatique, trophées, ligues de Bronze à Légende, arène visuelle selon la ligue.
+Quand la recherche d'un adversaire classé s'étire, l'écran propose de défier un Écho en attendant ; la recherche continue tant qu'on n'a pas accepté.
 Jouer avec un ami par code de partie.
 Défis entre amis : Duel classique ou Confluence, avec ou sans Hérauts, bannière d'invitation au hub.
 Tournoi solo : huit Commandants contre l'Écho, difficulté croissante, un Ordre banni à chaque tour.
