@@ -1551,12 +1551,19 @@ const ARENES = {
 // afficher une ligue en chantier, au cas ou une nouvelle viendrait s'ajouter avant son
 // decor.
 const LEAGUES = [
-  { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp" },
-  { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp" },
-  { name: "Or", min: 800, hub: "/arenes/or-hub.webp" },
-  { name: "Platine", min: 1500, hub: "/arenes/platine-hub.webp" },
-  { name: "Légende", min: 2500, hub: "/arenes/legende-hub.webp" },
+  // lueur (02/09) : la couleur du halo de la galerie des arenes, seule
+  // source de verite -- chaque page l emporte en custom property.
+  { name: "Bronze", min: 0, hub: "/arenes/bronze-hub.webp", lueur: "rgba(138, 90, 46, 0.38)" },
+  { name: "Argent", min: 300, hub: "/arenes/argent-hub.webp", lueur: "rgba(159, 178, 200, 0.30)" },
+  { name: "Or", min: 800, hub: "/arenes/or-hub.webp", lueur: "rgba(203, 164, 86, 0.36)" },
+  { name: "Platine", min: 1500, hub: "/arenes/platine-hub.webp", lueur: "rgba(154, 223, 224, 0.26)" },
+  { name: "Légende", min: 2500, hub: "/arenes/legende-hub.webp", lueur: "rgba(146, 86, 207, 0.38)" },
 ];
+// Le halo d une ligue verrouillee : la meme couleur au tiers de son opacite.
+// La ligue se devine, mais eteinte -- le cadenas garde le dernier mot.
+function lueurEteinte(lueur) {
+  return lueur.replace(/([\d.]+)\)\s*$/, (tout, a) => (Math.round((parseFloat(a) / 3) * 100) / 100) + ")");
+}
 function getLeague(trophies) {
   let current = LEAGUES[0];
   for (const l of LEAGUES) if (trophies >= l.min) current = l;
@@ -6910,6 +6917,17 @@ const APP_STYLES = `
           height: 100dvh; scroll-snap-align: center; scroll-snap-stop: always;
           display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
           gap: 6px; padding: 52px 20px 30px; box-sizing: border-box; position: relative;
+          /* Le halo de ligue (02/09) : la couleur vient de LEAGUES par la
+             custom property --arene-lueur, posee inline par la galerie
+             (attenuee au tiers si la page est verrouillee, pleine des la
+             ceremonie d ouverture). Trois couches : le halo radial centre
+             sur l illustration, un leger eclaircissement du centre qui
+             detache l arene du vide, et le fond presque noir. STATIQUE --
+             aucune animation, aucune transition entre pages. */
+          background:
+            radial-gradient(ellipse 75% 55% at 50% 55%, var(--arene-lueur, transparent), transparent 70%),
+            radial-gradient(ellipse 58% 40% at 50% 55%, rgba(255, 240, 205, 0.05), transparent 65%),
+            rgba(10, 8, 15, 0.97);
         }
         .arene-page-entete {
           flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -17421,7 +17439,11 @@ export default function Emprise() {
                     const montrerCadenas = verrouillee || sOuvre;
                     const refuse = !!cadenasRefuse && cadenasRefuse.nom === l.name;
                     return (
-                      <section key={l.name} className={`arene-page ${ici ? "ici" : ""}`}>
+                      <section
+                        key={l.name}
+                        className={`arene-page ${ici ? "ici" : ""}`}
+                        style={{ "--arene-lueur": verrouillee && !sOuvre ? lueurEteinte(l.lueur) : l.lueur }}
+                      >
                         {/* Le nom coiffe la page : on doit savoir ou l'on est des que
                             l'arene se pose, sans avoir a descendre le regard. */}
                         <div className="arene-page-entete">
