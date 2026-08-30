@@ -583,7 +583,7 @@ const TUTORIAL_STEPS = [
   {
     kind: "play",
     title: "La Mort Subite",
-    text: "Avant chaque duel, vous gardez 2 cartes de côté : votre Réserve. Ici, le duel vient de s'achever à égalité parfaite — regardez le plateau, aucun camp ne l'emporte. La Mort Subite tranche : chaque camp pose une carte de sa Réserve sur une case restée vide. Posez la vôtre sur la case qui brille.",
+    text: "Avant chaque duel, vous gardez 2 cartes de côté : votre Réserve. Ici, le duel vient de s'achever à égalité parfaite. Regardez le plateau, aucun camp ne l'emporte. La Mort Subite tranche : chaque camp pose une carte de sa Réserve sur une case restée vide. Posez la vôtre sur la case qui brille.",
     requiredCell: 7,
     handCard: tc(1, 8, 1, 1, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -16803,7 +16803,7 @@ export default function Emprise() {
               </header>
               <div className="quetes-corps">
                 <h3 className="boutique-titre">Journalières</h3>
-                <p className="quetes-soustitre">Renouvelées chaque nuit{quetes.rerollJour ? "" : " — une relance disponible"}</p>
+                <p className="quetes-soustitre">Renouvelées chaque nuit{quetes.rerollJour ? "" : " · une relance disponible"}</p>
                 <div className="boutique-grille quetes-grille">
                   {quetes.quetesJour.map((a) => {
                     const def = defQuete(a.cle);
@@ -17354,7 +17354,7 @@ export default function Emprise() {
                         ) : fenetreAccesAnticipe(order) ? (
                           <button className="acces-anticipe-btn" onClick={() => setAccesEnCours(order.key)}>
                             <span className="gemme-icone" aria-hidden="true" />
-                            Accès anticipé — {ACCES_ANTICIPE.prix} gemmes
+                            Accès anticipé : {ACCES_ANTICIPE.prix} gemmes
                           </button>
                         ) : null
                       )}
@@ -18207,7 +18207,7 @@ export default function Emprise() {
 
                 <div className="rules-section">
                   <div className="rules-h">La Réserve et la Mort Subite</div>
-                  <div className="rules-p">Avant le duel, vous gardez deux cartes de côté — une par Ordre. Si le compte final tombe exactement à égalité, chaque Commandant en pose une sur une case restée vide et l&apos;on recompte : c&apos;est la Mort Subite, deux rondes au plus. Si l&apos;égalité tient encore, la victoire revient à celui qui n&apos;a pas commencé.</div>
+                  <div className="rules-p">Avant le duel, vous gardez deux cartes de côté, une par Ordre. Si le compte final tombe exactement à égalité, chaque Commandant en pose une sur une case restée vide et l&apos;on recompte : c&apos;est la Mort Subite, deux rondes au plus. Si l&apos;égalité tient encore, la victoire revient à celui qui n&apos;a pas commencé.</div>
                 </div>
 
                 <div className="rules-section">
@@ -18716,7 +18716,7 @@ export default function Emprise() {
           {/* L'enjeu, annonce AVANT de confirmer quoi que ce soit. */}
           <div className="tournoi-enjeu">
             <span className="gemme-icone" aria-hidden="true" />
-            Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
+            Mise : {TOURNOI_ENJEU.entree} gemmes · Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
           </div>
           <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
           <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
@@ -18818,7 +18818,7 @@ export default function Emprise() {
             <h2>Tournoi en ligne</h2>
             <div className="tournoi-enjeu">
               <span className="gemme-icone" aria-hidden="true" />
-              Mise : {TOURNOI_ENJEU.entree} gemmes — Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
+              Mise : {TOURNOI_ENJEU.entree} gemmes · Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
             </div>
             {statut === "waiting" && (
               <>
@@ -20352,7 +20352,7 @@ export default function Emprise() {
         return (
           <div className="info-overlay" onClick={() => setAccesEnCours(null)}>
             <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
-              <div className="info-panel-title">Accès anticipé — {nomOrdreAffiche(ordre)}</div>
+              <div className="info-panel-title">Accès anticipé : {nomOrdreAffiche(ordre)}</div>
               <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{ACCES_ANTICIPE.prix}<span className="lecteur-seul"> gemmes</span></div>
               {dejaObtenu ? (
                 <div className="achat-solde">Déjà débloqué.</div>
@@ -20494,7 +20494,7 @@ export default function Emprise() {
                     disabled={!!envoyee}
                     onClick={() => { setAmitieAvis("");
                       (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
-                        .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
+                        .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible, réessayer")); }}
                     aria-label={envoyee ? "Demande d'ami envoyée"
                       : ilMaDemande ? `Accepter la demande de ${profilAdverse.nom}`
                       : `Ajouter ${profilAdverse.nom} en ami`}
