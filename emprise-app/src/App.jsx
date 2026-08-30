@@ -424,10 +424,20 @@ const FLAMME_TRAIT = "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-
 const FLAMME_MOYENNE = "M12 6.2c1.5 2 3.4 3.9 3.4 6.4a3.4 4.4 0 1 1-6.8 0c0-2.1 1.9-4.2 3.4-6.4z";
 const FLAMME_COEUR = "M12 10c.9 1.3 1.9 2.3 1.9 3.8a1.9 2.4 0 1 1-3.8 0c0-1.3 1-2.5 1.9-3.8z";
 let flammeClipCompteur = 0;
-function FlammeVivante({ allumee, className, remplissage, onRempli }) {
+function FlammeVivante({ allumee, className, remplissage, onRempli, jours = 7 }) {
   // Un id de clip unique par instance : le profil et le panneau peuvent
   // montrer la flamme en meme temps sans se voler le clip.
   const clipIdRef = useRef("flamme-clip-" + (++flammeClipCompteur));
+  // Un septieme par jour de serie (02/09) : la flamme au repos est remplie a
+  // hauteur de la serie en cours, pleine des 7 jours. Le decalage est un
+  // ETAT, pas une animation : custom property inline consommee par un
+  // transform statique sur le groupe PARENT .flamme-niveau -- il survit a
+  // .reduced-motion, et le vacillement des couches ENFANTS se compose avec
+  // lui sans l ecraser. 19 : la hauteur utile de la silhouette (du sommet
+  // vers y=3 a la base vers y=22 du viewBox). jours absent : pleine, comme
+  // avant. Aucune regle de la Flamme ne change, c est un habillage.
+  const fraction = Math.min(Math.max(jours || 0, 0), 7) / 7;
+  const decalageNiveau = Math.round((1 - fraction) * 19 * 10) / 10;
   // Le remplissage se joue quand l'element est A L'ECRAN : on previent
   // l'appelant apres la fin de la cascade et du rebond (~1,2 s).
   useEffect(() => {
@@ -448,10 +458,12 @@ function FlammeVivante({ allumee, className, remplissage, onRempli }) {
         </clipPath>
       </defs>
       <g clipPath={`url(#${clipIdRef.current})`}>
-        <g className="flamme-remplissage">
-          <path className="flamme-couche flamme-sombre" d={FLAMME_TRAIT} fill="#8a6a2c" />
-          <path className="flamme-couche flamme-or" d={FLAMME_MOYENNE} fill="var(--gold)" />
-          <path className="flamme-couche flamme-coeur" d={FLAMME_COEUR} fill="var(--gold-bright)" />
+        <g className="flamme-niveau" style={{ "--flamme-niveau": `${decalageNiveau}px` }}>
+          <g className="flamme-remplissage">
+            <path className="flamme-couche flamme-sombre" d={FLAMME_TRAIT} fill="#8a6a2c" />
+            <path className="flamme-couche flamme-or" d={FLAMME_MOYENNE} fill="var(--gold)" />
+            <path className="flamme-couche flamme-coeur" d={FLAMME_COEUR} fill="var(--gold-bright)" />
+          </g>
         </g>
       </g>
       <path className="flamme-contour" d={FLAMME_TRAIT} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -6416,6 +6428,14 @@ const APP_STYLES = `
         .flamme-vive .flamme-couche {
           transform-box: fill-box; transform-origin: 50% 100%; opacity: 0;
         }
+        /* Le niveau du jour (02/09) : un septieme par jour de serie. Le
+           decalage vit sur ce groupe PARENT en transform STATIQUE, nourri
+           par une custom property posee inline -- ce n est pas une
+           animation, .reduced-motion ne l efface donc pas. Le vacillement
+           et la remontee restent sur les couches ENFANTS : ils se composent
+           avec le niveau au lieu de l ecraser, et la remontee de fin de
+           partie arrive d elle-meme au niveau du jour. */
+        .flamme-vive .flamme-niveau { transform: translateY(var(--flamme-niveau, 0px)); }
         .flamme-vive .flamme-contour { color: var(--muted); }
         .flamme-vive.allumee .flamme-contour { color: var(--gold-bright); }
         .flamme-vive.allumee .flamme-couche { opacity: 1; }
@@ -15394,7 +15414,7 @@ export default function Emprise() {
           garde le mot. */}
       {b.flamme && (
         <div className="cer-flamme">
-          <FlammeVivante allumee className="cer-flamme-icone" />
+          <FlammeVivante allumee jours={b.flamme.jour} className="cer-flamme-icone" />
           <span className="lecteur-seul">Flamme : </span>
           {b.flamme.jour}<sup className="cer-flamme-exp">{b.flamme.jour === 1 ? "er" : "e"}</sup> jour
           {b.flamme.pieces > 0 && (
@@ -16561,6 +16581,7 @@ export default function Emprise() {
               >
                 <FlammeVivante
                   allumee={!!(flamme && flamme.serie > 0)}
+                  jours={(flamme && flamme.serie) || 0}
                   className="hub-flamme-icone"
                   remplissage={flammeRemplissage}
                   onRempli={() => setFlammeRemplissage(false)}
@@ -17518,6 +17539,7 @@ export default function Emprise() {
                         au hub, le profil montre l'etat, rien de plus. */}
                     <FlammeVivante
                       allumee={!!(flamme && flamme.serie > 0)}
+                      jours={(flamme && flamme.serie) || 0}
                       className="profil-flamme-icone"
                     />
                     {/* Plus aucune mention du record, nulle part (demande du
@@ -17776,6 +17798,7 @@ export default function Emprise() {
                     qu'au hub, le panneau ne le joue ni ne le consomme. */}
                 <FlammeVivante
                   allumee={!!(flamme && flamme.serie > 0)}
+                  jours={(flamme && flamme.serie) || 0}
                   className="flamme-panneau-icone"
                 />
                 <div className="flamme-etat">
