@@ -6044,16 +6044,37 @@ const APP_STYLES = `
           background: linear-gradient(90deg, #a37c33 0%, #e8c877 100%);
         }
 
-        /* L'action qui rapproche, et elle seule, porte l'or. */
-        .profil-adverse-ajouter {
-          width: 100%; margin-top: 14px; padding: 11px 14px;
-          border: none; border-radius: 11px; cursor: pointer;
-          font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700;
-          letter-spacing: 0.1em; text-transform: uppercase; color: #1a1424;
-          background: linear-gradient(160deg, #e8c877 0%, #b8944a 100%);
+        /* L ajout d ami, en icone d en-tete (02/09) : le grand bandeau dore a
+           vecu. Un rond au vocabulaire des portes du hub, 44 px de cible
+           tactile, cale a droite de la ligne du nom, sous la croix. */
+        .profil-adverse-ami {
+          flex: none; margin-left: auto; position: relative;
+          /* Cale en BAS de la rangee d identite : centre, l icone mordait la
+             croix de fermeture de 6 px (mesure) ; au ras du bas, elle passe
+             nettement dessous et s aligne sur la ligne d arene. */
+          align-self: flex-end;
+          width: 44px; height: 44px; border-radius: 50%; padding: 0;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.25);
+          cursor: pointer;
           transition: transform .12s ease-out;
         }
-        .profil-adverse-ajouter:active { transform: scale(0.98); }
+        .profil-adverse-ami:active { transform: scale(0.94); }
+        .profil-adverse-ami img { width: 28px; height: 28px; display: block; }
+        /* Demande partie : eteinte, non interactive -- la ligne d etat le dit. */
+        .profil-adverse-ami.eteinte { opacity: 0.5; cursor: default; }
+        .profil-adverse-ami.eteinte:active { transform: none; }
+        .profil-adverse-ami-pastille {
+          position: absolute; top: -3px; right: -3px;
+          width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 12px; font-weight: 700; line-height: 1;
+          background: linear-gradient(180deg, #f0dcae, #cfa452); color: #2a1c08;
+          border: 1px solid rgba(42,28,8,0.5);
+        }
+        /* Il m a demande : la pastille doree pleine, sans signe -- l attente
+           est de son cote, le toucher accepte. */
+        .profil-adverse-ami-pastille.pleine { background: var(--gold-bright); }
         .profil-adverse-etat { margin-top: 14px; }
 
         /* Dix pixels au moins entre eux et le bouton : ces deux mots ne doivent jamais
@@ -9813,14 +9834,8 @@ const APP_STYLES = `
           width: 16px; height: 21px; object-fit: contain; display: block;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
-        /* Titre de style en Classe : face aux trophees, a droite de la rangee d'Ordres. */
-        .titre-flottant {
-          flex: none; max-width: 44vw; padding: 3px 9px; border-radius: 999px;
-          font-family: 'Cinzel', serif; font-size: 10px; font-weight: 700;
-          letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          color: var(--bone); background: rgba(8,6,12,0.8);
-          border: 1px solid rgba(203,164,86,0.28);
-        }
+        /* La pastille de style a vecu (02/09) : l etiquette de camp ne porte
+           plus que le nom et les trophees, le style se lit sur les profils. */
         /* Le titre sous le pseudo du hub : discret, il n'eclipse pas le nom. */
         .hub-pseudo-titre {
           display: block; margin-top: 1px;
@@ -12937,7 +12952,6 @@ export default function Emprise() {
         </span>
         )}
         {pucesTrophees(camp)}
-        {pucesTitre(camp)}
       </div>
     );
   }
@@ -12958,24 +12972,10 @@ export default function Emprise() {
     );
   }
 
-  // Titre de style d'un camp en partie Classee, a la suite de ses trophees. Comme eux, la
-  // valeur vient du document de la partie : les deux ecrans lisent la meme chose. Un
-  // joueur sans titre n'affiche rien du tout.
-  function pucesTitre(camp) {
-    if (mode !== "online" || !partieClassee) return null;
-    const titre = titresPartie && typeof titresPartie[camp] === "string"
-      ? titresPartie[camp]
-      : (onlineRole === camp ? titrePrincipal(stats) : "");
-    if (!titre) return null;
-    // Le titre vient du document de partie, donc de l'autre joueur : il ne peut
-    // valoir que l'un des titres du jeu, combos OU replis. Tout le reste est
-    // ecarte, comme pour son pseudo.
-    const connu = titreDuJeu(titre);
-    if (!connu) return null;
-    return (
-      <span className="titre-flottant" title={connu.recit}>{connu.nom}</span>
-    );
-  }
+  // La pastille du titre de style a vecu en partie (02/09, demande du
+  // Commandant) : le style ne se lit plus que sur les profils -- la fiche de
+  // l adversaire, ouverte par son nom, le dit deja. L etiquette de camp ne
+  // porte plus que le nom et les trophees.
 
   function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
 
@@ -13051,8 +13051,7 @@ export default function Emprise() {
   // transporte le niveau adverse. Seule exception (02/09) : MON titre encore
   // absent se dit en toutes lettres -- le style se dessine -- car ce n est pas
   // une invention, c est l etat vrai. Le titre : le mien par titrePrincipal,
-  // celui d en face par le document de la partie, valide contre COMBOS comme
-  // dans pucesTitre.
+  // celui d en face par le document de la partie, valide par titreDuJeu.
   function territoireVs(camp, monCamp, nom, fond, cartes, reserve) {
     const p = (profilPartie && profilPartie[camp]) || {};
     const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
@@ -20346,6 +20345,32 @@ export default function Emprise() {
                   {f.codeAmi && <div className="profil-fiche-code">{codeAmiLisible(f.codeAmi)}</div>}
                   <div className="profil-fiche-arene">Arène {ligue.name} · {trophees} trophées{typeof f.niveau === "number" ? ` · Niveau ${f.niveau}` : ""}</div>
                 </div>
+                {/* L ajout d ami, en icone d en-tete (02/09) : le grand bandeau
+                    dore a vecu. Meme logique qu avant, seuls les habits
+                    changent -- envoyer, ou accepter si l autre a deja demande,
+                    l echec rejouable. Deja amis : pas d icone, la ligne d etat
+                    le dit. Demande partie : icone eteinte, non interactive. */}
+                {!dejaAmi && (
+                  <button
+                    type="button"
+                    className={`profil-adverse-ami ${envoyee ? "eteinte" : ""}`}
+                    disabled={!!envoyee}
+                    onClick={() => { setAmitieAvis("");
+                      (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
+                        .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
+                    aria-label={envoyee ? "Demande d'ami envoyée"
+                      : ilMaDemande ? `Accepter la demande de ${profilAdverse.nom}`
+                      : `Ajouter ${profilAdverse.nom} en ami`}
+                    title={envoyee ? "Demande d'ami envoyée"
+                      : ilMaDemande ? `Accepter la demande de ${profilAdverse.nom}`
+                      : `Ajouter ${profilAdverse.nom} en ami`}
+                  >
+                    <img src="/icones/amis.webp" alt="" width="28" height="28" />
+                    {!envoyee && (
+                      <span className={`profil-adverse-ami-pastille ${ilMaDemande ? "pleine" : ""}`} aria-hidden="true">{ilMaDemande ? "" : "+"}</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="profil-fiche-chiffres">
@@ -20373,18 +20398,18 @@ export default function Emprise() {
                 </>
               )}
 
+              {/* La ligne d etat, sous l icone d en-tete (02/09) : chacun des
+                  etats de l ancien bandeau survit ici. Par defaut (pas ami,
+                  pas de demande, pas d erreur) : aucune ligne. */}
               {dejaAmi ? (
                 <div className="revanche-attente profil-adverse-etat">Déjà dans vos amis</div>
               ) : envoyee ? (
                 <div className="revanche-attente profil-adverse-etat">Demande d&apos;ami envoyée</div>
-              ) : (
-                <button
-                  className="profil-adverse-ajouter"
-                  onClick={() => { setAmitieAvis("");
-                    (ilMaDemande ? accepterDemande(profilAdverse.uid) : envoyerDemande(profilAdverse.uid))
-                      .catch((e) => setAmitieAvis(e && e.message === "plafond-jour" ? "Plafond du jour atteint" : "Impossible — réessayer")); }}
-                >{amitieAvis || (ilMaDemande ? "Accepter en ami" : "Ajouter en ami")}</button>
-              )}
+              ) : amitieAvis ? (
+                <div className="revanche-attente profil-adverse-etat">{amitieAvis}</div>
+              ) : ilMaDemande ? (
+                <div className="revanche-attente profil-adverse-etat">Vous a demandé en ami</div>
+              ) : null}
 
               {/* Deux mots, petits et gris, ecartes du bouton principal. Aucun des deux
                   n'agit tout de suite : signaler ouvre le formulaire de motif, bloquer
