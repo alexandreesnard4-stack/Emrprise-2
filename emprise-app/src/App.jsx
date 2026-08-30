@@ -12942,15 +12942,24 @@ export default function Emprise() {
 
   function reserveDe(camp) { return camp === "red" ? reserveRouge : reserveBleue; }
 
-  // Ce que porte le dos d'une carte. En attendant les cosmetiques, c'est le portrait de
-  // son Ordre. Passe par une variable CSS : la feuille de style n'a ainsi pas a connaitre
-  // les dix Ordres, et le jour venu une seule ligne change ici.
+  // Ce que porte le dos d'une carte. Passe par une variable CSS : la feuille
+  // de style n'a ainsi pas a connaitre les dix Ordres.
   // Cela ne revele RIEN a l'adversaire : les deux mains sont publiques et l'apercu les
   // montre, et la Reserve tient une carte par Ordre -- ses deux Ordres etaient donc deja
   // connus. Ce qui reste cache, et qui seul compte, c'est l'orientation de ses rangs.
-  function dosDeCarte(c) {
+  // Le dos ACHETE n'habille que MES cartes (demande du Commandant, 02/09) :
+  // rien ne transporte le cosmetique d en face, et voir l adversaire porter
+  // le mien faisait croire a un achat partage. Son camp garde le dos par
+  // defaut. En duel local, deux humains partagent le profil : personne ne le
+  // porte, comme le veut monCampCombos qui y est nul.
+  // composeMien : l ecran de composition de la Reserve est TOUJOURS le mien
+  // -- personne d autre ne le voit -- et il doit montrer le dos choisi en
+  // boutique dans tous les modes, duel local compris (demande du Commandant,
+  // 02/09 : meme quand on selectionne la Reserve, on voit le dos choisi).
+  function dosDeCarte(c, camp, composeMien = false) {
+    const mien = composeMien || (camp != null && camp === monCampCombos);
     return {
-      ...variablesDos(cosmetiques.dos),
+      ...variablesDos(mien ? cosmetiques.dos : DOS_DEFAUT),
       "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none",
     };
   }
@@ -12961,15 +12970,17 @@ export default function Emprise() {
   // un cosmetique a venir, et le dos suffit a dire qu'elles sont la. Empilees avec un
   // decalage, pour qu'on voie qu'il y en a deux. Ecrite une seule fois : l'apercu
   // d'avant-partie et les deux rangees de jeu s'en servent toutes les trois.
-  function pileDeReserve(cartes, grande, campRevisible) {
+  function pileDeReserve(cartes, grande, campRevisible, campProprio) {
     if (!cartes || cartes.length === 0) return null;
     // Sans pastille de compte (demande du Commandant, 01/09) : les dos disent
     // deja combien il en reste, et l'aria-label garde le nombre pour le
     // lecteur d'ecran. Seule l'attente en ligne garde sa pastille, un ? qui
     // dit autre chose : la Reserve d'en face n'est pas encore composee.
+    // campProprio : a qui est la pile -- le dos cosmetique n habille que la
+    // mienne, jamais celle d en face.
     const contenu = (
       <>
-        {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} style={dosDeCarte(c)} aria-hidden="true" />))}
+        {cartes.map((c, i) => (<span key={c.id} className={`reserve-dos d${i}`} style={dosDeCarte(c, campProprio)} aria-hidden="true" />))}
       </>
     );
     // Sa PROPRE Reserve se rouvre d'un toucher : on l'a composee huit coups plus tot,
@@ -13076,7 +13087,7 @@ export default function Emprise() {
         <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
-        {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null)}
+        {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null, camp)}
       </div>
     );
   }
@@ -19054,7 +19065,7 @@ export default function Emprise() {
                     apercu.map((card) => (
                       <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
                     )),
-                    pileDeReserve(reserveDe(monCamp), true))}
+                    pileDeReserve(reserveDe(monCamp), true, null, monCamp))}
                 </div>
               </>
             );
@@ -19422,7 +19433,7 @@ export default function Emprise() {
                           visible a la fois. */}
                       <div className="reserve-flip">
                         <span className="reserve-face avant"><Card card={c} owner={camp} extraClass="hand" /></span>
-                        <span className="reserve-face arriere" style={dosDeCarte(c)} aria-hidden="true" />
+                        <span className="reserve-face arriere" style={dosDeCarte(c, camp, true)} aria-hidden="true" />
                       </div>
                     </div>
                   );
@@ -19523,13 +19534,13 @@ export default function Emprise() {
                         apercuParOrdre(mainAdverse).map((card) => (
                           <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
                         )),
-                        pileDeReserve(reserveDe(campAdverse), true))}
+                        pileDeReserve(reserveDe(campAdverse), true, null, campAdverse))}
                       <span className="vs-contre" aria-hidden="true">VS</span>
                       {territoireVs(monCamp, monCamp, pseudo || "Vous", fondMien,
                         apercuParOrdre(maMain).map((card) => (
                           <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
                         )),
-                        pileDeReserve(reserveDe(monCamp), true))}
+                        pileDeReserve(reserveDe(monCamp), true, null, monCamp))}
                     </div>
                     </>
                   );
