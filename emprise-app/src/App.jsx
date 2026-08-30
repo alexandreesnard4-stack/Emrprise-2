@@ -6341,10 +6341,12 @@ const APP_STYLES = `
            rien ne bouge au passage du niveau 10. */
         .hub-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
-          /* Blanc os (01/09), jumeau du profil et de l avant-partie. */
-          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
+          /* Brun sombre (02/09), jumeau du profil et de l avant-partie :
+             l interieur de la carte est devenu ivoire, le blanc os y etait
+             illisible. Sans ombre -- une ombre sombre sous un texte sombre
+             sur fond clair salit le rendu. */
+          color: #241a0a; line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center;
-          text-shadow: 0 1px 3px rgba(0,0,0,0.85);
         }
         /* La meme carte, en grand, au profil -- a gauche de la ligne de niveau. */
         /* 40 x 55 (53 x 72 avant) : depuis le rognage de l'image, l'art
@@ -6360,11 +6362,11 @@ const APP_STYLES = `
         }
         .profil-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
-          /* Blanc os (01/09), comme le pseudo sur les bannieres -- l ombre
-             portee garde la lisibilite sur le panneau central de la carte. */
-          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
+          /* Brun sombre (02/09), jumeau du hub et de l avant-partie :
+             l interieur de la carte est devenu ivoire, et l ivoire n a
+             besoin d aucune ombre pour la lisibilite. */
+          color: #241a0a; line-height: 1; font-variant-numeric: tabular-nums;
           min-width: 2ch; text-align: center;
-          text-shadow: 0 1px 4px rgba(0,0,0,0.9);
         }
         /* La carte a gauche, le corps (ligne, jauge, compte) a droite : le corps
            reprend l'ancienne colonne, la barre et ses textes n'ont pas bouge. */
@@ -9382,9 +9384,10 @@ const APP_STYLES = `
         }
         .territoire-niveau-nombre {
           font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
-          /* Blanc os (01/09), jumeau du hub et du profil. */
-          color: var(--bone); line-height: 1; font-variant-numeric: tabular-nums;
-          min-width: 2ch; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+          /* Brun sombre (02/09), jumeau du hub et du profil : l interieur
+             de la carte est devenu ivoire, sans ombre. */
+          color: #241a0a; line-height: 1; font-variant-numeric: tabular-nums;
+          min-width: 2ch; text-align: center;
         }
 
         .reserve-panel { max-width: 330px; }
