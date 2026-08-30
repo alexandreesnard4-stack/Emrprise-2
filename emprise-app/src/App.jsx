@@ -13048,10 +13048,11 @@ export default function Emprise() {
   // l apercu ET par l ecran d attente en ligne -- les deux scenes doivent
   // rester identiques. Une donnee absente EFFACE sa ligne : jamais un zero ni
   // un titre invente, et pas de carte de niveau en face tant que rien ne
-  // transporte le niveau adverse. Seule exception (02/09) : MON titre encore
-  // absent se dit en toutes lettres -- le style se dessine -- car ce n est pas
-  // une invention, c est l etat vrai. Le titre : le mien par titrePrincipal,
-  // celui d en face par le document de la partie, valide par titreDuJeu.
+  // transporte le niveau adverse. Seule exception (02/09) : un titre encore
+  // absent se dit en toutes lettres -- le style se dessine -- car ce n est
+  // pas une invention, c est l etat vrai, et le titre d en face voyage des
+  // la creation de la partie. Le titre : le mien par titrePrincipal, celui
+  // d en face par le document de la partie, valide par titreDuJeu.
   function territoireVs(camp, monCamp, nom, fond, cartes, reserve) {
     const p = (profilPartie && profilPartie[camp]) || {};
     const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
@@ -13061,11 +13062,15 @@ export default function Emprise() {
     // ou L'Alchimiste s'affichait vide avec la seule liste des combos.
     const titreAdverse = titreDuJeu(titreBrut);
     const titre = camp === monCamp ? titrePrincipal(stats) : (titreAdverse ? titreAdverse.nom : null);
-    // MON type de joueur se voit TOUJOURS (demande du Commandant, 02/09) :
-    // avant 10 parties comptees, pas de titre -- la ligne dit alors, comme au
-    // profil, que le style se dessine. Celui d en face reste efface sans
-    // titre recu : on n invente rien pour l adversaire.
-    const titreEnDevenir = camp === monCamp && !titre;
+    // Le type de joueur se voit TOUJOURS, des deux cotes (demande du
+    // Commandant, 02/09) : avant 10 parties comptees, pas de titre -- la
+    // ligne dit alors, comme au profil et a la fiche d ami, que le style se
+    // dessine. Pour le camp d en face ce n est pas une invention : son titre
+    // voyage DES la creation de la partie (vide s il n en a pas), et
+    // titresPartie n existe qu en ligne -- l Echo et le duel local n
+    // affichent donc jamais un style en devenir qu ils n auront pas.
+    const titreEnDevenir = !titre
+      && (camp === monCamp || (titresPartie && typeof titresPartie[camp] === "string"));
     // Le mien se calcule ici ; celui d'en face arrive par le document de la
     // partie (blueNiveau/redNiveau), assaini par niveauRecu. Absent (partie
     // d'avant le champ, client ancien) : pas de carte, jamais un zero.
@@ -13087,7 +13092,7 @@ export default function Emprise() {
             <div className="territoire-identite">
               <span className="territoire-pseudo">{nom}<span className="lecteur-seul">{camp === monCamp ? " (votre camp)" : " (camp adverse)"}</span></span>
               {titre && <span className="territoire-titre">{titre}</span>}
-              {titreEnDevenir && <span className="territoire-titre en-devenir">Votre style se dessine</span>}
+              {titreEnDevenir && <span className="territoire-titre en-devenir">{camp === monCamp ? "Votre style se dessine" : "Son style se dessine"}</span>}
             </div>
             {/* Le niveau et les trophees forment une PAIRE calee a droite :
                 sans niveau (camp adverse), les trophees restent en place. */}
