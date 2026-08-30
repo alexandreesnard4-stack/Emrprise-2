@@ -59,7 +59,11 @@ try {
 // recupere en reexecutant avec un retour explicite.
 const A_EXPOSER = ["ORDERS", "ROWS", "COLS", "CELLS", "setBoardSize", "makeHand",
   "resolvePlacement", "botChooseMove", "DIFFICULTIES", "LEAGUES",
-  "TROPHEES_VICTOIRE", "TROPHEES_DEFAITE", "MAITRISE_PARTIES_MAX"];
+  "TROPHEES_VICTOIRE", "TROPHEES_DEFAITE", "MAITRISE_PARTIES_MAX",
+  // La completion des tournois par des Echos (02/09) : la simulation et les
+  // prix assainis s eprouvent hors ecran, comme le reste du moteur.
+  "simulerMatchEchos", "estEchoTournoi", "prixDuTournoi", "graineDeChaine",
+  "TOURNOI_ENJEU", "TOURNOI_PRIX_PAR_HUMAIN", "TOURNOI_COMPLETE_ECHOS_S", "TOURNOI_ECHO_DIFF"];
 const dispo = A_EXPOSER.filter((n) => new RegExp("(function|const|let|var)\\s+" + n + "\\b").test(compile));
 const moteur = new Function("require", "module", "exports",
   compile + "\nreturn {" + dispo.join(", ") + "};")(requireStub, module_, module_.exports);

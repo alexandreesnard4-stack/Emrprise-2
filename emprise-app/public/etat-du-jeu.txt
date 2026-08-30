@@ -43,6 +43,7 @@ Bannières de prestige à double prix : en pièces ou en gemmes, au choix, jamai
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
 Le Changeur : les gemmes deviennent des pièces, à sens unique, chaque palier illustré (pile, bourse, coffret).
 Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
+Quand la salle d'un tournoi en ligne tarde à se remplir, l'organisateur peut compléter les sièges vides avec des Échos, affichés comme tels ; le prix du vainqueur suit le nombre de vrais Commandants, et si un Écho remporte le tournoi, personne ne touche la cagnotte.
 La Flamme du Commandant : livrer un duel classé chaque jour fait grandir une série, avec des pièces à certains paliers ; rien ne s'achète pour la protéger.
 La flamme affichée se remplit d'un septième par jour de série : pleine à sept jours, au trait quand elle est éteinte.
 Soldes d'essai avant la sortie : gemmes et pièces seront remises à zéro au lancement.

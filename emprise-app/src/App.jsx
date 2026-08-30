@@ -2200,7 +2200,7 @@ async function gagnerXp(montant, piecesExplicites = null) {
 // la fonction relit la sauvegarde avant de decider, si bien qu'un second appel sur le meme
 // tournoi -- au redemarrage de l'application, par exemple -- ne compte rien de plus.
 // La liste ne garde que les douze derniers identifiants.
-async function recordTournoiGagne(tournoiId) {
+async function recordTournoiGagne(tournoiId, prixGemmes = TOURNOI_ENJEU.prixVainqueur, prixXp = TOURNOI_ENJEU.xpVainqueur) {
   const stats = await loadStats();
   const vus = Array.isArray(stats.tournoisCredites) ? stats.tournoisCredites : [];
   if (vus.includes(tournoiId)) return stats;
@@ -2209,11 +2209,15 @@ async function recordTournoiGagne(tournoiId) {
   await writeStatsRaw(JSON.stringify(stats));
   // L'enjeu s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
   // tournoi n'avait jamais ete compte -- elle jure donc pour le prix en gemmes
-  // ET pour l'XP du vainqueur (les pieces suivent l'XP toutes seules). Les prix
-  // sont des constantes : jamais calcules depuis des pieces, dans aucun sens.
-  await crediterGemmes(TOURNOI_ENJEU.prixVainqueur);
-  const bilan = await gagnerXp(TOURNOI_ENJEU.xpVainqueur);
-  stats.xpDePartie = { ...bilan, gemmesTournoi: TOURNOI_ENJEU.prixVainqueur };
+  // ET pour l'XP du vainqueur (les pieces suivent l'XP toutes seules). Depuis
+  // la completion par des Echos (02/09), le prix arrive de prixDuTournoi :
+  // celui du document, borne par le recalcul et par les constantes -- jamais
+  // au-dela, la cagnotte ne cree pas de gemmes. Ceinture locale en plus.
+  const gemmesSures = Math.max(0, Math.min(TOURNOI_ENJEU.prixVainqueur, Math.floor(prixGemmes) || 0));
+  const xpSur = Math.max(0, Math.min(TOURNOI_ENJEU.xpVainqueur, Math.floor(prixXp) || 0));
+  await crediterGemmes(gemmesSures);
+  const bilan = await gagnerXp(xpSur);
+  stats.xpDePartie = { ...bilan, gemmesTournoi: gemmesSures };
   return stats;
 }
 
@@ -2906,6 +2910,40 @@ const TOURNOI_ENJEU = {
   prixVainqueur: 100,  // gemmes
   xpVainqueur: 300,    // XP en plus (les pieces suivent toutes seules)
 };
+// ---------- La completion d un tournoi en ligne par des Echos (02/09) ----------
+// L anti pompe a gemmes, en une ligne : N humains misent N x 20 gemmes, et le
+// prix du vainqueur vaut Math.round(N x 12,5) -- toujours STRICTEMENT sous la
+// cagnotte. 8 humains : 100, comme avant. 3 : 38. 2 : 25. Completer avec des
+// Echos ne cree donc JAMAIS de gemmes ; et si un Echo gagne, personne ne
+// recoit rien, la cagnotte brule entierement : c est le prix du risque, et
+// c est ce qui rend la completion honnete. L XP du vainqueur suit la meme
+// proportion. La regle d or heritee du tournoi solo tient : la cagnotte ne
+// cree jamais de gemmes.
+const TOURNOI_COMPLETE_ECHOS_S = 120; // delai avant de proposer les Echos
+const TOURNOI_PRIX_PAR_HUMAIN = 12.5; // gemmes par humain inscrit
+const TOURNOI_ECHO_DIFF = "avance";   // le niveau des Echos qui completent : Veteran
+// Un siege d Echo dans joueurs : jamais un uid, jamais un pseudo qui imite un
+// humain -- un prefixe que rien d autre ne porte.
+function estEchoTournoi(uid) { return typeof uid === "string" && uid.startsWith("echo:"); }
+// Le prix REEL d un tournoi : celui du document (ecrit a la completion),
+// borne par le recalcul depuis ses joueurs ET par les constantes -- un
+// document trafique ne peut pas gonfler la cagnotte, elle ne cree jamais de
+// gemmes. Vieux tournois sans champ : les constantes pleines, comme avant.
+function prixDuTournoi(t) {
+  const joueurs = (t && Array.isArray(t.joueurs)) ? t.joueurs : [];
+  const humains = joueurs.length ? joueurs.filter((u) => !estEchoTournoi(u)).length : 8;
+  const plafondGemmes = Math.min(TOURNOI_ENJEU.prixVainqueur, Math.round(humains * TOURNOI_PRIX_PAR_HUMAIN));
+  const plafondXp = Math.min(TOURNOI_ENJEU.xpVainqueur, Math.round((TOURNOI_ENJEU.xpVainqueur * humains) / 8));
+  const gemmes = typeof t?.prixGemmes === "number" ? Math.max(0, Math.min(plafondGemmes, Math.floor(t.prixGemmes))) : plafondGemmes;
+  const xp = typeof t?.prixXp === "number" ? Math.max(0, Math.min(plafondXp, Math.floor(t.prixXp))) : plafondXp;
+  return { gemmes, xp, humains };
+}
+// Graine numerique d une chaine, pour l alea deterministe des matchs d Echos.
+function graineDeChaine(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h | 0;
+}
 
 // ---------- Les bannieres de profil ----------
 // Un seul catalogue pour les cinq sources : depart (le choix du premier
@@ -4770,6 +4808,49 @@ function botChooseMove(board, hand, opponentHand, player, opponent, difficulty, 
     if (net > bestNet) { bestNet = net; bestMove = cand; }
   });
   return bestMove || candidates[0];
+}
+
+// Simule un match Echo contre Echo de tournoi, hors interface : botChooseMove
+// des deux cotes, chaque coup applique par simulateMove -- resolvePlacement,
+// le VRAI moteur (captures, resonances, ondes, poisons), identique pour les
+// deux camps. DETERMINISTE : l alea est seme par la graine (code du tournoi +
+// cle du match), tous les clients calculent donc le MEME vainqueur, et la
+// course d ecriture devient inoffensive -- la transaction ne garde que le
+// premier depot, qui dit la meme chose que les autres. Egalite parfaite au
+// compte final : la regle de la Mort Subite epuisee s applique telle quelle,
+// la victoire revient a celui qui n a pas commence.
+function simulerMatchEchos(graine) {
+  const alea = aleaDeterministe(graineDeChaine(graine));
+  const tire = (pool) => pool.splice(Math.floor(alea() * pool.length), 1)[0];
+  const dispo = ORDERS.filter((o) => isOrderAvailable(o));
+  const poolBleu = [...dispo]; const b1 = tire(poolBleu), b2 = tire(poolBleu);
+  const poolRouge = [...dispo]; const r1 = tire(poolRouge), r2 = tire(poolRouge);
+  let board = Array(CELLS).fill(null);
+  let poisons = Array(CELLS).fill(false);
+  // Les mains par makeOrderQuad directement, PAS par makeHand : son melange
+  // interne passe par Math.random, et l ordre de la main pese sur les bris
+  // d egalite du bot -- la graine ne suffirait plus. Memes cartes, ordre
+  // fixe : le determinisme tient.
+  const mains = {
+    blue: [...makeOrderQuad(b1), ...makeOrderQuad(b2)],
+    red: [...makeOrderQuad(r1), ...makeOrderQuad(r2)],
+  };
+  const premier = alea() < 0.5 ? "blue" : "red";
+  let tour = premier;
+  for (let coups = 0; coups < 16; coups++) {
+    const camp = tour, adverse = camp === "blue" ? "red" : "blue";
+    const coup = botChooseMove(board, mains[camp], mains[adverse], camp, adverse, TOURNOI_ECHO_DIFF, poisons);
+    if (!coup) break;
+    const sim = simulateMove(board, mains[camp][coup.cardIdx], coup.cellIdx, camp, poisons);
+    board = sim.board;
+    poisons = sim.poisonedCells;
+    mains[camp] = mains[camp].filter((_, i) => i !== coup.cardIdx);
+    tour = adverse;
+  }
+  let bleu = 0, rouge = 0;
+  for (const c of board) { if (c && c.owner === "blue") bleu++; else if (c && c.owner === "red") rouge++; }
+  if (bleu === rouge) return premier === "blue" ? "red" : "blue";
+  return bleu > rouge ? "blue" : "red";
 }
 
 // ---------- Component ----------
@@ -13564,6 +13645,7 @@ export default function Emprise() {
     setRevancheVotes(null); revancheCreationRef.current = false;
     setTournoiOnlineId(null); setTournoiData(null); setTournoiErreur(""); setCodeTournoiInput("");
     tournoiLancementRef.current = false; tournoiResultatRef.current = null;
+    matchEchoTournoiRef.current = null;
     setPhase("landing");
   }
 
@@ -13777,6 +13859,13 @@ export default function Emprise() {
         const matches = {};
         for (let k = 0; k < 4; k++) {
           const a = t.joueurs[k * 2], b = t.joueurs[k * 2 + 1];
+          // Un match ou vit un Echo (completion, 02/09) ne cree PAS de partie
+          // en ligne : il se joue localement (humain contre Echo) ou se
+          // simule (Echo contre Echo). gameId nul est sa marque.
+          if (estEchoTournoi(a) || estEchoTournoi(b)) {
+            matches[`qf${k}`] = { a, b, gameId: null, vainqueur: null };
+            continue;
+          }
           // Suffixe aléatoire : un identifiant entièrement prévisible pouvait être
           // pré-créé par un tiers dans games/, ce qui faisait échouer la transaction à
           // jamais (mise à jour refusée par les règles, suppression interdite) et gelait
@@ -13790,38 +13879,77 @@ export default function Emprise() {
     } catch (e) { /* un autre client y arrivera */ }
   }
 
-  // Écrit le résultat d'un match, et si le tour est alors complet, crée le tour suivant
-  // dans la MÊME transaction — le client qui dépose le dernier résultat ouvre le tour
-  // d'après, quel qu'il soit. Les deux joueurs d'un match tentent l'écriture : le second
-  // trouve le vainqueur déjà posé et repart sans rien faire.
-  async function ecrireResultatTournoi(gameId, campVainqueur) {
+  // La completion par des Echos (02/09), reservee a l ORGANISATEUR -- le
+  // createur, donc le premier siege. Transaction : salle encore en attente,
+  // au moins 2 humains (un organisateur seul est invite au tournoi solo
+  // gratuit a la place), aucun Echo deja pose (idempotent). Les sieges vides
+  // recoivent echo:1..echo:N, et le PRIX est fige DANS le document a cet
+  // instant, depuis le nombre d humains : c est lui que tous les ecrans
+  // lisent ensuite, jamais un recalcul local. La salle ainsi pleine, l ecoute
+  // existante lance les quarts d elle-meme, sur n importe quel client.
+  async function completerAvecEchos() {
     try {
       await runTransaction(db, async (tx) => {
         const ref = doc(db, "tournaments", tournoiOnlineId);
         const snap = await tx.get(ref);
         if (!snap.exists()) return;
         const t = snap.data();
-        const cles = Object.keys(t.matches || {});
-        const cle = cles.find((k) => t.matches[k].gameId === gameId);
-        if (!cle) return;
-        const m = t.matches[cle];
+        const joueurs = t.joueurs || [];
+        if (t.status !== "waiting") return;
+        if (joueurs.some(estEchoTournoi)) return;
+        if (joueurs.length < 2 || joueurs.length >= 8) return;
+        if (joueurs[0] !== myUid) return;
+        const humains = joueurs.length;
+        const complet = [...joueurs];
+        for (let i = 1; complet.length < 8; i++) complet.push(`echo:${i}`);
+        tx.update(ref, {
+          joueurs: complet,
+          prixGemmes: Math.round(humains * TOURNOI_PRIX_PAR_HUMAIN),
+          prixXp: Math.round((TOURNOI_ENJEU.xpVainqueur * humains) / 8),
+          humains,
+        });
+      });
+    } catch (e) { setTournoiErreur("Impossible de compléter. Réessayez."); }
+  }
+
+  // Dépose un vainqueur dans l'arbre partagé et, si le tour est alors complet, crée le
+  // tour suivant dans la MÊME transaction — le client qui dépose le dernier résultat
+  // ouvre le tour d'après, quel qu'il soit. Deux portes d'entrée : par gameId (les
+  // parties en ligne, camp vainqueur à traduire) ou par clé directe (les matchs
+  // d'Échos, vainqueur déjà connu). Idempotent : un vainqueur déjà posé arrête tout,
+  // quel que soit le nombre de déposants.
+  async function deposerResultatTournoi({ gameId, campVainqueur, cle, vainqueurUid }) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", tournoiOnlineId);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const t = snap.data();
+        const laCle = cle || Object.keys(t.matches || {}).find((k) => t.matches[k].gameId === gameId);
+        if (!laCle || !t.matches || !t.matches[laCle]) return;
+        const m = t.matches[laCle];
         if (m.vainqueur) return;
-        const vainqueurUid = campVainqueur === "blue" ? m.a : m.b;
-        const matches = { ...t.matches, [cle]: { ...m, vainqueur: vainqueurUid } };
+        const gagnant = vainqueurUid || (campVainqueur === "blue" ? m.a : m.b);
+        if (gagnant !== m.a && gagnant !== m.b) return;
+        const matches = { ...t.matches, [laCle]: { ...m, vainqueur: gagnant } };
         const majs = { matches };
         const v = (k) => matches[k] && matches[k].vainqueur;
-        if (cle.startsWith("qf") && v("qf0") && v("qf1") && v("qf2") && v("qf3") && !matches.sf0) {
-          const sf0 = { a: v("qf0"), b: v("qf1"), gameId: `${tournoiOnlineId}-SF0-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
-          const sf1 = { a: v("qf2"), b: v("qf3"), gameId: `${tournoiOnlineId}-SF1-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
-          tx.set(doc(db, "games", sf0.gameId), nouvellePartieDeTournoi(sf0.a, sf0.b, "sf0"));
-          tx.set(doc(db, "games", sf1.gameId), nouvellePartieDeTournoi(sf1.a, sf1.b, "sf1"));
-          matches.sf0 = sf0; matches.sf1 = sf1;
-        } else if (cle.startsWith("sf") && v("sf0") && v("sf1") && !matches.f0) {
-          const f0 = { a: v("sf0"), b: v("sf1"), gameId: `${tournoiOnlineId}-F0-${Math.random().toString(36).slice(2, 8)}`, vainqueur: null };
-          tx.set(doc(db, "games", f0.gameId), nouvellePartieDeTournoi(f0.a, f0.b, "f0"));
-          matches.f0 = f0;
-        } else if (cle === "f0") {
-          majs.champion = vainqueurUid;
+        // Ouvre un match du tour suivant : une partie en ligne SEULEMENT si
+        // les deux sieges sont humains -- un Echo present, gameId nul, le
+        // match se jouera localement ou se simulera (completion, 02/09).
+        const ouvre = (cleMatch, a, b) => {
+          if (estEchoTournoi(a) || estEchoTournoi(b)) return { a, b, gameId: null, vainqueur: null };
+          const gid = `${tournoiOnlineId}-${cleMatch.toUpperCase()}-${Math.random().toString(36).slice(2, 8)}`;
+          tx.set(doc(db, "games", gid), nouvellePartieDeTournoi(a, b, cleMatch));
+          return { a, b, gameId: gid, vainqueur: null };
+        };
+        if (laCle.startsWith("qf") && v("qf0") && v("qf1") && v("qf2") && v("qf3") && !matches.sf0) {
+          matches.sf0 = ouvre("sf0", v("qf0"), v("qf1"));
+          matches.sf1 = ouvre("sf1", v("qf2"), v("qf3"));
+        } else if (laCle.startsWith("sf") && v("sf0") && v("sf1") && !matches.f0) {
+          matches.f0 = ouvre("f0", v("sf0"), v("sf1"));
+        } else if (laCle === "f0") {
+          majs.champion = gagnant;
           majs.status = "done";
         }
         tx.update(ref, majs);
@@ -13829,6 +13957,9 @@ export default function Emprise() {
     } catch (e) {
       tournoiResultatRef.current = null; // l'autre client (ou une reprise) réessaiera
     }
+  }
+  async function ecrireResultatTournoi(gameId, campVainqueur) {
+    return deposerResultatTournoi({ gameId, campVainqueur });
   }
 
   // Mon prochain match encore à jouer, s'il existe.
@@ -13841,9 +13972,44 @@ export default function Emprise() {
     return null;
   }
 
+  // Mon match de tournoi contre un ECHO (gameId nul) : il se joue LOCALEMENT,
+  // comme une partie d Echo ordinaire -- XP, pieces et quetes par les portes
+  // existantes, pas de trophees, pas de Flamme (partie non classee) -- et son
+  // resultat repart dans l arbre partage a la fin, par la cle directe.
+  const matchEchoTournoiRef = useRef(null);
+  function jouerMatchTournoiEcho(m) {
+    const echoUid = estEchoTournoi(m.a) ? m.a : m.b;
+    matchEchoTournoiRef.current = { cle: m.cle, echoUid };
+    setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setBoard(Array(CELLS).fill(null));
+    setPoisonedCells(Array(CELLS).fill(false));
+    setBlueHand([]); setRedHand([]);
+    setBlueOrders([]); setRedOrders([]);
+    setPickerChoice([]);
+    setMode("bot");
+    setConfluenceActive(false);
+    setTestMode(false);
+    setBotDifficulty(TOURNOI_ECHO_DIFF);
+    const pool = ORDERS.filter((o) => isOrderAvailable(o));
+    const melange = [...pool];
+    const oa = melange.splice(Math.floor(Math.random() * melange.length), 1)[0];
+    const ob = melange.splice(Math.floor(Math.random() * melange.length), 1)[0];
+    setRedOrders([oa, ob]);
+    setRedHand(makeHand(oa, ob));
+    const premier = tirerPremierJoueur();
+    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
+    setDrag(null); setDragHoverCell(null); setHistory([]);
+    resetFanState();
+    setAllowUndo(false); setAllowHint(false); setHint(null);
+    setVainqueurForce(null); setFinMotif(null);
+    statsRecordedRef.current = false;
+    setPhase("select-blue");
+  }
+
   function jouerMatchTournoi() {
     const m = monMatchEnAttente();
     if (!m) return;
+    if (!m.gameId) { jouerMatchTournoiEcho(m); return; }
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setConfluenceActive(false); setTestMode(false); setPickerChoice([]);
     dernierCoupDistantRef.current = null;
@@ -13908,7 +14074,10 @@ export default function Emprise() {
     if (tournoiCrediteRef.current === tournoiOnlineId) return;
     if ((stats.tournoisCredites || []).includes(tournoiOnlineId)) return;
     tournoiCrediteRef.current = tournoiOnlineId;
-    recordTournoiGagne(tournoiOnlineId).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
+    // Le prix vient du document, assaini et borne par prixDuTournoi : un
+    // tournoi complete par des Echos paie a hauteur de ses humains.
+    const prix = prixDuTournoi(tournoiData);
+    recordTournoiGagne(tournoiOnlineId, prix.gemmes, prix.xp).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiData, tournoiOnlineId, myUid]);
 
@@ -13958,7 +14127,8 @@ export default function Emprise() {
             // seulement -- seul le vainqueur recoit des gemmes. Sans champion,
             // le tournoi court encore : le marqueur attend sa conclusion.
             if (t.champion === myUid) {
-              const st = await recordTournoiGagne(mise.id);
+              const prix = prixDuTournoi(t);
+              const st = await recordTournoiGagne(mise.id, prix.gemmes, prix.xp);
               setStats(st); rafraichirProgression();
               await reglerMiseTournoi(mise.id);
             } else if (t.champion) {
@@ -13980,6 +14150,52 @@ export default function Emprise() {
     ecrireResultatTournoi(onlineGameId, winner);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver, winner, tournoiOnlineId, onlineGameId, mode]);
+
+  // Depot du resultat de MON match d Echo de tournoi (partie locale, 02/09) :
+  // la meme porte que les resultats en ligne, par cle directe. Si l Echo
+  // gagne, son siege avance dans l arbre -- c est le prix du risque.
+  useEffect(() => {
+    const m = matchEchoTournoiRef.current;
+    if (!gameOver || mode !== "bot" || !m || !tournoiOnlineId || !winner) return;
+    matchEchoTournoiRef.current = null;
+    deposerResultatTournoi({ cle: m.cle, vainqueurUid: winner === "blue" ? myUid : m.echoUid });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameOver, winner, mode, tournoiOnlineId]);
+
+  // Les matchs Echo contre Echo (02/09) se resolvent sans interface : une
+  // simulation DETERMINISTE -- meme graine, meme vainqueur sur tous les
+  // appareils -- et le depot passe par la meme transaction que les autres
+  // resultats : le premier arrive ecrit, les suivants trouvent le vainqueur
+  // pose et repartent. L organisateur n a donc rien d exclusif : s il est
+  // parti, le premier participant qui constate le match en attente le
+  // resout, comme le lancement des quarts.
+  const echosSimulesRef = useRef(new Set());
+  useEffect(() => {
+    if (!tournoiData || !tournoiOnlineId || tournoiData.status !== "running") return;
+    for (const cle of Object.keys(tournoiData.matches || {})) {
+      const m = tournoiData.matches[cle];
+      if (!m || m.vainqueur || !estEchoTournoi(m.a) || !estEchoTournoi(m.b)) continue;
+      const marque = `${tournoiOnlineId}:${cle}`;
+      if (echosSimulesRef.current.has(marque)) continue;
+      echosSimulesRef.current.add(marque);
+      const camp = simulerMatchEchos(marque);
+      deposerResultatTournoi({ cle, vainqueurUid: camp === "blue" ? m.a : m.b });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiData, tournoiOnlineId]);
+
+  // Les secondes passees dans la salle d attente du tournoi : elles
+  // nourrissent la proposition de completion par des Echos. L interval vit
+  // avec la salle et se nettoie avec elle ; revenir repart de zero.
+  const [secondesSalle, setSecondesSalle] = useState(0);
+  useEffect(() => {
+    const enSalle = phase === "tourney-online" && !!tournoiOnlineId
+      && (!tournoiData || tournoiData.status === "waiting");
+    if (!enSalle) { setSecondesSalle(0); return; }
+    const t = setInterval(() => setSecondesSalle((s) => s + 1), 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, tournoiOnlineId, tournoiData && tournoiData.status]);
 
   // « Jouer avec un ami » et « Defier un ami » creent la meme partie ; seule la suite
   // differe (afficher le code, ou le deposer chez l'ami). D'ou une fonction qui REND le
@@ -18817,6 +19033,9 @@ export default function Emprise() {
         const statut = (tournoiData && tournoiData.status) || "waiting";
         // Un uid -> sa plaque (alias + portrait de son siège, "Vous" pour soi-même).
         const plaqueDe = (uid) => {
+          // Un Echo s affiche comme tel, PARTOUT : jamais l alias d un siege,
+          // qui imiterait un humain (02/09).
+          if (estEchoTournoi(uid)) return { nom: "Écho Vétéran", key: null, vous: false, echo: true };
           const i = joueurs.indexOf(uid);
           if (i === -1 || !SIEGES_TOURNOI[i]) return null;
           return { nom: uid === myUid ? "Vous" : SIEGES_TOURNOI[i].nom, key: SIEGES_TOURNOI[i].key, vous: uid === myUid };
@@ -18877,9 +19096,16 @@ export default function Emprise() {
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
             <h2>Tournoi en ligne</h2>
+            {/* Le prix COURANT, en permanence : celui du document du tournoi
+                (fige a la completion), sinon le plafond des humains presents.
+                Jamais un recalcul local d ecran a ecran (02/09). */}
             <div className="tournoi-enjeu">
               <span className="gemme-icone" aria-hidden="true" />
-              Mise : {TOURNOI_ENJEU.entree} gemmes · Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
+              {(() => {
+                if (!tournoiData) return `Mise : ${TOURNOI_ENJEU.entree} gemmes · Vainqueur : ${TOURNOI_ENJEU.prixVainqueur} gemmes`;
+                const p = prixDuTournoi(tournoiData);
+                return `Mise : ${TOURNOI_ENJEU.entree} gemmes · Vainqueur : ${p.gemmes} gemmes (${p.humains} Commandant${p.humains > 1 ? "s" : ""})`;
+              })()}
             </div>
             {statut === "waiting" && (
               <>
@@ -18900,6 +19126,30 @@ export default function Emprise() {
                 </div>
                 <div className="code-copie">{codeCopie ? "Code copié" : ""}</div>
                 <div className="sub">{8 - joueurs.length > 0 ? `En attente de ${8 - joueurs.length} Commandant${8 - joueurs.length > 1 ? "s" : ""}...` : "Lancement du tournoi..."}</div>
+                {/* La completion par des Echos (02/09) : une OFFRE, apres
+                    TOURNOI_COMPLETE_ECHOS_S secondes, pour le seul
+                    ORGANISATEUR -- les autres ne voient que l attente. Seul,
+                    il est invite au tournoi solo gratuit a la place : payer
+                    20 gemmes pour un prix de 13 serait l arnaque que le
+                    commentaire du tournoi solo interdit deja. */}
+                {joueurs[0] === myUid && joueurs.length < 8 && !joueurs.some(estEchoTournoi)
+                  && secondesSalle >= TOURNOI_COMPLETE_ECHOS_S && (
+                  joueurs.length >= 2 ? (
+                    <div className="attente-propose-echo">
+                      <div className="attente-propose-ligne">Les places restantes peuvent être tenues par des Échos.</div>
+                      <button type="button" className="attente-propose-bouton" onClick={completerAvecEchos}>
+                        Compléter avec des Échos
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="attente-propose-echo">
+                      <div className="attente-propose-ligne">Personne en vue pour l&apos;instant. Seul, le tournoi solo est gratuit.</div>
+                      <button type="button" className="attente-propose-bouton" onClick={() => { quitterSalleTournoi(); setPhase("tourney-menu"); }}>
+                        Jouer le tournoi solo
+                      </button>
+                    </div>
+                  )
+                )}
               </>
             )}
             {statut === "running" && (
@@ -18911,14 +19161,19 @@ export default function Emprise() {
                   : "Duel gagné ! En attente des autres résultats..."}
               </div>
             )}
+            {/* Un Echo champion : personne ne recoit rien, la cagnotte brule
+                entierement -- et l ecran le dit sans detour (02/09). */}
             {champion && (
               <div className="sub tb-champion-annonce">
-                🏆 {suisChampion ? "Vous remportez le tournoi !" : `${champion.nom} remporte le tournoi !`}
+                {estEchoTournoi(tournoiData.champion)
+                  ? "L'Écho remporte le tournoi. La cagnotte est perdue."
+                  : <>🏆 {suisChampion ? "Vous remportez le tournoi !" : `${champion.nom} remporte le tournoi !`}</>}
               </div>
             )}
-            {suisChampion && (
-              <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{TOURNOI_ENJEU.prixVainqueur} gemmes · +{TOURNOI_ENJEU.xpVainqueur} XP</div>
-            )}
+            {suisChampion && (() => {
+              const p = prixDuTournoi(tournoiData);
+              return <div className="tournoi-gain"><span className="gemme-icone" aria-hidden="true" />+{p.gemmes} gemmes · +{p.xp} XP</div>;
+            })()}
             <div className="tb-scene">
               <div
                 className="tb-arbre"
