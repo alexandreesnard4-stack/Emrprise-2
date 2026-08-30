@@ -16421,7 +16421,9 @@ export default function Emprise() {
           {/* Trois rangees au meme rythme vertical : la banniere et le tresor
               sur UNE ligne (52 px, meme centre), la flamme et les trophees en
               pilules jumelles dessous, puis le parchemin des quetes a gauche
-              face a la grille reguliere des portes a droite. */}
+              face a la grille reguliere des portes a droite. La Boutique ne
+              garde que la premiere rangee (02/09) ; Jouer les a toutes, la
+              page Ordres retire seulement la grille des portes. */}
           <header className="hub-haut">
             {/* Rangee 1 -- la banniere (souple) puis les deux pilules du tresor
                 (fixes) : le tresor s'affiche sur TOUTES les pages du hub,
@@ -16489,7 +16491,10 @@ export default function Emprise() {
             </button>
             </div>
             {/* Rangee 2 -- flamme et trophees, pilules jumelles, meme marge
-                gauche que la banniere. */}
+                gauche que la banniere. La Boutique s en passe (02/09) : rien
+                que l identite et le portefeuille au-dessus du catalogue, le
+                reste SORT du DOM et les rayons remontent d autant. */}
+            {hubPage !== "boutique" && (
             <div className="hub-joueur">
               {/* La Flamme REVIENT au hub -- maquette A v2 du Commandant, qui
                   annule son retrait de la veille : la vivante, en petit, et le
@@ -16528,9 +16533,14 @@ export default function Emprise() {
                 <span className="hub-trophees-nombre">{stats.trophies || 0}</span>
               </button>
             </div>
+            )}
             {/* Rangee 3 -- le parchemin des quetes sur la marge gauche, et la
                 grille reguliere des portes (2 colonnes) sur la marge droite ;
-                la page Ordres garde le parchemin et laisse respirer le reste. */}
+                la page Ordres garde le parchemin et laisse respirer le reste,
+                la Boutique demonte la rangee entiere (02/09). Les etats --
+                quetes non vues, amis en attente -- ne bougent pas : seul
+                l affichage se retire, les pastilles reviennent intactes. */}
+            {hubPage !== "boutique" && (
             <div className="hub-portes">
             <button
               className="hub-rouage hub-quetes"
@@ -16584,6 +16594,7 @@ export default function Emprise() {
             </span>
             )}
             </div>
+            )}
           </header>
 
           {/* ---------- La page des quetes : plein ecran par-dessus le hub.
