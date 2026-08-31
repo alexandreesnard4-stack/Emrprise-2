@@ -1431,9 +1431,13 @@ const DOS_CARTES = [
   { cle: "ardoise", nom: "Ardoise", matiere: "Pierre fendue des carrières", prix: 2000,
     fond: "repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 1px, rgba(0,0,0,0) 1px 6px), linear-gradient(160deg, #2b2f36 0%, #12151a 100%)",
     bord: "rgba(170,182,196,0.45)", anneau: "rgba(210,222,236,0.72)", socle: "#4a5460" },
+  // Velin repris (03/09) : une seule radiale douce donnait un brun-olive uni,
+  // ni peau ni parchemin. Trois couches maintenant, comme les dos qui
+  // fonctionnent -- le grain de la fibre, une tache d age hors centre, et la
+  // lueur centrale plus franche sur une base au contraste elargi.
   { cle: "velin", nom: "Vélin", matiere: "Peau de chèvre, encre passée", prix: 2000,
-    fond: "radial-gradient(circle at 50% 40%, rgba(226,206,158,0.16) 0%, rgba(226,206,158,0) 64%), linear-gradient(160deg, #3a3226 0%, #1d1810 100%)",
-    bord: "rgba(214,192,140,0.5)", anneau: "rgba(240,226,186,0.78)", socle: "#7a6636" },
+    fond: "radial-gradient(circle at 5px 4px, rgba(226,206,158,0.07) 0.8px, rgba(0,0,0,0) 1.6px) 0 0 / 9px 9px, radial-gradient(ellipse 60% 40% at 28% 24%, rgba(214,186,128,0.14) 0%, rgba(214,186,128,0) 70%), radial-gradient(circle at 50% 46%, rgba(238,218,170,0.24) 0%, rgba(238,218,170,0) 62%), linear-gradient(160deg, #4a4030 0%, #1a150e 100%)",
+    bord: "rgba(222,200,148,0.56)", anneau: "rgba(246,232,192,0.84)", socle: "#8a7440" },
   { cle: "fonte", nom: "Fonte", matiere: "Fer coulé, encore chaud", prix: 2000,
     fond: "radial-gradient(circle at 50% 72%, rgba(226,110,52,0.2) 0%, rgba(226,110,52,0) 58%), linear-gradient(160deg, #2e2320 0%, #130e0c 100%)",
     bord: "rgba(206,124,70,0.5)", anneau: "rgba(246,178,124,0.78)", socle: "#7a4222" },
@@ -1452,12 +1456,19 @@ const DOS_CARTES = [
   { cle: "bronze", nom: "Bronze verdi", matiere: "Métal ancien, patine du temps", prix: 2000,
     fond: "radial-gradient(circle at 6px 4px, rgba(120,180,150,0.1) 1.2px, rgba(0,0,0,0) 2.4px) 0 0 / 13px 13px, linear-gradient(160deg, #2a3028 0%, #12160f 100%)",
     bord: "rgba(150,190,160,0.5)", anneau: "rgba(206,232,208,0.76)", socle: "#4e6a4a" },
+  // Cendre froide reprise (03/09) : a 10 % sur un gris neutre, la radiale ne
+  // se voyait pas et la carte lisait comme un aplat. Le grain fin de la
+  // cendre par-dessus, la lueur au double, et une base au contraste elargi.
   { cle: "cendre-froide", nom: "Cendre froide", matiere: "Ce que le feu a laissé", prix: 2000,
-    fond: "radial-gradient(circle at 50% 30%, rgba(200,196,190,0.1) 0%, rgba(200,196,190,0) 62%), linear-gradient(160deg, #2a2828 0%, #121111 100%)",
-    bord: "rgba(180,176,170,0.45)", anneau: "rgba(224,220,214,0.74)", socle: "#565250" },
+    fond: "radial-gradient(circle at 3px 3px, rgba(214,210,204,0.11) 0.9px, rgba(0,0,0,0) 1.8px) 0 0 / 7px 7px, radial-gradient(circle at 50% 26%, rgba(228,222,214,0.19) 0%, rgba(228,222,214,0) 58%), linear-gradient(160deg, #383432 0%, #100f0f 100%)",
+    bord: "rgba(196,192,186,0.5)", anneau: "rgba(234,230,224,0.8)", socle: "#6a6462" },
+  // Nacre reprise (03/09) : trois teintes a 10 % se moyennaient en un
+  // bleu-gris plat, l irisation ne survivait pas a la taille de la carte.
+  // Quatre teintes au double, et les lignes de croissance de la coquille en
+  // trame fine par-dessus pour casser l aplat.
   { cle: "nacre", nom: "Nacre", matiere: "Coquille des fosses", prix: 3000,
-    fond: "linear-gradient(110deg, rgba(196,226,240,0.12) 20%, rgba(226,196,240,0.12) 42%, rgba(240,226,196,0.1) 62%, rgba(255,255,255,0) 78%), linear-gradient(160deg, #232a34 0%, #0d1016 100%)",
-    bord: "rgba(196,206,232,0.5)", anneau: "rgba(236,240,252,0.82)", socle: "#4a5674" },
+    fond: "repeating-linear-gradient(66deg, rgba(255,255,255,0.05) 0 1px, rgba(0,0,0,0) 1px 5px), linear-gradient(110deg, rgba(150,214,240,0.26) 14%, rgba(214,160,240,0.24) 38%, rgba(240,214,150,0.2) 60%, rgba(140,220,210,0.18) 78%, rgba(255,255,255,0) 92%), linear-gradient(160deg, #2b3444 0%, #0b0e14 100%)",
+    bord: "rgba(206,216,242,0.58)", anneau: "rgba(240,244,255,0.88)", socle: "#5a6a92" },
   { cle: "sang-seche", nom: "Sang séché", matiere: "Ce qui ne s'efface pas", prix: 2500,
     fond: "radial-gradient(circle at 50% 66%, rgba(150,30,30,0.18) 0%, rgba(150,30,30,0) 56%), linear-gradient(160deg, #2a1616 0%, #120707 100%)",
     bord: "rgba(180,80,80,0.5)", anneau: "rgba(232,160,150,0.76)", socle: "#6e2424" },
