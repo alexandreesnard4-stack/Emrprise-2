@@ -9825,23 +9825,6 @@ const APP_STYLES = `
            Retour, qui retombe dans le flux au lieu de se placer au-dessus du titre.
            isolation reste : elle sert au bon empilement des vignettes d'Ordre. */
         .order-picker, .diff-picker { width: 100%; max-width: 540px; display: flex; flex-direction: column; align-items: center; gap: 14px; position: static; isolation: isolate; }
-        /* Le centrage vertical des ecrans de modes (03/09). MESURE d abord, en
-           390x844 : .emprise-root fait bien 844 px (min-height 100dvh) et
-           empile en colonne, mais .diff-picker ne faisait que 297 px -- la
-           hauteur de son CONTENU, flex 0 1 auto -- pose sous le rembourrage du
-           haut, laissant 463 px de vide dessous. Aucun centrage n avait jamais
-           ete tente : ni classe utilitaire, ni marge auto nulle part.
-           La chaine de hauteur etait donc deja bonne ; il ne manquait que les
-           deux marges auto sur le bloc lui-meme. La classe suit la table
-           FONDS_ECRANS, sa seule source de verite : ces ecrans se centrent,
-           les autres non. Enfant DIRECT a dessein.
-           Le garde-fou tient tout seul : en flex, quand la place libre devient
-           negative (selection des Ordres, arbre du tournoi, draft), une marge
-           auto vaut zero -- l ancrage haut et le defilement restent intacts.
-           Le bouton Retour ne bouge pas : il est en position absolute sur
-           .emprise-root, hors du bloc qui se centre. */
-        .emprise-root.ecran-centre > .order-picker,
-        .emprise-root.ecran-centre > .diff-picker { margin-top: auto; margin-bottom: auto; }
         .order-picker h2, .diff-picker h2 { font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0; color: var(--blue-bright); }
         .order-picker h2.red-t { color: var(--red-bright); }
         .order-picker .sub { font-size: 11px; color: var(--muted); margin-top: -8px; }
@@ -16906,7 +16889,7 @@ export default function Emprise() {
 
   return (
     <div
-      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${phase === "chapters" ? "ecran-histoire" : ""} ${FONDS_ECRANS[phase] ? "ecran-centre" : ""}`}
+      className={`emprise-root ${reducedMotion ? "reduced-motion" : ""} ${phase === "play" ? "ecran-jeu" : ""} ${phase === "chapters" ? "ecran-histoire" : ""}`}
     >
       <style>{APP_STYLES}</style>
 
