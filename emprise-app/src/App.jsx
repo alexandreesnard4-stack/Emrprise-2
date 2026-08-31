@@ -9841,7 +9841,7 @@ const APP_STYLES = `
            Le bouton Retour ne bouge pas : il est en position absolute sur
            .emprise-root, hors du bloc qui se centre. */
         .emprise-root.ecran-centre > .order-picker,
-        .emprise-root.ecran-centre > .diff-picker:not(.diff-miroirs) { margin-top: auto; margin-bottom: auto; }
+        .emprise-root.ecran-centre > .diff-picker { margin-top: auto; margin-bottom: auto; }
         .order-picker h2, .diff-picker h2 { font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0; color: var(--blue-bright); }
         .order-picker h2.red-t { color: var(--red-bright); }
         .order-picker .sub { font-size: 11px; color: var(--muted); margin-top: -8px; }
@@ -11181,48 +11181,6 @@ const APP_STYLES = `
         .diff-option .diff-text { flex: 1; min-width: 0; }
         .diff-option .name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.05em; color: var(--gold-bright); }
         .diff-option .desc { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
-        /* ---------- Le choix de l Echo en quatre miroirs (03/09) ----------
-           TOUT est porte par .diff-miroirs : .diff-grid et .diff-option
-           servent aussi au menu du Tournoi, qui ne doit pas bouger d un
-           pixel. Ici le bloc ne se centre plus, il REMPLIT : flex 1 dans la
-           racine, qui fait deja toute la hauteur visible (min-height 100dvh
-           - la hauteur dynamique vaut la zone reellement visible, donc rien
-           ne passe sous la barre du navigateur, et cet ecran ne defile pas,
-           la barre ne se replie donc jamais sous lui).
-           Les 4 px lateraux s ajoutent aux 14 px de la racine : 18 px des
-           bords, comme la maquette. Le bas : 22 px de la racine plus 22 px
-           ici, soit 44, et la zone sure de l iPhone par-dessus. */
-        .diff-picker.diff-miroirs { flex: 1; min-height: 0; gap: 0; justify-content: flex-start; }
-        .diff-miroirs h2 { font-size: 18px; margin-top: 24px; }
-        .diff-miroirs .diff-grid {
-          flex: 1; min-height: 0; width: 100%; box-sizing: border-box;
-          display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px;
-          /* 42 et non 62 : a 18 px, le titre tient sur DEUX lignes en 390 de
-             large (mesure : il finit a 128), la ou la maquette le comptait
-             sur une. L ecart est cale sur le resultat qu elle demandait, la
-             grille a 170 du haut, pas sur son intermediaire. */
-          margin-top: 42px; margin-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
-          padding: 0 4px;
-        }
-        /* La glace : le haut translucide laisse voir la salle, le bas assoit
-           le texte. Le contenu se cale en bas, c est la hauteur de l ecran
-           qui donne leur stature aux cartes. */
-        .diff-miroirs .diff-option {
-          padding: 16px 14px; border-radius: 16px;
-          border: 1px solid rgba(203,164,86,0.3);
-          background: linear-gradient(180deg, rgba(52,40,74,0.55), rgba(16,12,24,0.92));
-          display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch;
-          gap: 0; text-align: left; font: inherit; color: inherit;
-          -webkit-appearance: none; appearance: none; box-shadow: none;
-          transition: border-color .2s;
-        }
-        /* Le survol ne souleve plus rien : quatre glaces dressees ne flottent
-           pas. Reste la pression, en transform seul. */
-        .diff-miroirs .diff-option:hover { transform: none; box-shadow: none; border-color: rgba(203,164,86,0.55); }
-        .diff-miroirs .diff-option:active { transform: scale(0.97); }
-        .diff-miroirs .diff-option .diff-text { flex: none; }
-        .diff-miroirs .diff-option .name { font-size: 16px; }
-        .diff-miroirs .diff-option .desc { font-size: 11.5px; line-height: 1.4; margin-top: 6px; }
         .confirm-panel { max-width: 300px; gap: 16px; }
         .confirm-text { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
         .confirm-actions { display: flex; flex-direction: column; gap: 9px; }
@@ -20015,21 +19973,17 @@ export default function Emprise() {
       )}
 
       {phase === "select-difficulty" && (
-        <div className="diff-picker diff-miroirs">
+        <div className="diff-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Choisissez le niveau de l'Écho</h2>
-          {/* Quatre miroirs dressés dans la salle (03/09) : la grille 2x2
-              remplit la hauteur, l'ordre de lecture est celui de la
-              difficulté. Un vrai bouton, la ou vivait un div role=button :
-              le toucher et le clavier viennent alors du navigateur. */}
           <div className="diff-grid">
             {DIFFICULTIES.map((d) => (
-              <button key={d.key} type="button" className="diff-option" onClick={() => chooseDifficulty(d.key)}>
+              <div key={d.key} className="diff-option" role="button" tabIndex={0} onClick={() => chooseDifficulty(d.key)} onKeyDown={KEY_ACTIVATE(() => chooseDifficulty(d.key))}>
                 <div className="diff-text">
                   <div className="name">{d.label}</div>
                   <div className="desc">{d.desc}</div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
