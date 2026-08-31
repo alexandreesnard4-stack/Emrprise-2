@@ -11412,6 +11412,13 @@ const APP_STYLES = `
            autres portent un portrait. C'est la marque la plus simple possible, et la plus
            lisible a 30 px. Un ecu, une croix ou tout autre dessin ne faisait qu'ajouter du
            bruit dans un espace ou rien n'est lisible. */
+        /* L Etendard d un Echo dans le sceau (03/09). L image est un bandeau
+           3:1 : cadree au centre, elle ne montrait que du ciel. Le point de
+           mire vise l embleme de l Etendard du Veteran, seule difficulte que
+           la completion emploie, et le sceau y gagne une marque lisible a
+           30 px. Un cran de sombre en plus : l Echo n est pas un Commandant,
+           sa plaque ne doit pas briller autant qu un portrait. */
+        .tb-etendard { object-position: 78% 56%; filter: brightness(0.9) saturate(0.85); }
         .tb-blason {
           display: block; width: 100%; height: 100%;
           background: linear-gradient(160deg, #f2dda2 0%, #e8c877 45%, #b8944a 100%);
@@ -19077,8 +19084,10 @@ export default function Emprise() {
         // Un uid -> sa plaque (alias + portrait de son siège, "Vous" pour soi-même).
         const plaqueDe = (uid) => {
           // Un Echo s affiche comme tel, PARTOUT : jamais l alias d un siege,
-          // qui imiterait un humain (02/09).
-          if (estEchoTournoi(uid)) return { nom: "Écho Vétéran", key: null, vous: false, echo: true };
+          // qui imiterait un humain (02/09). Il porte l Etendard de sa
+          // difficulte (03/09) : le sceau d or plein est la marque du JOUEUR
+          // lui-meme -- le laisser a l Echo, c est lui preter votre blason.
+          if (estEchoTournoi(uid)) return { nom: "Écho Vétéran", key: null, vous: false, echo: true, etendard: banniereDeDifficulte(TOURNOI_ECHO_DIFF) };
           const i = joueurs.indexOf(uid);
           if (i === -1 || !SIEGES_TOURNOI[i]) return null;
           return { nom: uid === myUid ? "Vous" : SIEGES_TOURNOI[i].nom, key: SIEGES_TOURNOI[i].key, vous: uid === myUid };
@@ -19102,7 +19111,9 @@ export default function Emprise() {
               <span className="tb-sceau">
                 {order
                   ? <img src={order.portrait} alt="" className="tb-portrait" />
-                  : <span className="tb-blason" aria-hidden="true" />}
+                  : p && p.etendard
+                    ? <img src={p.etendard.image} alt="" className="tb-portrait tb-etendard" />
+                    : <span className="tb-blason" aria-hidden="true" />}
               </span>
               <span className="tb-nom">{p ? p.nom : "..."}</span>
               {elimine && <span className="tb-balafre" aria-hidden="true" />}
