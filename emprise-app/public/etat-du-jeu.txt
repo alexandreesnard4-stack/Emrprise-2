@@ -76,5 +76,6 @@ Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de d�
 Écran de fin : score, trophées animés, XP et pièces de la partie, la Flamme du jour portée par son icône, gains de tournoi.
 Partage des codes de partie et de tournoi (copie, et envoi quand l'appareil le permet).
 Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
-Le choix du niveau de l'Écho et le tournoi en ligne ont leur propre fond d'écran.
+Chaque famille d'écrans a son fond : le choix du niveau de l'Écho, les tournois, la Confluence, les défis, le tutoriel.
+Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
