@@ -2981,8 +2981,9 @@ const BANNIERES = [
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
-// (waitingBanniere au salon, blueBanniere/redBanniere au document, la
-// Revanche echange) : le repli ne sert plus qu aux vieilles parties, aux
+// (blueBanniere/redBanniere au document de la partie -- chaque camp ecrit la
+// sienne, le salon ne peut pas les porter -- et la Revanche les echange) :
+// le repli ne sert plus qu aux vieilles parties, aux
 // defis par code (qui ne transportent ni titre ni trophees non plus) et aux
 // cles hors catalogue.
 const BANNIERE_REPLI = "depart-nuit";
@@ -14629,9 +14630,13 @@ export default function Emprise() {
             // Le titre suit le meme chemin que les trophees : recopie dans le document de
             // la partie, il s'affiche a l'identique sur les deux ecrans.
             waitingTitre: titrePrincipal(stats) || "",
-            // La banniere equipee aussi (02/09) : connue DES l appariement,
-            // l ecran d attente peut deja habiller le bloc d en face.
-            waitingBanniere: bourse.banniereEquipee || "",
+            // PAS de banniere ici (03/09) : la regle du salon borne ses champs
+            // par un hasOnly, et un champ de plus faisait refuser TOUTE
+            // inscription en file -- plus aucune partie classee possible. La
+            // banniere d Azur voyage donc par une ecriture separee dans le
+            // document de la partie, ou un participant peut tout ecrire. Regle
+            // generale : un nouveau champ du salon exige une republication des
+            // regles Firestore, jamais une simple ligne de code.
             waitingPseudo: pseudo || "",
             ...(monAncienMatch ? { matchedUid: null, matchedGameId: null, matchedAt: null } : {}),
           }, { merge: true });
@@ -14666,7 +14671,10 @@ export default function Emprise() {
           redTrophees: stats.trophies || 0,
           blueTitre: lobby.waitingTitre || "",
           redTitre: titrePrincipal(stats) || "",
-          blueBanniere: lobby.waitingBanniere || "",
+          // Ma banniere, que je connais ; celle d Azur reste vide ici et
+          // arrive par sa propre ecriture des qu il entre (03/09) : le salon
+          // ne peut pas la transporter, ses champs sont bornes par les regles.
+          blueBanniere: "",
           redBanniere: bourse.banniereEquipee || "",
           // Ce n'est pas son propre nom qu'on inscrit ici, c'est celui de l'adversaire,
           // ramasse dans le salon : donnee etrangere en transit, a assainir comme telle.
@@ -15057,6 +15065,12 @@ export default function Emprise() {
             const snap = await getDoc(doc(db, "games", code));
             const d = snap.exists() ? snap.data() : null;
             if (!d || d.blueUid !== myUid || !d.appariement || d.gameOver) return;
+            // Ma banniere equipee, ecrite par MOI dans le document (03/09) :
+            // le salon ne peut pas la porter (champs bornes par les regles),
+            // mais ici je suis Azur, donc participant, et un participant peut
+            // tout ecrire. Elle arrive avant l ecran des Ordres. Un echec ne
+            // coute que le repli chez l adversaire : la partie continue.
+            updateDoc(doc(db, "games", code), { blueBanniere: bourse.banniereEquipee || "" }).catch(() => {});
             libererAppariement(code);
             setFileAttente(false);
             setOnlineStatus("");
@@ -19538,9 +19552,10 @@ export default function Emprise() {
             const apercu = maMain.filter((c) => { if (vus.has(c.ability)) return false; vus.add(c.ability); return true; });
             const fondMien = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
             // La meme scene que l apercu d avant-partie, par territoireVs.
-            // Sa banniere est connue DES l appariement (waitingBanniere,
-            // 02/09) : le bloc d en face la porte deja pendant l attente ;
-            // sans elle (vieille partie, defi par code), Le Drap de Nuit.
+            // Sa banniere arrive de sa PROPRE ecriture dans le document, des
+            // son entree en partie (03/09) : le bloc d en face la porte deja
+            // pendant l attente ; sans elle (vieille partie, defi par code,
+            // ecriture perdue), Le Drap de Nuit.
             // Ses cartes restent des ? et sa Reserve des dos neutres au
             // compte ? -- elles, il ne les a pas encore choisies.
             const fondAdverse = (profilPartie && profilPartie[campAdverse] && banniereDeCle(profilPartie[campAdverse].banniere))
