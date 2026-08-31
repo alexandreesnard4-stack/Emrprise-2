@@ -5699,6 +5699,19 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 17px; letter-spacing: 0.14em;
           text-transform: uppercase; color: var(--gold-bright); margin: 6px 0 0;
         }
+        /* La page Ordres se centre dans l espace libre (03/09). Il n y avait
+           aucune regle qui poussait le bloc vers le bas : .hub-page fait toute
+           la hauteur (height 100 %) et empile ses enfants en flex-start, si
+           bien que TOUT le mou se ramassait sous la grille -- mesure en
+           390x844 : 10 px d air au-dessus du titre, 236 px de ciel vide
+           dessous. Deux marges auto rendent ce mou aux deux bords. Elles ne
+           debordent jamais : quand la grille remplit deja la boite, une marge
+           auto vaut zero, donc la regle de la maison (Jouer et Ordres tiennent
+           sans defilement) reste vraie sur les ecrans courts. On vise les
+           enfants par leur nom plutot que par first-child et last-child : le
+           calque de defi se pose dans cette meme boite. */
+        .hub-page.page-ordres .hub-page-titre { margin-top: auto; }
+        .hub-page.page-ordres .hub-ordres-grille4 { margin-bottom: auto; }
         .hub-page-sous { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
         /* ---------- Boutique : ce qu'on possede, et bientot ce qu'on achete ---------- */
         .boutique-page { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 2px; }
@@ -17465,7 +17478,7 @@ export default function Emprise() {
               </section>
             )}
             {hubPage === "ordres" && (
-              <section key="ordres" className={`hub-page hub-glisse-${hubSens}`} aria-label="Les Ordres">
+              <section key="ordres" className={`hub-page page-ordres hub-glisse-${hubSens}`} aria-label="Les Ordres">
                 <h2 className="hub-page-titre">Les Ordres</h2>
                 <p className="hub-page-sous">Votre maîtrise de chaque maison, partie après partie.</p>
                 {/* Cette page dit quel joueur on est, Ordre par Ordre : chaque portrait se
