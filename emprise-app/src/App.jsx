@@ -2214,6 +2214,22 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
         if (res.ajoutee) stats.banniereDebloquee = etendard.cle;
       }
     }
+    // ---------- Le medaillon d un Ordre (03/09) ----------
+    // Sa maitrise atteint le rang Disciple : son medaillon se gagne. Le seuil
+    // est lu dans MAITRISE_RANGS, jamais recopie. On passe les onze en revue
+    // plutot que les seuls Ordres de cette partie : c est aussi bon marche, et
+    // cela rattrape d office les Ordres deja au-dela du seuil avant que le
+    // systeme n existe -- il serait absurde qu un joueur a trois cents parties
+    // de Gardiens attende la trois-cent-unieme. possederMedaillon jure de son
+    // cote qu on ne le donne jamais deux fois. Le champ medaillonDebloque
+    // voyage vers l ecran de fin, jamais vers la sauvegarde.
+    const seuil = medaillonRang().min;
+    for (const md of MEDAILLONS) {
+      if (md.source !== "ordre") continue;
+      if (maitriseOrdre(stats, md.ordre).parties < seuil) continue;
+      const res = await possederMedaillon(md.cle, false);
+      if (res.ajoutee && !stats.medaillonDebloque) stats.medaillonDebloque = md.cle;
+    }
   }
   return stats;
 }
@@ -5630,6 +5646,18 @@ const APP_STYLES = `
         }
         .choix-medaillon.choisi .choix-medaillon-etat { color: var(--gold-bright); }
         .choix-medaillon:not(:disabled):active { transform: scale(0.94); }
+        /* Le medaillon au rayon et dans sa fenetre d achat : le meme sceau
+           rond, deux tailles. La carte du rayon garde le gabarit des autres. */
+        .boutique-medaillon {
+          width: 96px; height: 96px; border-radius: 50%; object-fit: cover; display: block;
+          border: 2px solid rgba(203,164,86,0.35); box-sizing: border-box;
+          background-color: #14101d;
+        }
+        .achat-medaillon {
+          width: 128px; height: 128px; border-radius: 50%; object-fit: cover; display: block;
+          margin: 0 auto; border: 2px solid var(--gold); box-sizing: border-box;
+          background-color: #14101d;
+        }
         /* L avatar du profil se touche pour en changer : c est un bouton, il
            faut donc lui reprendre les habitudes du navigateur. */
         .profil-fiche-medaillon.choisissable {
@@ -12604,9 +12632,11 @@ export default function Emprise() {
   // l'annonce, la fin de la partie suivante ou son debut l'efface (l'effet vit
   // plus bas, apres la declaration de gameOver).
   const [banniereAnnonce, setBanniereAnnonce] = useState(null);
+  const [medaillonAnnonce, setMedaillonAnnonce] = useState(null); // l avatar fraichement gagne (03/09)
   // L'achat de banniere en cours (l'article du catalogue), et le panneau de
   // choix parmi les possedees ouvert depuis le profil.
   const [achatBanniere, setAchatBanniere] = useState(null);
+  const [achatMedaillon, setAchatMedaillon] = useState(null); // l achat d un avatar (03/09)
   const [selectionBanniere, setSelectionBanniere] = useState(false);
   const [selectionMedaillon, setSelectionMedaillon] = useState(false); // le choix de l avatar (03/09)
   // Un seul choix de depart EN VOL : le meme patron que siegeEnCoursRef des
@@ -13023,6 +13053,31 @@ export default function Emprise() {
     ouvertureTimerRef.current = setTimeout(() => setAreneOuverte(null), 1800);
   }, [activeModal, stats.trophies]);
 
+  // Les medaillons d arene (03/09) : gagnes en ATTEIGNANT la ligue, jamais
+  // achetes -- c est ce qui leur donne leur valeur. UN seul effet couvre les
+  // deux cas : celui qui vient de franchir le seuil, et celui qui l avait
+  // franchi avant que ce systeme n existe. On donne tout ce que les trophees
+  // justifient, et possederMedaillon jure qu on ne donne jamais deux fois --
+  // un joueur deja Platine recoit donc Bronze, Argent, Or et Platine a son
+  // premier chargement, et rien de plus au suivant. Se brancher sur la seule
+  // ceremonie aurait laisse ce joueur-la sans rien.
+  useEffect(() => {
+    const trophees = stats.trophies || 0;
+    let vivant = true;
+    (async () => {
+      let derniere = null;
+      for (const md of MEDAILLONS) {
+        if (md.source !== "arene") continue;
+        const l = LEAGUES.find((x) => x.name === md.ligue);
+        if (!l || trophees < l.min) continue;
+        const res = await possederMedaillon(md.cle, false);
+        if (res.ajoutee) derniere = res.bourse;
+      }
+      if (vivant && derniere) setBourse(derniere);
+    })();
+    return () => { vivant = false; };
+  }, [stats.trophies]);
+
 
   // Le profil public : cree des la connexion — avant meme que le joueur ait un nom, pour
   // que son identifiant soit deja la quand il le choisit — avec ce numero tire dans une
@@ -13307,6 +13362,7 @@ export default function Emprise() {
   // La banniere annoncee ne survit ni a l'ecran de fin ni a celui du chapitre
   // termine (qui l'affiche aussi) : la partie suivante la retire d'elle-meme.
   useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setBanniereAnnonce(null); }, [gameOver, storyChapterJustCompleted]);
+  useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setMedaillonAnnonce(null); }, [gameOver, storyChapterJustCompleted]);
   const [storyCeremonyDone, setStoryCeremonyDone] = useState(false); // la cérémonie de déblocage du Héraut a été vue (ou passée)
   const [tourneyBanPick, setTourneyBanPick] = useState(null); // clé d'Ordre sélectionné à bannir, avant confirmation
   // Premier clic : demande confirmation. Second clic (sur "Confirmer") : efface pour de bon.
@@ -13718,6 +13774,13 @@ export default function Emprise() {
         if (st.banniereDebloquee) {
           const bn = banniereDeCle(st.banniereDebloquee);
           if (bn) setBanniereAnnonce(bn.nom);
+        }
+        // Le medaillon d un Ordre fraichement gagne (03/09) : meme chemin, et
+        // la bourse rechargee par rafraichirProgression porte deja sa
+        // possession -- l ecran de fin n a plus qu a le dire.
+        if (st.medaillonDebloque) {
+          const md = medaillonDeCle(st.medaillonDebloque);
+          if (md) setMedaillonAnnonce(md.nom);
         }
         // Les quetes avancent sur les memes parties que l XP -- la porte du profil
         // et l Histoire -- plus la Confluence pour sa quete dediee. Le bac a sable,
@@ -16202,8 +16265,16 @@ export default function Emprise() {
   // La banniere fraichement debloquee (Etendard d'Histoire ou d'Echo), SOUS les
   // lignes existantes. Fondu en opacity seule, comme le reste de l'ecran.
   function bilanBanniereDePartie() {
-    if (!banniereAnnonce || !gameOver) return null;
-    return <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>;
+    if (!gameOver || (!banniereAnnonce && !medaillonAnnonce)) return null;
+    return (
+      <>
+        {banniereAnnonce && <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>}
+        {/* Le medaillon d un Ordre, gagne au rang Disciple (03/09) : la meme
+            ligne, le meme fondu, sous la banniere quand les deux tombent
+            ensemble -- ce qui n arrive qu une fois dans une vie de joueur. */}
+        {medaillonAnnonce && <div className="cer-banniere">Médaillon débloqué : {medaillonAnnonce}</div>}
+      </>
+    );
   }
 
   function bilanTrophees() {
@@ -17644,6 +17715,37 @@ export default function Emprise() {
                             : bn.source === "prestige"
                               ? <span className="boutique-prix"><span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes}</span>
                               : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{bn.prix}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Le rayon des medaillons (03/09), apres les bannieres et au
+                      meme gabarit. SEULS les cinq de la source pieces y sont :
+                      ceux d Ordre se gagnent a la maitrise, ceux d arene en
+                      atteignant la ligue, et les trois du depart sont offerts --
+                      aucun ne s achete, c est ce qui leur donne leur valeur. */}
+                  <h2 className="boutique-titre second">Médaillons</h2>
+                  <p className="boutique-sous">L&apos;avatar qui vous représente, partout où l&apos;on vous voit.</p>
+                  <div className="boutique-grille">
+                    {MEDAILLONS.filter((x) => x.source === "pieces").map((md) => {
+                      const possede = bourse.possessions.medaillons.includes(md.cle);
+                      const equipe = bourse.medaillonEquipe === md.cle;
+                      return (
+                        <button
+                          key={md.cle}
+                          className={`boutique-carte ${equipe ? "choisi" : ""}`}
+                          onClick={() => possede
+                            ? equiperMedaillon(md.cle).then(setBourse)
+                            : setAchatMedaillon(md)}
+                          aria-pressed={equipe}
+                          aria-label={`Médaillon ${md.nom}.${equipe ? " Équipé." : possede ? " Possédé." : ` ${md.prix} pièces.`}`}
+                        >
+                          <img className="boutique-medaillon" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" loading="lazy" />
+                          <span className="boutique-nom">{md.nom}</span>
+                          {equipe || possede
+                            ? <span className="boutique-etat">{equipe ? "Équipé" : "Possédé"}</span>
+                            : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{md.prix}</span>}
                         </button>
                       );
                     })}
@@ -19307,6 +19409,9 @@ export default function Emprise() {
                 de ceremonie de fin de partie, l'annonce vit donc ICI. */}
             {banniereAnnonce && (
               <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>
+            )}
+            {medaillonAnnonce && (
+              <div className="cer-banniere">Médaillon débloqué : {medaillonAnnonce}</div>
             )}
             <button
               className="reset-btn"
@@ -21010,6 +21115,30 @@ export default function Emprise() {
                 </>
               )}
               <button className="landing-link" onClick={() => setAchatBanniere(null)}>Fermer</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* L'achat d'un medaillon (03/09) : le meme panneau que la banniere en
+          pieces. Acquis, il s'equipe dans la foulee, comme tous les
+          cosmetiques -- on achete un avatar pour le porter. */}
+      {achatMedaillon && (() => {
+        const md = achatMedaillon;
+        return (
+          <div className="info-overlay" onClick={() => setAchatMedaillon(null)}>
+            <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel-title">{md.nom}</div>
+              <img className="achat-medaillon" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" />
+              <div className="achat-prix"><span className="piece-icone" aria-hidden="true" />{md.prix}<span className="lecteur-seul"> pièces</span></div>
+              {bourse.pieces < md.prix && <div className="achat-solde">Il vous manque {md.prix - bourse.pieces} pièces.</div>}
+              <button className="reset-btn" disabled={bourse.pieces < md.prix}
+                      onClick={() => acheterMedaillonPieces(md.cle).then(({ bourse: b, fait }) => {
+                        setBourse(b);
+                        if (fait) equiperMedaillon(md.cle).then(setBourse);
+                        setAchatMedaillon(null);
+                      })}>Acquérir</button>
+              <button className="landing-link" onClick={() => setAchatMedaillon(null)}>Fermer</button>
             </div>
           </div>
         );
