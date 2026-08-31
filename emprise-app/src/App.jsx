@@ -2948,8 +2948,11 @@ function graineDeChaine(s) {
 // ---------- Les bannieres de profil ----------
 // Un seul catalogue pour les cinq sources : depart (le choix du premier
 // lancement), pieces (la boutique), histoire (un Etendard par chapitre
-// termine), echo (premiere victoire libre par difficulte), prestige (DOUBLE
-// prix pieces OU gemmes -- JAMAIS d'exclusivite gemmes, c'est une regle).
+// termine), echo (premiere victoire libre par difficulte), prestige (en
+// GEMMES seulement, 600 : depuis le 03/09 elles n ont plus de prix en pieces
+// du tout -- le champ prix a disparu de leurs lignes, si bien qu aucun chemin
+// de code ne peut plus en debiter, acheterBannierePieces refusant tout
+// article sans prix. Le double prix pieces OU gemmes a vecu).
 // Les chemins d'images vivent ICI, en webp comprime (les originaux PNG de
 // 3 a 24 Mo dorment dans sources-images/bannieres-originaux). Les 24 visuels
 // sont livres et verifies a l'oeil, un par un.
@@ -2974,10 +2977,10 @@ const BANNIERES = [
   { cle: "echo-combattant", nom: "L'Étendard du Combattant", image: "/bannieres/echo-combattant.webp", source: "echo", difficulte: "intermediaire" },
   { cle: "echo-veteran", nom: "L'Étendard du Vétéran", image: "/bannieres/echo-veteran.webp", source: "echo", difficulte: "avance" },
   { cle: "echo-seigneur", nom: "L'Étendard du Seigneur de Guerre", image: "/bannieres/echo-seigneur.webp", source: "echo", difficulte: "expert" },
-  { cle: "prestige-trone", nom: "Le Trône d'Améthyste", image: "/bannieres/prestige-trone.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
-  { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
-  { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
-  { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prix: 6000, prixGemmes: 600 },
+  { cle: "prestige-trone", nom: "Le Trône d'Améthyste", image: "/bannieres/prestige-trone.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prixGemmes: 600 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
@@ -3266,9 +3269,9 @@ async function acheterBannierePieces(cle) {
   return { bourse: b, fait: true };
 }
 
-// L'achat du prestige en GEMMES : l'AUTRE moitie du double prix, jamais une
-// exclusivite -- le meme article s'achete en pieces juste au-dessus. Meme
-// modele sur, sans toucher a acheterCosmetique ni aux autres articles.
+// L'achat du prestige en GEMMES : depuis le 03/09, le SEUL chemin vers ces
+// quatre bannieres -- elles n'ont plus de prix en pieces. Meme modele sur,
+// sans toucher a acheterCosmetique ni aux autres articles.
 async function acheterBanniereGemmes(cle) {
   const b = await loadBourse();
   const item = banniereDeCle(cle);
@@ -5388,13 +5391,9 @@ const APP_STYLES = `
            arrive plus tard dans la feuille et gagnerait a egalite. */
         .boutique-grille.bannieres-grille { grid-template-columns: 1fr; }
         .banniere-carte { align-items: center; gap: 6px; }
-        .banniere-prix-double { display: inline-flex; align-items: center; gap: 5px; }
-        .banniere-prix-ou { font-size: 10px; color: var(--muted); }
-        .achat-double { display: flex; gap: 10px; justify-content: center; }
-        .achat-double .reset-btn {
-          display: inline-flex; align-items: center; gap: 6px;
-        }
-        .achat-double .reset-btn:disabled { opacity: 0.45; cursor: default; }
+        /* Les regles du DOUBLE prix (banniere-prix-double, banniere-prix-ou,
+           achat-double) sont parties avec lui le 03/09 : le prestige ne porte
+           plus qu un prix, en gemmes, et reprend la mise en page ordinaire. */
         /* Le choix de depart et la selection : les memes cartes larges. */
         .choix-banniere-voile { z-index: 220; }
         .choix-banniere-panneau {
@@ -17276,14 +17275,14 @@ export default function Emprise() {
                             ? equiperBanniere(bn.cle).then(setBourse)
                             : setAchatBanniere(bn)}
                           aria-pressed={equipee}
-                          aria-label={`Bannière ${bn.nom}.${equipee ? " Équipée." : possede ? " Possédée." : bn.source === "prestige" ? ` ${bn.prix} pièces ou ${bn.prixGemmes} gemmes.` : ` ${bn.prix} pièces.`}`}
+                          aria-label={`Bannière ${bn.nom}.${equipee ? " Équipée." : possede ? " Possédée." : bn.source === "prestige" ? ` ${bn.prixGemmes} gemmes.` : ` ${bn.prix} pièces.`}`}
                         >
                           <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" loading="lazy" />
                           <span className="boutique-nom">{bn.nom}</span>
                           {equipee || possede
                             ? <span className="boutique-etat">{equipee ? "Équipée" : "Possédée"}</span>
                             : bn.source === "prestige"
-                              ? <span className="boutique-prix banniere-prix-double"><span className="piece-icone" aria-hidden="true" />{bn.prix}<span className="banniere-prix-ou">ou</span><span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes}</span>
+                              ? <span className="boutique-prix"><span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes}</span>
                               : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{bn.prix}</span>}
                         </button>
                       );
@@ -20563,8 +20562,8 @@ export default function Emprise() {
       {/* Toucher un pack : un panneau d'information, RIEN d'autre. Aucune gemme n'est
           creditee, la bourse n'est pas touchee -- le paiement passera par les achats
           integres des magasins, a la publication. */}
-      {/* L'achat d'une banniere : pieces simple, ou DOUBLE prix du prestige --
-          deux boutons, chacun grise si SON solde manque, un seul debite. */}
+      {/* L'achat d'une banniere : en pieces, ou en GEMMES pour le prestige --
+          un seul bouton dans les deux cas, grise si le solde manque. */}
       {achatBanniere && (() => {
         const bn = achatBanniere;
         const acquerir = (achat) => achat(bn.cle).then(({ bourse: b, fait }) => {
@@ -20580,15 +20579,10 @@ export default function Emprise() {
               <img className="banniere-apercu" src={bn.image} alt="" aria-hidden="true" width="512" height="171" />
               {bn.source === "prestige" ? (
                 <>
-                  <div className="achat-solde">Bannière de prestige : payez en pièces ou en gemmes, au choix.</div>
-                  <div className="achat-double">
-                    <button className="reset-btn" disabled={bourse.pieces < bn.prix} onClick={() => acquerir(acheterBannierePieces)}>
-                      <span className="piece-icone" aria-hidden="true" />{bn.prix} pièces
-                    </button>
-                    <button className="reset-btn" disabled={bourse.gemmes < bn.prixGemmes} onClick={() => acquerir(acheterBanniereGemmes)}>
-                      <span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes} gemmes
-                    </button>
-                  </div>
+                  <div className="achat-prix"><span className="gemme-icone" aria-hidden="true" />{bn.prixGemmes}<span className="lecteur-seul"> gemmes</span></div>
+                  <div className="achat-solde">Bannière de prestige : elle ne s&apos;acquiert qu&apos;en gemmes.</div>
+                  {bourse.gemmes < bn.prixGemmes && <div className="achat-solde">Il vous manque {bn.prixGemmes - bourse.gemmes} gemmes.</div>}
+                  <button className="reset-btn" disabled={bourse.gemmes < bn.prixGemmes} onClick={() => acquerir(acheterBanniereGemmes)}>Acquérir</button>
                 </>
               ) : (
                 <>

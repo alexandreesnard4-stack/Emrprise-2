@@ -39,7 +39,7 @@ Au-delà de trois parties classées dans la journée contre le même adversaire,
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
 Boutique : thèmes de plateau, dos de cartes et bannières de profil, payés en pièces.
 Le dos de cartes choisi habille vos cartes et se voit dès la composition de la Réserve ; en ligne, chacun voit aussi le dos choisi par l'adversaire.
-Bannières de prestige à double prix : en pièces ou en gemmes, au choix, jamais réservées aux gemmes.
+Bannières de prestige : elles s'acquièrent en gemmes seulement.
 Vitrine des packs de gemmes (les acquisitions réelles ouvriront à la sortie du jeu), gemmes doublées au premier achat de chaque pack.
 Le Changeur : les gemmes deviennent des pièces, à sens unique, chaque palier illustré (pile, bourse, coffret).
 Tournoi en ligne à enjeu : une mise en gemmes à l'inscription, remboursée si le tournoi ne se joue pas, et seul le vainqueur reçoit le prix en gemmes et son XP.
