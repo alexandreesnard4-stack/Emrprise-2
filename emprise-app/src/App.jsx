@@ -2922,6 +2922,15 @@ const TOURNOI_ENJEU = {
 const TOURNOI_COMPLETE_ECHOS_S = 120; // delai avant de proposer les Echos
 const TOURNOI_PRIX_PAR_HUMAIN = 12.5; // gemmes par humain inscrit
 const TOURNOI_ECHO_DIFF = "avance";   // le niveau des Echos qui completent : Veteran
+// Le forfait d un match contre un Echo (03/09). Contre un HUMAIN, l adversaire
+// constate le silence dans le document de partie et ecrit le forfait ; face a
+// un Echo il n y a ni document ni adversaire, et un match jamais joue gelait
+// l arbre pour les huit. Un simple delai ne suffit pas : le match local n a
+// pas de minuteur, un joueur qui reflechit serait declare forfait. D ou un
+// SIGNE DE VIE, ecrit par le joueur pendant qu il joue ; le forfait ne tombe
+// qu apres un silence complet, donc sur une application fermee.
+const TOURNOI_ECHO_FORFAIT_MS = 300000;  // 5 min sans le moindre signe de vie
+const TOURNOI_ECHO_BATTEMENT_MS = 60000; // le signe de vie, pendant le match
 // Un siege d Echo dans joueurs : jamais un uid, jamais un pseudo qui imite un
 // humain -- un prefixe que rien d autre ne porte.
 function estEchoTournoi(uid) { return typeof uid === "string" && uid.startsWith("echo:"); }
@@ -13900,7 +13909,8 @@ export default function Emprise() {
           // en ligne : il se joue localement (humain contre Echo) ou se
           // simule (Echo contre Echo). gameId nul est sa marque.
           if (estEchoTournoi(a) || estEchoTournoi(b)) {
-            matches[`qf${k}`] = { a, b, gameId: null, vainqueur: null };
+            // ouvertA : le depart du compte a rebours du forfait (03/09).
+            matches[`qf${k}`] = { a, b, gameId: null, vainqueur: null, ouvertA: Date.now() };
             continue;
           }
           // Suffixe aléatoire : un identifiant entièrement prévisible pouvait être
@@ -13975,7 +13985,7 @@ export default function Emprise() {
         // les deux sieges sont humains -- un Echo present, gameId nul, le
         // match se jouera localement ou se simulera (completion, 02/09).
         const ouvre = (cleMatch, a, b) => {
-          if (estEchoTournoi(a) || estEchoTournoi(b)) return { a, b, gameId: null, vainqueur: null };
+          if (estEchoTournoi(a) || estEchoTournoi(b)) return { a, b, gameId: null, vainqueur: null, ouvertA: Date.now() };
           const gid = `${tournoiOnlineId}-${cleMatch.toUpperCase()}-${Math.random().toString(36).slice(2, 8)}`;
           tx.set(doc(db, "games", gid), nouvellePartieDeTournoi(a, b, cleMatch));
           return { a, b, gameId: gid, vainqueur: null };
@@ -13999,6 +14009,25 @@ export default function Emprise() {
     return deposerResultatTournoi({ gameId, campVainqueur });
   }
 
+  // Le signe de vie d un match contre un Echo (03/09) : « je suis devant ce
+  // match, il avance ». Il repousse le forfait d autant. Ecrit a l ouverture
+  // du match puis toutes les TOURNOI_ECHO_BATTEMENT_MS ; un vainqueur deja
+  // pose l arrete net, plus rien a signaler.
+  async function battementMatchEcho(cle) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "tournaments", tournoiOnlineId);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const t = snap.data();
+        const m = t.matches && t.matches[cle];
+        if (!m || m.vainqueur || m.gameId) return;
+        if (m.a !== myUid && m.b !== myUid) return;
+        tx.update(ref, { matches: { ...t.matches, [cle]: { ...m, vivantA: Date.now() } } });
+      });
+    } catch (e) { /* le battement suivant reessaiera */ }
+  }
+
   // Mon prochain match encore à jouer, s'il existe.
   function monMatchEnAttente() {
     if (!tournoiData || !tournoiData.matches || !myUid) return null;
@@ -14017,6 +14046,7 @@ export default function Emprise() {
   function jouerMatchTournoiEcho(m) {
     const echoUid = estEchoTournoi(m.a) ? m.a : m.b;
     matchEchoTournoiRef.current = { cle: m.cle, echoUid };
+    battementMatchEcho(m.cle); // je prends le match en main : le forfait recule
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
@@ -14220,6 +14250,58 @@ export default function Emprise() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournoiData, tournoiOnlineId]);
+
+  // Le battement du match d Echo en cours (03/09) : tant que je suis devant
+  // lui et qu il n est pas fini, je le signale. C est ce battement qui me
+  // protege du forfait pendant que je reflechis -- une partie contre l Echo
+  // n a pas de minuteur, elle peut durer.
+  useEffect(() => {
+    if (!tournoiOnlineId || mode !== "bot" || gameOver) return;
+    if (!matchEchoTournoiRef.current) return;
+    const t = setInterval(() => {
+      const m = matchEchoTournoiRef.current;
+      if (m) battementMatchEcho(m.cle);
+    }, TOURNOI_ECHO_BATTEMENT_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiOnlineId, mode, gameOver, phase]);
+
+  // Le forfait d un match contre un Echo (03/09), constate par les AUTRES.
+  // Contre un humain, l adversaire ecrit le forfait dans le document de
+  // partie ; ici il n y a ni document ni adversaire, et un match jamais joue
+  // gelait l arbre pour les huit. Apres TOURNOI_ECHO_FORFAIT_MS sans le
+  // moindre signe de vie -- donc application fermee, pas un joueur qui
+  // reflechit -- l Echo prend le match, et l arbre repart. Jamais mon propre
+  // forfait : mon battement parle pour moi. Meme transaction que les autres
+  // resultats, donc un vainqueur deja pose arrete tout.
+  // Un battement local pour reveiller ce constat : sans lui l effet ne se
+  // rejouerait qu au prochain changement du document, et un match abandonne
+  // n a par definition plus rien qui bouge.
+  const [tickArbre, setTickArbre] = useState(0);
+  useEffect(() => {
+    if (phase !== "tourney-online" || !tournoiData || tournoiData.status !== "running") return;
+    const t = setInterval(() => setTickArbre((n) => n + 1), 15000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, tournoiData && tournoiData.status]);
+  const forfaitsEchoRef = useRef(new Set());
+  useEffect(() => {
+    if (!tournoiData || !tournoiOnlineId || tournoiData.status !== "running") return;
+    for (const cle of Object.keys(tournoiData.matches || {})) {
+      const m = tournoiData.matches[cle];
+      if (!m || m.vainqueur || m.gameId) continue;
+      const aEcho = estEchoTournoi(m.a), bEcho = estEchoTournoi(m.b);
+      if (aEcho === bEcho) continue; // deux Echos : la simulation s en charge
+      if ((aEcho ? m.b : m.a) === myUid) continue;
+      const depuis = m.vivantA || m.ouvertA;
+      if (!depuis || Date.now() - depuis < TOURNOI_ECHO_FORFAIT_MS) continue;
+      const marque = `${tournoiOnlineId}:${cle}:forfait`;
+      if (forfaitsEchoRef.current.has(marque)) continue;
+      forfaitsEchoRef.current.add(marque);
+      deposerResultatTournoi({ cle, vainqueurUid: aEcho ? m.a : m.b });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournoiData, tournoiOnlineId, tickArbre]);
 
   // Les secondes passees dans la salle d attente du tournoi : elles
   // nourrissent la proposition de completion par des Echos. L interval vit
