@@ -637,6 +637,17 @@ const DIFFICULTIES = [
   { key: "avance", label: "Vétéran", desc: "Capture et évite de s'exposer" },
   { key: "expert", label: "Seigneur de Guerre", desc: "Anticipe votre meilleure réponse" },
 ];
+// L Ordre qui illustre chaque glace du choix de l Echo (03/09). Purement
+// decoratif : la difficulte ne joue pas cet Ordre, c est un visage sur une
+// carte. La table est explicite pour qu on la change en une ligne, et le ton
+// monte avec le niveau -- l or des Dores, l acier des Piques, la pierre des
+// Gardiens, l ombre des Maudits.
+const MIROIRS_ORDRES = {
+  debutant: "eveil",
+  intermediaire: "percee",
+  avance: "guardian",
+  expert: "maudits",
+};
 
 const rankLabel = (n) => (n >= 10 ? "A" : String(n));
 
@@ -1475,14 +1486,44 @@ const DOS_CARTES = [
   { cle: "orichalque", nom: "Orichalque", matiere: "L'or qui n'existe plus", prix: 6000,
     fond: "radial-gradient(circle at 50% 34%, rgba(255,214,140,0.26) 0%, rgba(255,214,140,0) 58%), repeating-linear-gradient(45deg, rgba(255,226,170,0.05) 0 2px, rgba(0,0,0,0) 2px 8px), linear-gradient(160deg, #38301c 0%, #16120a 100%)",
     bord: "rgba(240,200,120,0.62)", anneau: "rgba(255,236,180,0.9)", socle: "#9a7a2c" },
+  // Les quatre dos ILLUSTRES (03/09). Une image au lieu d une recette, et un
+  // prix en GEMMES au lieu de pieces -- le champ prixGemmes est celui des
+  // bannieres de prestige, repris tel quel, sans second systeme de paiement.
+  // Les seize dos CSS au-dessus n ont pas de champ image et ne changent pas
+  // d un pixel : les deux familles cohabitent dans le meme catalogue.
+  { cle: "guilloche", nom: "Guilloche", matiere: "Mille arcs gravés dans la laque",
+    prixGemmes: 150, image: "/dos/guilloche.webp",
+    bord: "rgba(214,180,120,0.5)", anneau: "rgba(244,214,160,0.78)", socle: "#7a5f2c" },
+  { cle: "ecailles", nom: "Écailles", matiere: "L'armure d'une bête sans nom",
+    prixGemmes: 200, image: "/dos/ecailles.webp",
+    bord: "rgba(196,160,110,0.5)", anneau: "rgba(238,206,150,0.78)", socle: "#6e5426" },
+  { cle: "entrelacs", nom: "Entrelacs", matiere: "Un noeud que nul n'a défait",
+    prixGemmes: 250, image: "/dos/entrelacs.webp",
+    bord: "rgba(206,150,180,0.5)", anneau: "rgba(244,200,220,0.78)", socle: "#7a3a5c" },
+  { cle: "vitrail", nom: "Vitrail", matiere: "Le verre plombé des chapelles",
+    prixGemmes: 300, image: "/dos/vitrail.webp",
+    bord: "rgba(160,170,220,0.55)", anneau: "rgba(214,222,252,0.8)", socle: "#43508a" },
 ];
 const DOS_DEFAUT = "blason";
 function dosDe(cle) { return DOS_CARTES.find((d) => d.cle === cle) || DOS_CARTES[0]; }
-// Les quatre variables que le dos et son medaillon lisent. Le portrait de l'Ordre, lui,
-// vient de la carte et se pose a cote : le dos habille, le portrait dit QUI.
+// Les deux variables que le dos lit. Le dos est desormais un MOTIF PUR (03/09) :
+// plus de portrait d Ordre en medaillon au centre. Il ne disait rien qu on ne
+// sache deja -- en Mort Subite, les cartes de Reserve sortent dans l ordre
+// compose avant la partie (reserveBleue[mortSubiteRonde]), le joueur ne choisit
+// jamais laquelle poser : le portrait n etait qu un rappel.
+// image : quand une entree en porte une, elle REMPLACE la recette de degrades.
+// Le degrade sombre reste dessous, en deuxieme couche : un fichier absent laisse
+// une carte propre au lieu d un trou.
+// anneau et socle ne sont plus poses : ils ne servaient qu au medaillon central,
+// disparu avec lui. Les champs restent au catalogue, prets si un sceau revient.
 function variablesDos(cle) {
   const d = dosDe(cle);
-  return { "--dos-fond": d.fond, "--dos-bord": d.bord, "--dos-anneau": d.anneau, "--dos-socle": d.socle };
+  return {
+    "--dos-fond": d.image
+      ? `url("${d.image}") center / cover no-repeat, linear-gradient(160deg, #2a2138 0%, #14101d 100%)`
+      : d.fond,
+    "--dos-bord": d.bord,
+  };
 }
 function plateauDe(cle) { return PLATEAUX.find((p) => p.cle === cle) || PLATEAUX[0]; }
 // Les cinq variables que .table et .cell lisent. Posees sur la dalle, elles descendent
@@ -3375,6 +3416,23 @@ async function acheterCosmetique(famille, cle) {
   if (possedeCosmetique(b, famille, cle)) return { bourse: b, fait: true };
   if (b.pieces < item.prix) return { bourse: b, fait: false };
   b.pieces -= item.prix;
+  b.possessions[famille] = [...b.possessions[famille], cle];
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// L achat d un cosmetique en GEMMES (03/09) : le meme modele sur, sur le champ
+// prixGemmes -- celui des bannieres de prestige, repris tel quel plutot que
+// d inventer un second systeme de paiement. Un article sans prixGemmes n a pas
+// de chemin ici, comme un article sans prix n en a pas en pieces.
+async function acheterCosmetiqueGemmes(famille, cle) {
+  const b = await loadBourse();
+  const f = FAMILLES_COSMETIQUES[famille];
+  const item = f && f.catalogue.find((x) => x.cle === cle);
+  if (!item || !(item.prixGemmes > 0)) return { bourse: b, fait: false };
+  if (possedeCosmetique(b, famille, cle)) return { bourse: b, fait: true };
+  if (b.gemmes < item.prixGemmes) return { bourse: b, fait: false };
+  b.gemmes -= item.prixGemmes;
   b.possessions[famille] = [...b.possessions[famille], cle];
   await writeBourseRaw(JSON.stringify(b));
   return { bourse: b, fait: true };
@@ -6041,18 +6099,9 @@ const APP_STYLES = `
         }
         .boutique-dos.b0 { transform: translate(-16%, 4%) rotate(-6deg); }
         .boutique-dos.b1 { transform: translate(16%, -2%) rotate(5deg); }
-        /* Le medaillon, comme sur la vraie pile. Seule la carte du dessus le porte : deux
-           medaillons a cette taille ne feraient qu'un amas. */
-        .boutique-dos.b1::after {
-          content: ""; position: absolute; left: 50%; top: 50%;
-          width: 34%; height: 24%; margin: -12% 0 0 -17%;
-          border-radius: 50%;
-          background-color: var(--dos-socle);
-          background-image: var(--dos-portrait, none);
-          background-size: cover; background-position: center;
-          border: 1px solid var(--dos-anneau);
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-        }
+        /* Le medaillon central a vecu (03/09) : le dos est un motif pur, ici
+           comme en partie. Les quatre dos illustres ont ete dessines pour ca,
+           centre libre -- et les seize dos CSS respirent mieux sans lui. */
         .boutique-nom {
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
           color: #f0eaf8; margin-top: 4px;
@@ -9704,18 +9753,9 @@ const APP_STYLES = `
         }
         /* Le motif du dos : un losange dore, simple, qui tiendra lieu de place au vrai
            cosmetique le jour ou les dos de carte s'achetteront. */
-        /* Le dos porte le portrait de son Ordre, en medaillon. Le fond dore reste dessous :
-           si un portrait manquait, le dos garde une pastille pleine au lieu d'un trou. */
-        .reserve-dos::after {
-          content: ""; position: absolute; left: 50%; top: 50%;
-          width: 18px; height: 18px; margin: -9px 0 0 -9px;
-          border-radius: 50%;
-          background-color: var(--dos-socle, #8a6f34);
-          background-image: var(--dos-portrait, none);
-          background-size: cover; background-position: center;
-          border: 1px solid var(--dos-anneau, rgba(232, 200, 119, 0.75));
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-        }
+        /* Le medaillon du portrait a vecu (03/09) : le dos est un motif pur.
+           Il ne disait rien de neuf -- en Mort Subite les cartes de Reserve
+           sortent dans l ordre compose, le joueur ne choisit pas laquelle. */
         .reserve-dos.d0 { transform: translate(0, 4px) rotate(-5deg); }
         .reserve-dos.d1 { transform: translate(8px, 0) rotate(4deg); }
         /* Le compte ne fait pas doublon avec la pile : il devient utile des qu'une carte
@@ -9874,7 +9914,8 @@ const APP_STYLES = `
              l interieur et le dos faisait 2 px de moins que la carte d a cote. */
           box-sizing: content-box;
         }
-        .reserve-pile.grande .reserve-dos::after { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+        /* La grande pile n a plus de medaillon a agrandir (03/09) : le motif
+           suit la carte tout seul, il est le fond. */
         .reserve-pile.grande .reserve-dos.d1 { transform: translate(12px, 0) rotate(4deg); }
         .reserve-compte {
           position: absolute; right: -3px; bottom: -3px;
@@ -9964,18 +10005,8 @@ const APP_STYLES = `
             linear-gradient(160deg, #2a2138 0%, #14101d 100%));
           border: 1px solid var(--dos-bord, rgba(203,164,86,0.5)); box-sizing: border-box;
         }
-        /* Le meme medaillon que sur la pile en partie : c'est le meme dos. */
-        .reserve-face.arriere::after {
-          content: ""; position: absolute; left: 50%; top: 50%;
-          width: calc(var(--res-l) * 0.45); height: calc(var(--res-l) * 0.45);
-          margin: calc(var(--res-l) * -0.225) 0 0 calc(var(--res-l) * -0.225);
-          border-radius: 50%;
-          background-color: var(--dos-socle, #8a6f34);
-          background-image: var(--dos-portrait, none);
-          background-size: cover; background-position: center;
-          border: 1px solid var(--dos-anneau, rgba(232, 200, 119, 0.75));
-          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
-        }
+        /* Le meme dos qu'en partie, et lui non plus ne porte plus de medaillon
+           (03/09) : un seul et meme motif, a toutes les tailles. */
         @media (prefers-reduced-motion: reduce) {
           .reserve-flip { transition: none; }
         }
@@ -11407,6 +11438,59 @@ const APP_STYLES = `
         .diff-option .diff-text { flex: 1; min-width: 0; }
         .diff-option .name { font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.05em; color: var(--gold-bright); }
         .diff-option .desc { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+        /* ---------- Le choix de l Echo en quatre miroirs (03/09) ----------
+           TOUT est porte par .diff-miroirs : .diff-grid et .diff-option
+           servent aussi au menu du Tournoi, qui ne doit pas bouger d un
+           pixel. Ici le bloc REMPLIT : flex 1 dans la racine, qui fait deja
+           toute la hauteur visible (min-height 100dvh -- la hauteur dynamique
+           vaut la zone reellement visible, donc rien ne passe sous la barre du
+           navigateur, et cet ecran ne defile pas, la barre ne se replie donc
+           jamais sous lui).
+           Les 4 px lateraux s ajoutent aux 14 px de la racine : 18 px des
+           bords. Le bas : 22 px de la racine plus 22 px ici, soit 44, et la
+           zone sure de l iPhone par-dessus. */
+        .diff-picker.diff-miroirs { flex: 1; min-height: 0; gap: 0; justify-content: flex-start; }
+        .diff-miroirs h2 { font-size: 18px; margin-top: 24px; }
+        .diff-miroirs .diff-grid {
+          flex: 1; min-height: 0; width: 100%; box-sizing: border-box;
+          display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px;
+          /* 42 et non 62 : a 18 px, le titre tient sur DEUX lignes en 390 de
+             large (mesure : il finit a 128), la ou la maquette le comptait
+             sur une. L ecart est cale sur le resultat qu elle demandait, la
+             grille a 170 du haut, pas sur son intermediaire. */
+          margin-top: 42px; margin-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+          padding: 0 4px;
+        }
+        /* La glace : le haut translucide laisse voir la salle, le bas assoit
+           le texte. Le contenu se cale en bas, c est la hauteur de l ecran
+           qui donne leur stature aux cartes. */
+        .diff-miroirs .diff-option {
+          position: relative; overflow: hidden;
+          padding: 16px 14px; border-radius: 16px;
+          border: 1px solid rgba(203,164,86,0.3);
+          background: linear-gradient(180deg, rgba(52,40,74,0.55), rgba(16,12,24,0.92));
+          display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch;
+          gap: 0; text-align: left; font: inherit; color: inherit;
+          -webkit-appearance: none; appearance: none; box-shadow: none;
+          transition: border-color .2s;
+        }
+        /* Le portrait de l Ordre, derriere le texte : cadre en haut, fondu vers
+           le bas par un masque, pour que le nom et la description gardent leur
+           assise sombre. Il ne mange jamais le toucher du bouton. */
+        .diff-miroirs .diff-illustration {
+          position: absolute; inset: 0; width: 100%; height: 100%;
+          object-fit: cover; object-position: 50% 22%;
+          opacity: 0.62; pointer-events: none;
+          -webkit-mask-image: linear-gradient(180deg, #000 0, #000 46%, transparent 86%);
+          mask-image: linear-gradient(180deg, #000 0, #000 46%, transparent 86%);
+        }
+        .diff-miroirs .diff-text { position: relative; z-index: 1; flex: none; }
+        /* Le survol ne souleve plus rien : quatre glaces dressees ne flottent
+           pas. Reste la pression, en transform seul. */
+        .diff-miroirs .diff-option:hover { transform: none; box-shadow: none; border-color: rgba(203,164,86,0.55); }
+        .diff-miroirs .diff-option:active { transform: scale(0.97); }
+        .diff-miroirs .diff-option .name { font-size: 16px; }
+        .diff-miroirs .diff-option .desc { font-size: 11.5px; line-height: 1.4; margin-top: 6px; }
         .confirm-panel { max-width: 300px; gap: 16px; }
         .confirm-text { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
         .confirm-actions { display: flex; flex-direction: column; gap: 9px; }
@@ -13536,10 +13620,10 @@ export default function Emprise() {
     const mien = composeMien || (camp != null && camp === monCampCombos);
     const transporte = mode === "online" && camp && profilPartie && profilPartie[camp]
       ? profilPartie[camp].dos : undefined;
-    return {
-      ...variablesDos(mien ? cosmetiques.dos : (transporte || DOS_DEFAUT)),
-      "--dos-portrait": c && c.portrait ? `url("${c.portrait}")` : "none",
-    };
+    // La carte elle-meme ne sert plus a rien ici depuis que le dos est un
+    // motif pur (03/09) : elle ne portait que le portrait du medaillon central.
+    // La signature garde son parametre, les appelants la passent encore.
+    return variablesDos(mien ? cosmetiques.dos : (transporte || DOS_DEFAUT));
   }
   // Ce qu'il reste a poser : les cartes des rondes deja jouees sont passees en main.
   function reserveRestante(camp) { return reserveDe(camp).slice(mortSubiteRonde); }
@@ -17667,22 +17751,24 @@ export default function Emprise() {
                           className={`boutique-carte ${choisi ? "choisi" : ""}`}
                           onClick={() => possede
                             ? choisirCosmetique("dos", d.cle).then(setCosmetiques)
-                            : setAchatEnCours({ famille: "dos", cle: d.cle, nom: d.nom, prix: d.prix })}
+                            : setAchatEnCours({ famille: "dos", cle: d.cle, nom: d.nom, prix: d.prix, prixGemmes: d.prixGemmes })}
                           aria-pressed={choisi}
-                          aria-label={`Dos ${d.nom}. ${d.matiere}.${choisi ? " Choisi." : possede ? " Possédé." : ` ${d.prix} pièces.`}`}
+                          aria-label={`Dos ${d.nom}. ${d.matiere}.${choisi ? " Choisi." : possede ? " Possédé." : d.prixGemmes ? ` ${d.prixGemmes} gemmes.` : ` ${d.prix} pièces.`}`}
                         >
-                          {/* Deux dos poses l'un sur l'autre, comme la pile en partie, avec
-                              un vrai portrait d'Ordre au medaillon : ce qu'on voit ici est
-                              ce qu'on posera a cote de sa main. */}
+                          {/* Deux dos poses l'un sur l'autre, comme la pile en partie :
+                              ce qu'on voit ici est ce qu'on posera a cote de sa main.
+                              Sans medaillon central depuis le 03/09, la aussi. */}
                           <span className="boutique-dos-pile" aria-hidden="true">
                             <span className="boutique-dos b0" style={variablesDos(d.cle)} />
-                            <span className="boutique-dos b1" style={{ ...variablesDos(d.cle), "--dos-portrait": `url("${ORDERS[0].portrait}")` }} />
+                            <span className="boutique-dos b1" style={variablesDos(d.cle)} />
                           </span>
                           <span className="boutique-nom">{d.nom}</span>
                           <span className="boutique-monde">{d.matiere}</span>
                           {choisi || possede
                             ? <span className="boutique-etat">{choisi ? "Choisi" : "Possédé"}</span>
-                            : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{d.prix}</span>}
+                            : d.prixGemmes
+                              ? <span className="boutique-prix"><span className="gemme-icone" aria-hidden="true" />{d.prixGemmes}</span>
+                              : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{d.prix}</span>}
                         </button>
                       );
                     })}
@@ -20349,18 +20435,27 @@ export default function Emprise() {
       )}
 
       {phase === "select-difficulty" && (
-        <div className="diff-picker">
+        <div className="diff-picker diff-miroirs">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Choisissez le niveau de l'Écho</h2>
+          {/* Quatre miroirs dressés dans la salle : la grille 2x2 remplit la
+              hauteur, l'ordre de lecture est celui de la difficulté. Un vrai
+              bouton, la ou vivait un div role=button : le toucher et le clavier
+              viennent alors du navigateur. Chaque glace porte le portrait d'un
+              Ordre, fondu vers le bas pour que le texte s'y assoie. */}
           <div className="diff-grid">
-            {DIFFICULTIES.map((d) => (
-              <div key={d.key} className="diff-option" role="button" tabIndex={0} onClick={() => chooseDifficulty(d.key)} onKeyDown={KEY_ACTIVATE(() => chooseDifficulty(d.key))}>
-                <div className="diff-text">
-                  <div className="name">{d.label}</div>
-                  <div className="desc">{d.desc}</div>
-                </div>
-              </div>
-            ))}
+            {DIFFICULTIES.map((d) => {
+              const illustre = ORDERS.find((o) => o.key === MIROIRS_ORDRES[d.key]);
+              return (
+                <button key={d.key} type="button" className="diff-option" onClick={() => chooseDifficulty(d.key)}>
+                  {illustre && <img className="diff-illustration" src={illustre.portrait} alt="" aria-hidden="true" loading="lazy" />}
+                  <div className="diff-text">
+                    <div className="name">{d.label}</div>
+                    <div className="desc">{d.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -21160,23 +21255,31 @@ export default function Emprise() {
           solde ne suffit pas, on le DIT -- avec le manque exact -- au lieu de griser un
           bouton sans explication. */}
       {achatEnCours && (() => {
-        const assez = bourse.pieces >= achatEnCours.prix;
+        // Deux monnaies depuis le 03/09 : les dos illustres se paient en gemmes,
+        // tout le reste en pieces. C'est l'article qui dit laquelle -- le panneau
+        // ne fait que suivre, et le DEBIT reste celui du champ correspondant.
+        const enGemmes = achatEnCours.prixGemmes > 0;
+        const montant = enGemmes ? achatEnCours.prixGemmes : achatEnCours.prix;
+        const solde = enGemmes ? bourse.gemmes : bourse.pieces;
+        const unite = enGemmes ? "gemmes" : "pièces";
+        const assez = solde >= montant;
         return (
           <div className="info-overlay" onClick={() => setAchatEnCours(null)}>
             <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
               <div className="info-panel-title">Acquérir {achatEnCours.nom}</div>
-              <div className="achat-prix"><span className="piece-icone" aria-hidden="true" />{achatEnCours.prix}<span className="lecteur-seul"> pièces</span></div>
+              <div className="achat-prix"><span className={enGemmes ? "gemme-icone" : "piece-icone"} aria-hidden="true" />{montant}<span className="lecteur-seul"> {unite}</span></div>
               {assez ? (
-                <div className="achat-solde">Solde après l&apos;acquisition : {bourse.pieces - achatEnCours.prix} pièces</div>
+                <div className="achat-solde">Solde après l&apos;acquisition : {solde - montant} {unite}</div>
               ) : (
-                <div className="achat-solde manque">Il vous manque {achatEnCours.prix - bourse.pieces} pièces.</div>
+                <div className="achat-solde manque">Il vous manque {montant - solde} {unite}.</div>
               )}
               {assez && (
                 <button
                   className="reset-btn"
                   onClick={() => {
                     const a = achatEnCours;
-                    acheterCosmetique(a.famille, a.cle).then(({ bourse: b, fait }) => {
+                    const achat = enGemmes ? acheterCosmetiqueGemmes : acheterCosmetique;
+                    achat(a.famille, a.cle).then(({ bourse: b, fait }) => {
                       setBourse(b);
                       // Acquis : on l'equipe dans la foulee -- on vient de le payer pour
                       // le voir, pas pour le ranger.

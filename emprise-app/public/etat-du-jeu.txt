@@ -38,6 +38,7 @@ Une victoire en ligne par abandon ou forfait sur une partie à peine commencée 
 Au-delà de trois parties classées dans la journée contre le même adversaire, les suivantes se jouent en amicales, annoncées avant la partie : aucun trophée ne circule plus entre eux jusqu'au lendemain.
 Paliers de niveaux : des gemmes versées tous les cinq niveaux.
 Boutique : thèmes de plateau, dos de cartes et bannières de profil, payés en pièces.
+Le dos des cartes est un motif plein, sans portrait au centre ; quatre dos illustrés s'acquièrent en gemmes.
 Le dos de cartes choisi habille vos cartes et se voit dès la composition de la Réserve ; en ligne, chacun voit aussi le dos choisi par l'adversaire.
 Bannières de prestige : elles s'acquièrent en gemmes seulement.
 Médaillons : l'avatar qui vous représente au profil, en avant-partie, sur la fiche d'un Commandant et au Panthéon. Trois offerts au départ, un par Ordre en atteignant le rang Disciple, un par arène en atteignant sa ligue, cinq en boutique.
@@ -79,5 +80,6 @@ Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de d�
 Partage des codes de partie et de tournoi (copie, et envoi quand l'appareil le permet).
 Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
 Chaque famille d'écrans a son fond : le choix du niveau de l'Écho, le choix des Ordres, les tournois, la Confluence, les défis, le tutoriel.
+Le choix du niveau de l'Écho présente ses quatre niveaux en cartes illustrées, dressées sur toute la hauteur de l'écran.
 Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
