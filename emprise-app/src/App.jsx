@@ -6303,6 +6303,14 @@ const APP_STYLES = `
           font-family: 'Spectral', Georgia, serif; font-size: 12px; color: var(--muted);
           margin: 2px 0 6px;
         }
+        /* Le compte a rebours du forfait (03/09) : rouge clair et chiffres a
+           chasse fixe, comme le minuteur de coup -- un nombre qui descend ne
+           doit pas faire danser la ligne. Rien ne s anime : c est deja le
+           chiffre qui bouge. */
+        .tournoi-forfait {
+          color: var(--red-bright);
+          font-variant-numeric: tabular-nums;
+        }
         .tournoi-gain {
           display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
           font-family: 'Cinzel', serif; font-size: 12.5px; font-weight: 700; color: var(--gold-bright);
@@ -14318,11 +14326,13 @@ export default function Emprise() {
   // resultats, donc un vainqueur deja pose arrete tout.
   // Un battement local pour reveiller ce constat : sans lui l effet ne se
   // rejouerait qu au prochain changement du document, et un match abandonne
-  // n a par definition plus rien qui bouge.
+  // n a par definition plus rien qui bouge. A la seconde, car c est lui qui
+  // fait aussi descendre le compte a rebours du forfait affiche dans l arbre.
+  // Il ne vit que sur l ecran du tournoi en cours, et meurt avec lui.
   const [tickArbre, setTickArbre] = useState(0);
   useEffect(() => {
     if (phase !== "tourney-online" || !tournoiData || tournoiData.status !== "running") return;
-    const t = setInterval(() => setTickArbre((n) => n + 1), 15000);
+    const t = setInterval(() => setTickArbre((n) => n + 1), 1000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, tournoiData && tournoiData.status]);
@@ -19339,6 +19349,20 @@ export default function Emprise() {
                   : "Duel gagné ! En attente des autres résultats..."}
               </div>
             )}
+            {/* Le compte a rebours du forfait (03/09), pour mon seul duel
+                contre un Echo (gameId nul). Contre un humain, le meme
+                avertissement existe deja dans la partie ; ici, sans lui, on
+                se faisait eliminer sans rien voir venir. Il ne parait que
+                dans la derniere minute et demie : plus tot, il ne ferait
+                que presser sans raison. Le battement de tickArbre le fait
+                descendre de seconde en seconde. */}
+            {statut === "running" && monMatch && !monMatch.gameId && (() => {
+              const depuis = monMatch.vivantA || monMatch.ouvertA;
+              if (!depuis) return null;
+              const reste = Math.ceil((TOURNOI_ECHO_FORFAIT_MS - (Date.now() - depuis)) / 1000);
+              if (reste > 90 || reste <= 0) return null;
+              return <div className="sub tournoi-forfait">Lancez votre duel : forfait dans {reste}s...</div>;
+            })()}
             {/* Un Echo champion : personne ne recoit rien, la cagnotte brule
                 entierement -- et l ecran le dit sans detour (02/09). */}
             {champion && (
