@@ -5593,6 +5593,49 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: var(--gold-bright);
         }
         .selection-bannieres { display: flex; flex-direction: column; gap: 8px; }
+        /* ---------- Le choix de l avatar (03/09) ----------
+           Une grille de ronds, la ou les bannieres s empilent en bandeaux :
+           elles sont larges, les medaillons sont des sceaux. Quatre par
+           rangee tient dans le panneau a 375 de large. */
+        .selection-medaillons {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 8px;
+          max-height: 46vh; overflow-y: auto; padding: 2px;
+        }
+        .choix-medaillon {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          background: none; border: none; padding: 0; cursor: pointer;
+          font: inherit; color: inherit; min-width: 0;
+        }
+        .choix-medaillon-image {
+          width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 50%;
+          object-fit: cover; display: block; box-sizing: border-box;
+          border: 2px solid rgba(203,164,86,0.3);
+          background-color: #14101d;
+        }
+        .choix-medaillon.choisi .choix-medaillon-image { border-color: var(--gold-bright); }
+        /* Verrouille : eteint et INERTE. Le bouton porte deja disabled -- le
+           curseur et l opacite ne font que le dire a l oeil. */
+        .choix-medaillon.verrouille { cursor: default; }
+        .choix-medaillon.verrouille .choix-medaillon-image { opacity: 0.32; filter: grayscale(0.8); }
+        .choix-medaillon.verrouille .choix-medaillon-nom { opacity: 0.55; }
+        .choix-medaillon-nom {
+          font-size: 9.5px; line-height: 1.15; text-align: center; color: var(--bone);
+          overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+        /* La condition tient la meme place que le mot Equipe : la grille ne
+           danse pas selon que le medaillon est acquis ou non. */
+        .choix-medaillon-etat {
+          font-size: 8.5px; line-height: 1.15; text-align: center; color: var(--muted);
+          overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+        .choix-medaillon.choisi .choix-medaillon-etat { color: var(--gold-bright); }
+        .choix-medaillon:not(:disabled):active { transform: scale(0.94); }
+        /* L avatar du profil se touche pour en changer : c est un bouton, il
+           faut donc lui reprendre les habitudes du navigateur. */
+        .profil-fiche-medaillon.choisissable {
+          padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none;
+        }
+        .profil-fiche-medaillon.choisissable:active { transform: scale(0.94); }
         /* Le bandeau du profil : l'image en fond-bouton, le contenu par-dessus.
            Les zones libres du bandeau ouvrent le choix ; chaque commande garde
            son propre toucher (les enfants passent au-dessus du fond). */
@@ -11821,13 +11864,16 @@ export default function Emprise() {
         // Une cle d'Ordre venue d'ailleurs se verifie comme le reste : seule une cle que
         // le jeu connait passe.
         const ordreFavori = ORDERS.some((o) => o.key === d.ordreFavori) ? d.ordreFavori : "";
+        // L avatar (03/09), meme mefiance : une cle du catalogue, sinon vide --
+        // l affichage se replie alors sur Le Premier Duel.
+        const medaillon = medaillonDeCle(d.medaillon) ? d.medaillon : "";
         // Le niveau de Commandant, borne aux niveaux du jeu ; undefined quand il
         // manque -- l'affichage se tait plutot que d'annoncer un niveau 0.
         const niveau = Number.isFinite(d.niveau) && d.niveau >= 1 && d.niveau <= NIVEAU_MAX ? Math.floor(d.niveau) : undefined;
         return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
           parties: entier(d.parties), victoires: entier(d.victoires), combos,
-          ordreFavori, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
+          ordreFavori, medaillon, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
           lu: Date.now() }];
       } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
@@ -12562,6 +12608,7 @@ export default function Emprise() {
   // choix parmi les possedees ouvert depuis le profil.
   const [achatBanniere, setAchatBanniere] = useState(null);
   const [selectionBanniere, setSelectionBanniere] = useState(false);
+  const [selectionMedaillon, setSelectionMedaillon] = useState(false); // le choix de l avatar (03/09)
   // Un seul choix de depart EN VOL : le meme patron que siegeEnCoursRef des
   // tournois -- deux taps rapides sur deux cartes ne partent pas tous les deux.
   const choixDepartRef = useRef(false);
@@ -13048,7 +13095,10 @@ export default function Emprise() {
                  stats.mesVictoires || 0, stats.combosParties || 0, stats.tournoisGagnes || 0,
                  // Le niveau : l'XP d'une quete peut le faire monter sans qu'aucune
                  // statistique ne bouge -- il a donc sa place dans la cle.
-                 niveauDepuisXp(progression.xpTotal).niveauJoueur].join("/");
+                 niveauDepuisXp(progression.xpTotal).niveauJoueur,
+                 // L avatar : changer de medaillon ne touche aucune statistique,
+                 // il lui faut donc sa place dans la cle pour repartir.
+                 bourse.medaillonEquipe || ""].join("/");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
     const moi = profilPublic();
@@ -13068,7 +13118,14 @@ export default function Emprise() {
                                          // liste fait refuser TOUTE l'ecriture qui le porte,
                                          // il voyage donc avec ceux qui attendent deja.
                                          niveau: Math.max(1, Math.min(NIVEAU_MAX, niveauDepuisXp(progression.xpTotal).niveauJoueur)) }).catch(() => {});
-  }, [myUid, monCodeAmi, stats, progression]);
+    // L avatar (03/09) part SEUL, et c est la lecon de la liste hasOnly : un
+    // champ neuf ne rejoint jamais un convoi qui marche, sinon il l emporte
+    // dans sa chute. Tant que les regles ne l ont pas accueilli, cette seule
+    // ecriture echoue et rien d autre ne s en ressent -- le Pantheon et la
+    // fiche d ami montrent alors Le Premier Duel, le repli, sans une erreur.
+    updateDoc(doc(db, "users", myUid), { medaillon: bourse.medaillonEquipe || "" }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid, monCodeAmi, stats, progression, bourse.medaillonEquipe]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
   // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
@@ -13484,7 +13541,6 @@ export default function Emprise() {
   // d en face par le document de la partie, valide par titreDuJeu.
   function territoireVs(camp, monCamp, nom, fond, cartes, reserve) {
     const p = (profilPartie && profilPartie[camp]) || {};
-    const ordre = ORDERS.find((o) => o.key === p.ordreFavori) || null;
     const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
     const titreBrut = titresPartie && typeof titresPartie[camp] === "string" ? titresPartie[camp] : "";
     // Valide contre COMBOS ET TITRES_REPLI : un adversaire portant L'Errant
@@ -13513,9 +13569,14 @@ export default function Emprise() {
         <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
           <div className="territoire-voile" aria-hidden="true" />
           <div className="territoire-tete">
+            {/* L'avatar (03/09) : mon medaillon equipe de mon cote, le sien
+                transporte par le document de la partie de l'autre. Une partie
+                qui ne le transporte pas -- ancienne, defi par code, Echo,
+                duel local -- montre Le Premier Duel, comme la banniere se
+                replie sur le Drap de Nuit. */}
             <span
-              className={`territoire-medaillon ${ordre ? "" : "neutre"}`}
-              style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+              className="territoire-medaillon"
+              style={{ backgroundImage: `url("${imageMedaillon(camp === monCamp ? bourse.medaillonEquipe : p.medaillon)}")` }}
               aria-hidden="true"
             />
             <div className="territoire-identite">
@@ -14718,15 +14779,18 @@ export default function Emprise() {
         // sinon rien -- l affichage retombera sur le repli, jamais une image
         // cassee.
         const banniereRecue = (v) => (typeof v === "string" && banniereDeCle(v) ? v : undefined);
+        // Le medaillon aussi (03/09), meme mefiance : une cle du catalogue,
+        // sinon rien -- imageMedaillon rendra Le Premier Duel.
+        const medaillonRecu = (v) => (typeof v === "string" && medaillonDeCle(v) ? v : undefined);
         setProfilPartie({
           blue: { parties: entierRecu(data.blueParties), victoires: entierRecu(data.blueVictoires), combos: combosRecus(data.blueCombos),
                   ordreFavori: ordreRecu(data.blueOrdreFavori), combosParties: entierRecu(data.blueCombosParties),
                   tournois: entierRecu(data.blueTournois), niveau: niveauRecu(data.blueNiveau), dos: dosRecu(data.blueDos),
-                  banniere: banniereRecue(data.blueBanniere) },
+                  banniere: banniereRecue(data.blueBanniere), medaillon: medaillonRecu(data.blueMedaillon) },
           red: { parties: entierRecu(data.redParties), victoires: entierRecu(data.redVictoires), combos: combosRecus(data.redCombos),
                  ordreFavori: ordreRecu(data.redOrdreFavori), combosParties: entierRecu(data.redCombosParties),
                  tournois: entierRecu(data.redTournois), niveau: niveauRecu(data.redNiveau), dos: dosRecu(data.redDos),
-                 banniere: banniereRecue(data.redBanniere) },
+                 banniere: banniereRecue(data.redBanniere), medaillon: medaillonRecu(data.redMedaillon) },
         });
         // Le nom d'en face passe par le filtre AVANT d'atteindre l'ecran. C'est le seul
         // controle que l'autre joueur ne peut pas contourner : il s'execute ici, chez
@@ -14959,6 +15023,10 @@ export default function Emprise() {
           // ne peut pas la transporter, ses champs sont bornes par les regles.
           blueBanniere: "",
           redBanniere: bourse.banniereEquipee || "",
+          // L avatar suit exactement le meme chemin que la banniere (03/09) :
+          // le mien des la creation, le sien a son entree.
+          blueMedaillon: "",
+          redMedaillon: bourse.medaillonEquipe || "",
           // Ce n'est pas son propre nom qu'on inscrit ici, c'est celui de l'adversaire,
           // ramasse dans le salon : donnee etrangere en transit, a assainir comme telle.
           // Le nom refuse n'est ainsi jamais recopie dans le document de partie.
@@ -15201,6 +15269,9 @@ export default function Emprise() {
               blueTrophees: ancienne.redTrophees ?? null, redTrophees: ancienne.blueTrophees ?? null,
               blueTitre: ancienne.redTitre || "", redTitre: ancienne.blueTitre || "",
               blueBanniere: ancienne.redBanniere || "", redBanniere: ancienne.blueBanniere || "",
+              // L avatar echange de camp avec le reste (03/09) : la revanche
+              // inverse Azur et Vermeil, chacun garde donc SON medaillon.
+              blueMedaillon: ancienne.redMedaillon || "", redMedaillon: ancienne.blueMedaillon || "",
               blueOrderKeys: null, redOrderKeys: null, blueHand: null, redHand: null,
               board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
@@ -15353,7 +15424,8 @@ export default function Emprise() {
             // mais ici je suis Azur, donc participant, et un participant peut
             // tout ecrire. Elle arrive avant l ecran des Ordres. Un echec ne
             // coute que le repli chez l adversaire : la partie continue.
-            updateDoc(doc(db, "games", code), { blueBanniere: bourse.banniereEquipee || "" }).catch(() => {});
+            updateDoc(doc(db, "games", code), { blueBanniere: bourse.banniereEquipee || "",
+                                                blueMedaillon: bourse.medaillonEquipe || "" }).catch(() => {});
             libererAppariement(code);
             setFileAttente(false);
             setOnlineStatus("");
@@ -15794,6 +15866,9 @@ export default function Emprise() {
           // Le dos equipe, par la meme porte (02/09) : l adversaire habille
           // mes cartes de MON cosmetique, comme je vois le sien.
           blueDos: cosmetiques.dos,
+          // L avatar par la meme porte (03/09) : le medaillon equipe habille
+          // ma tete dans le face-a-face de l adversaire, comme je vois le sien.
+          blueMedaillon: bourse.medaillonEquipe || "",
           blueRencontres: rencontresJour }
       : { redOrderKeys: ordres.map((l) => l.key), redHand: hand.map(stripForSave), redReserve: choisies.map(stripForSave),
           redParties: moi.parties, redVictoires: moi.victoires, redCombos: moi.combos,
@@ -15802,6 +15877,7 @@ export default function Emprise() {
           redTrophees: tropheesPublics(),
           redNiveau: niveauDepuisXp(progression.xpTotal).niveauJoueur,
           redDos: cosmetiques.dos,
+          redMedaillon: bourse.medaillonEquipe || "",
           redRencontres: rencontresJour };
     if (onlineRole === "blue") setReserveBleue(choisies); else setReserveRouge(choisies);
     try {
@@ -18067,7 +18143,6 @@ export default function Emprise() {
             const profil = titresDuProfil(stats);
             const total = stats.gamesPlayed || 0;
             const victoires = stats.mesVictoires || 0;
-            const monOrdreFavori = ORDERS.find((o) => o.key === ordreLePlusJoue(stats)) || null;
             const maLigue = getLeague(stats.trophies || 0);
             const avanceTitre = Math.min(1, (stats.combosParties || 0) / COMBOS_PARTIES_MIN);
             return (
@@ -18133,12 +18208,16 @@ export default function Emprise() {
                     </div>
                   ) : (
                     <div className="profil-fiche-identite">
-                      {/* Le medaillon porte l'Ordre que vous jouez le plus. Sans partie
-                          posee, un degrade sombre -- jamais un trou. */}
-                      <span
-                        className={`profil-fiche-medaillon ${monOrdreFavori ? "" : "neutre"}`}
-                        style={monOrdreFavori ? { backgroundImage: `url("${monOrdreFavori.portrait}")` } : undefined}
-                        aria-hidden="true"
+                      {/* L'avatar : le medaillon EQUIPE (03/09), la ou l'Ordre le
+                          plus joue s'imposait. Il se touche pour en changer, comme
+                          la banniere se change par son pinceau. imageMedaillon est
+                          l'unique porte : jamais un trou, jamais une image cassee. */}
+                      <button
+                        className="profil-fiche-medaillon choisissable"
+                        style={{ backgroundImage: `url("${imageMedaillon(bourse.medaillonEquipe)}")` }}
+                        onClick={() => setSelectionMedaillon(true)}
+                        aria-label={`Médaillon équipé : ${(medaillonDeCle(bourse.medaillonEquipe) || medaillonDeCle(MEDAILLON_REPLI)).nom}. Changer de médaillon.`}
+                        title="Changer de médaillon"
                       />
                       <div className="profil-fiche-qui">
                         {/* Le nom reste modifiable : c'est le sien. Il garde son crayon,
@@ -18481,6 +18560,41 @@ export default function Emprise() {
             </div>
           )}
 
+          {/* ---------- Le choix de l'avatar (03/09) ---------- */}
+          {/* Le panneau jumeau de celui des bannieres, avec une difference
+              voulue : il montre TOUT le catalogue, pas seulement les acquis.
+              Les autres restent grises, et disent en une ligne ce qu'il faut
+              faire pour les obtenir -- c'est ce qui donne envie de les gagner.
+              Un medaillon verrouille ne se touche pas : le bouton est desactive,
+              pas seulement pali. */}
+          {selectionMedaillon && (
+            <div className="info-overlay" onClick={() => setSelectionMedaillon(false)}>
+              <div className="info-panel choix-banniere-panneau" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">Vos médaillons</div>
+                <div className="selection-medaillons">
+                  {MEDAILLONS.map((md) => {
+                    const acquis = bourse.possessions.medaillons.includes(md.cle);
+                    const equipe = bourse.medaillonEquipe === md.cle;
+                    return (
+                      <button key={md.cle} type="button" disabled={!acquis}
+                              className={`choix-medaillon ${equipe ? "choisi" : ""} ${acquis ? "" : "verrouille"}`}
+                              aria-pressed={equipe}
+                              aria-label={acquis ? `${md.nom}${equipe ? ", équipé" : ""}` : `${md.nom}, verrouillé : ${conditionMedaillon(md)}`}
+                              onClick={() => equiperMedaillon(md.cle).then((b) => { setBourse(b); setSelectionMedaillon(false); })}>
+                        <img className="choix-medaillon-image" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" loading="lazy" />
+                        <span className="choix-medaillon-nom">{md.nom}</span>
+                        <span className="choix-medaillon-etat">
+                          {equipe ? "Équipé" : acquis ? "Acquis" : conditionMedaillon(md)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button className="reset-btn" onClick={() => setSelectionMedaillon(false)}>Fermer</button>
+              </div>
+            </div>
+          )}
+
           {/* ---------- Le panneau de la Flamme ---------- */}
           {/* Serie en cours et paliers de pieces -- et la regle dite sobrement,
               sans compte a rebours ni culpabilisation. RIEN a acheter ici : la
@@ -18563,16 +18677,18 @@ export default function Emprise() {
           {activeModal === "pantheon" && (() => {
             const seuil = LEAGUES[LEAGUES.length - 1].min;
             const rangMoi = myUid ? pantheon.lignes.findIndex((l) => l && l.uid === myUid) : -1;
-            const monOrdre = ORDERS.find((o) => o.key === ordreLePlusJoue(stats)) || null;
             const monTitre = titrePrincipal(stats);
             // Une ligne du classement. Les pseudos viennent du serveur mais ont ete ecrits
             // par des joueurs : ils passent par le filtre, comme partout ailleurs.
             const ligne = (l, rang) => {
-              const ordre = ORDERS.find((o) => o.key === (l && l.ordre)) || null;
               return (
                 <div key={(l && l.uid) || rang} className={`pantheon-ligne ${rang <= 3 ? `p${rang}` : ""}`}>
                   <span className="pantheon-rang">{rang}</span>
-                  {ordre ? <img className="pantheon-medaillon" src={ordre.portrait} alt="" /> : <span className="pantheon-medaillon vide" />}
+                  {/* L'avatar choisi (03/09). Le document du classement est bati
+                      par le serveur : tant que ses lignes ne portent pas le
+                      champ, imageMedaillon rend Le Premier Duel -- une image
+                      juste, jamais un trou ni une image cassee. */}
+                  <img className="pantheon-medaillon" src={imageMedaillon(l && l.medaillon)} alt="" />
                   <span className="pantheon-noms">
                     <span className="pantheon-nom">{pseudoAffichable(l && l.pseudo) || "Commandant"}</span>
                     {l && l.titre ? <span className="pantheon-titre">{String(l.titre).slice(0, 40)}</span> : null}
@@ -18613,7 +18729,7 @@ export default function Emprise() {
                       Ses donnees viennent de l'etat local, deja charge : aucune lecture. */}
                   <div className="pantheon-ligne pantheon-moi">
                     <span className="pantheon-rang">{rangMoi >= 0 ? rangMoi + 1 : ""}</span>
-                    {monOrdre ? <img className="pantheon-medaillon" src={monOrdre.portrait} alt="" /> : <span className="pantheon-medaillon vide" />}
+                    <img className="pantheon-medaillon" src={imageMedaillon(bourse.medaillonEquipe)} alt="" />
                     <span className="pantheon-noms">
                       <span className="pantheon-nom">{pseudo}</span>
                       {rangMoi >= 0
@@ -21110,11 +21226,12 @@ export default function Emprise() {
                       aria-label="Fermer">&times;</button>
 
               <div className="profil-fiche-identite">
-                {/* Le medaillon porte l'Ordre qu'il joue le plus. Sans cette information,
-                    un degrade sombre neutre -- jamais un trou. */}
+                {/* Son avatar : le medaillon qu'il a choisi (03/09), lu dans son
+                    profil public. Le champ attend la publication des regles ; d'ici
+                    la, imageMedaillon rend Le Premier Duel -- un repli, pas un trou. */}
                 <span
-                  className={`profil-fiche-medaillon ${ordre ? "" : "neutre"}`}
-                  style={ordre ? { backgroundImage: `url("${ordre.portrait}")` } : undefined}
+                  className="profil-fiche-medaillon"
+                  style={{ backgroundImage: `url("${imageMedaillon(f.medaillon)}")` }}
                   aria-hidden="true"
                 />
                 <div className="profil-fiche-qui">

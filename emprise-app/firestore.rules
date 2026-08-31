@@ -204,7 +204,12 @@ service cloud.firestore {
               || (request.resource.data.combosParties is int && request.resource.data.combosParties >= 0 && request.resource.data.combosParties <= 1000000))
           // Le niveau de Commandant, montre aux amis : les niveaux du jeu vont de 1 a 50.
           && (!('niveau' in request.resource.data)
-              || (request.resource.data.niveau is int && request.resource.data.niveau >= 1 && request.resource.data.niveau <= 50));
+              || (request.resource.data.niveau is int && request.resource.data.niveau >= 1 && request.resource.data.niveau <= 50))
+          // L'avatar du Commandant : une cle courte du catalogue des medaillons,
+          // pas un champ de texte deguise. Le client verifie de son cote qu'elle
+          // designe un medaillon qui existe ; ici on borne seulement la taille.
+          && (!('medaillon' in request.resource.data)
+              || (request.resource.data.medaillon is string && request.resource.data.medaillon.size() <= 30));
     }
 
     // Un horodatage de profil ne prend que l'heure du serveur, ou reste tel quel.
@@ -263,7 +268,7 @@ service cloud.firestore {
       allow update: if connecte() && moi() == uid
         // adoubementVu : la cérémonie de première ouverture a eu lieu. Un simple témoin,
         // que seul son propriétaire écrit et qui ne sert qu'à ne pas la rejouer.
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties', 'niveau'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties', 'niveau', 'medaillon'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
         && codeAmiValide(request.resource.data.codeAmi)
