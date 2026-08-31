@@ -3053,6 +3053,73 @@ const BANNIERE_REPLI = "depart-nuit";
 function banniereDeCle(cle) { return BANNIERES.find((b) => b.cle === cle) || null; }
 function banniereDeDifficulte(diff) { return BANNIERES.find((b) => b.source === "echo" && b.difficulte === diff) || banniereDeCle(BANNIERE_REPLI); }
 
+// ---------- Les medaillons : l avatar du Commandant (03/09) ----------
+// Le jumeau des bannieres, et il suit leurs patrons a la lettre : meme forme
+// de catalogue, meme possession dans la bourse, meme equipement, meme
+// transport en ligne, meme panneau de choix. Le medaillon REMPLACE le portrait
+// d Ordre impose comme avatar -- la fiche de joueur, le face-a-face
+// d avant-partie, le Pantheon, le profil. Le portrait d Ordre garde son sens
+// partout ailleurs (page Ordres, maitrise, cartes de jeu) : rien n y bouge.
+// Quatre sources : depart (offerts d office au premier lancement), ordre (la
+// maitrise de l Ordre atteint le rang Disciple), arene (la ligue atteinte,
+// jamais achetee), pieces (la boutique).
+// aVenir : l image n est pas encore deposee. L entree existe -- le medaillon
+// des Geoliers sortira avec son Ordre -- mais TOUT affichage se replie sur
+// MEDAILLON_REPLI, jamais une image cassee. Le jour du depot, une ligne saute.
+const MEDAILLONS = [
+  { cle: "depart-duel", nom: "Le Premier Duel", image: "/medaillons/depart-duel.webp", source: "depart" },
+  { cle: "pacte-azur", nom: "Le Pacte Azur", image: "/medaillons/pacte-azur.webp", source: "depart" },
+  { cle: "horde-ecarlate", nom: "La Horde Écarlate", image: "/medaillons/horde-ecarlate.webp", source: "depart" },
+  { cle: "ordre-dores", nom: "Le Masque Renversé", image: "/medaillons/ordre-dores.webp", source: "ordre", ordre: "eveil" },
+  { cle: "ordre-cendres", nom: "Le Tourbillon de Cendres", image: "/medaillons/ordre-cendres.webp", source: "ordre", ordre: "cendres" },
+  { cle: "ordre-piques", nom: "La Pointe", image: "/medaillons/ordre-piques.webp", source: "ordre", ordre: "percee" },
+  { cle: "ordre-archers", nom: "La Corde Tendue", image: "/medaillons/ordre-archers.webp", source: "ordre", ordre: "portee" },
+  { cle: "ordre-abysses", nom: "La Gueule", image: "/medaillons/ordre-abysses.webp", source: "ordre", ordre: "devoreuse" },
+  { cle: "ordre-chimeres", nom: "La Double Face", image: "/medaillons/ordre-chimeres.webp", source: "ordre", ordre: "mue" },
+  { cle: "ordre-pestiferes", nom: "Le Bec", image: "/medaillons/ordre-pestiferes.webp", source: "ordre", ordre: "poison" },
+  { cle: "ordre-gardiens", nom: "Le Rempart", image: "/medaillons/ordre-gardiens.webp", source: "ordre", ordre: "guardian" },
+  { cle: "ordre-scribes", nom: "L'Oeil Voilé", image: "/medaillons/ordre-scribes.webp", source: "ordre", ordre: "scribes" },
+  { cle: "ordre-maudits", nom: "La Chaîne Rompue", image: "/medaillons/ordre-maudits.webp", source: "ordre", ordre: "maudits" },
+  { cle: "ordre-geoliers", nom: "Le Verrou", image: "/medaillons/ordre-geoliers.webp", source: "ordre", ordre: "geolier", aVenir: true },
+  { cle: "arene-bronze", nom: "L'Arène de Bronze", image: "/medaillons/arene-bronze.webp", source: "arene", ligue: "Bronze" },
+  { cle: "arene-argent", nom: "L'Arène d'Argent", image: "/medaillons/arene-argent.webp", source: "arene", ligue: "Argent" },
+  { cle: "arene-or", nom: "L'Arène d'Or", image: "/medaillons/arene-or.webp", source: "arene", ligue: "Or" },
+  { cle: "arene-platine", nom: "L'Arène de Platine", image: "/medaillons/arene-platine.webp", source: "arene", ligue: "Platine" },
+  { cle: "arene-legende", nom: "L'Arène de Légende", image: "/medaillons/arene-legende.webp", source: "arene", ligue: "Légende" },
+  { cle: "flamme", nom: "La Flamme du Commandant", image: "/medaillons/flamme.webp", source: "pieces", prix: 1500 },
+  { cle: "mort-subite", nom: "La Mort Subite", image: "/medaillons/mort-subite.webp", source: "pieces", prix: 1500 },
+  { cle: "resonance", nom: "La Résonance", image: "/medaillons/resonance.webp", source: "pieces", prix: 2000 },
+  { cle: "onde", nom: "L'Onde", image: "/medaillons/onde.webp", source: "pieces", prix: 2000 },
+  { cle: "pantheon", nom: "Le Panthéon", image: "/medaillons/pantheon.webp", source: "pieces", prix: 3000 },
+];
+const MEDAILLON_REPLI = "depart-duel";
+function medaillonDeCle(cle) { return MEDAILLONS.find((m) => m.cle === cle) || null; }
+// L image A AFFICHER, l unique porte : celle du medaillon s il en a une de
+// deposee, celle du repli sinon. Une cle inconnue, un champ absent d une
+// vieille partie, une image pas encore livree passent tous par ici.
+function imageMedaillon(cle) {
+  const m = medaillonDeCle(cle);
+  return (m && !m.aVenir ? m : medaillonDeCle(MEDAILLON_REPLI)).image;
+}
+// Le rang de maitrise qui delivre le medaillon d un Ordre. Lu dans
+// MAITRISE_RANGS, jamais recopie : le jour ou le bareme bouge, il suit. Une
+// fonction et non une constante : rien ne doit s evaluer au chargement du
+// module en dependant d un autre bloc -- l ordre des declarations n est alors
+// jamais un piege.
+function medaillonRang() { return MAITRISE_RANGS.find((r) => r.nom === "Disciple"); }
+// Ce qu il faut faire pour l obtenir, en toutes lettres, sous un medaillon
+// encore verrouille. Les noms d arene portent deja leur article.
+function conditionMedaillon(m) {
+  if (!m) return "";
+  if (m.source === "ordre") {
+    const o = ORDERS.find((x) => x.key === m.ordre);
+    return `${medaillonRang().nom} des ${o ? nomOrdreAffiche(o) : "?"}`;
+  }
+  if (m.source === "arene") return `Atteindre ${m.nom.replace(/^L'/, "l'")}`;
+  if (m.source === "pieces") return `${m.prix} pièces`;
+  return "";
+}
+
 // ---------- Un fond par famille d ecrans (02/09) ----------
 // La table est la seule source de verite : la phase y figure, son fond se
 // pose en PREMIERE couche par-dessus le ciel d orage ; absente, le ciel
@@ -3080,7 +3147,7 @@ const FONDS_ECRANS = {
 };
 
 const BOURSE_ESSAI = 1000;
-const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "" };
+const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "", medaillonEquipe: MEDAILLON_REPLI };
 let memoryBourse = null;
 
 async function readBourseRaw() {
@@ -3114,7 +3181,7 @@ async function writeBourseRaw(str) {
 // se verse ici, une seule fois -- au premier passage comme chez un joueur de la veille.
 async function loadBourse() {
   const brut = await readBourseRaw();
-  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [] }, accesAnticipe: [], misesTournoi: [] };
+  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [] };
   if (brut) {
     try {
       const lu = JSON.parse(brut);
@@ -3151,8 +3218,24 @@ async function loadBourse() {
       b.banniereEquipee = typeof lu.banniereEquipee === "string" && b.possessions.bannieres.includes(lu.banniereEquipee)
         ? lu.banniereEquipee
         : (b.possessions.bannieres[0] || "");
+      // Les medaillons (03/09), meme validation que les bannieres : une cle
+      // hors catalogue est jetee. Ce qui differe, plus bas : les trois de
+      // depart sont offerts d office, et l equipe se replie toujours.
+      b.possessions.medaillons = (lu.possessions && Array.isArray(lu.possessions.medaillons))
+        ? [...new Set(lu.possessions.medaillons.filter((k) => MEDAILLONS.some((x) => x.cle === k)))]
+        : [];
+      if (typeof lu.medaillonEquipe === "string") b.medaillonEquipe = lu.medaillonEquipe;
     } catch (e) { /* sauvegarde abimee : on repart des offerts */ }
   }
+  // Les trois medaillons de depart sont POSSEDES d office, comme les
+  // cosmetiques a prix nul -- et l avatar ne peut jamais etre vide : un equipe
+  // non possede, inconnu ou absent d une vieille sauvegarde retombe sur Le
+  // Premier Duel. Pose ici, hors du try : la sauvegarde neuve, l ancienne et
+  // l abimee suivent la meme regle, et la relire ne double rien.
+  for (const m of MEDAILLONS) {
+    if (m.source === "depart" && !b.possessions.medaillons.includes(m.cle)) b.possessions.medaillons.push(m.cle);
+  }
+  if (!b.possessions.medaillons.includes(b.medaillonEquipe)) b.medaillonEquipe = MEDAILLON_REPLI;
   if (BOURSE_ESSAI > 0 && !b.essaiVerse) {
     b.gemmes += BOURSE_ESSAI;
     b.essaiVerse = true;
@@ -3341,6 +3424,44 @@ async function acheterBanniereGemmes(cle) {
   b.gemmes -= item.prixGemmes;
   b.possessions.bannieres = [...b.possessions.bannieres, cle];
   if (!b.banniereEquipee) b.banniereEquipee = cle;
+  await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, fait: true };
+}
+
+// ---------- Les medaillons : possession, equipement, achat (03/09) ----------
+// Les trois memes fonctions que les bannieres, au meme modele sur : relire,
+// decider, ecrire. Une difference : le medaillon d office du depart n a pas de
+// garde d unicite -- les trois sont offerts ensemble, il n y a rien a choisir.
+async function possederMedaillon(cle, equiperAussi) {
+  const b = await loadBourse();
+  const item = medaillonDeCle(cle);
+  if (!item) return { bourse: b, ajoutee: false };
+  const deja = b.possessions.medaillons.includes(cle);
+  const equipeAvant = b.medaillonEquipe;
+  if (!deja) b.possessions.medaillons = [...b.possessions.medaillons, cle];
+  if (equiperAussi) b.medaillonEquipe = cle;
+  if (!deja || b.medaillonEquipe !== equipeAvant) await writeBourseRaw(JSON.stringify(b));
+  return { bourse: b, ajoutee: !deja };
+}
+
+async function equiperMedaillon(cle) {
+  const b = await loadBourse();
+  if (!b.possessions.medaillons.includes(cle) || b.medaillonEquipe === cle) return b;
+  b.medaillonEquipe = cle;
+  await writeBourseRaw(JSON.stringify(b));
+  return b;
+}
+
+// Seuls les medaillons de la source pieces ont un prix : les offerts, ceux de
+// maitrise et ceux d arene n en ont pas, donc pas de chemin d achat.
+async function acheterMedaillonPieces(cle) {
+  const b = await loadBourse();
+  const item = medaillonDeCle(cle);
+  if (!item || !(item.prix > 0)) return { bourse: b, fait: false };
+  if (b.possessions.medaillons.includes(cle)) return { bourse: b, fait: true };
+  if (b.pieces < item.prix) return { bourse: b, fait: false };
+  b.pieces -= item.prix;
+  b.possessions.medaillons = [...b.possessions.medaillons, cle];
   await writeBourseRaw(JSON.stringify(b));
   return { bourse: b, fait: true };
 }
