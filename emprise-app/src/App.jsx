@@ -7055,6 +7055,76 @@ const APP_STYLES = `
           font-family: 'Spectral', Georgia, serif; font-size: 12px; color: var(--muted);
           margin: 2px 0 6px;
         }
+        /* ---------- Le Tournoi en ligne, maquette C (01/09) ----------
+           Le titre etait bleu et gris comme tous les choix du jeu, et l enjeu
+           tenait sur une ligne de 12 px en gris sourd : on lisait mal ce qu on
+           allait payer. Tout est repris ICI, sous .tournoi-ligne, jamais sur
+           .order-picker : treize ecrans partagent ce conteneur et aucun autre
+           ne doit bouger d un pixel. */
+        .order-picker.tournoi-ligne h2 {
+          font-size: 26px; letter-spacing: 5px;
+          color: #e9c65d;
+          text-shadow: 0 0 22px rgba(233,198,93,0.3), 0 2px 4px rgba(0,0,0,0.85);
+          padding-bottom: 10px;
+        }
+        /* Le filet sous le titre. En ::after absolu, il ne prend aucune place
+           dans le flux : le reste de l ecran ne descend pas d un pixel. */
+        .order-picker.tournoi-ligne h2::after {
+          content: ""; position: absolute; left: 50%; bottom: 0;
+          transform: translateX(-50%);
+          width: 120px; height: 1px;
+          background: linear-gradient(90deg, transparent, #b98f3e, transparent);
+        }
+        .order-picker.tournoi-ligne .sub {
+          font-size: 15px; line-height: 1.55; color: #efe4cc;
+          max-width: 320px; text-align: center; margin-top: 0;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        }
+        /* Les deux badges remplacent la ligne unique. Ils s enroulent si la
+           mention entre parentheses les allonge : sur 375 de large, mieux vaut
+           deux lignes qu un debordement. */
+        .order-picker.tournoi-ligne .tournoi-enjeu {
+          display: flex; flex-wrap: wrap; justify-content: center;
+          align-items: stretch; gap: 10px; margin: 2px 0 4px;
+          font-family: inherit; font-size: inherit; color: inherit;
+        }
+        .tournoi-badge {
+          box-sizing: border-box; min-width: 120px;
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
+          padding: 10px 16px; border-radius: 12px;
+          background: rgba(20,14,30,0.85);
+          border: 1px solid #6d5a8f;
+        }
+        .tournoi-badge-libelle {
+          font-family: 'Cinzel', serif; font-size: 11px; text-transform: uppercase;
+          letter-spacing: 1.5px; color: #a893c4;
+        }
+        .tournoi-badge-valeur {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 17px; font-weight: 700; color: #f4ead2;
+        }
+        /* La gemme du jeu, celle de la bourse, agrandie a la mesure du chiffre
+           qu elle accompagne -- aucune autre image n est fabriquee pour ici. */
+        .tournoi-badge-valeur .gemme-icone { width: 15px; height: 15px; }
+        /* Le nombre de Commandants presents fait varier le prix : il se lit
+           donc SOUS le chiffre, dans la meme clarte que les phrases. */
+        .tournoi-badge-note {
+          font-size: 11.5px; color: #efe4cc;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        }
+        /* Le "ou" separateur, encadre de deux filets. Ils sont en pseudo-
+           elements pour qu aucun element vide ne traine dans le document. */
+        .tournoi-ou {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; max-width: 320px; margin-top: 4px;
+          font-size: 13.5px; letter-spacing: 1px; color: #cbb98f;
+          text-align: center;
+        }
+        .tournoi-ou::before, .tournoi-ou::after {
+          content: ""; flex: 1; height: 1px;
+        }
+        .tournoi-ou::before { background: linear-gradient(90deg, transparent, #8a6d3b); }
+        .tournoi-ou::after { background: linear-gradient(90deg, #8a6d3b, transparent); }
         /* Le compte a rebours du forfait (03/09) : rouge clair et chiffres a
            chasse fixe, comme le minuteur de coup -- un nombre qui descend ne
            doit pas faire danser la ligne. Rien ne s anime : c est deja le
@@ -20216,17 +20286,30 @@ export default function Emprise() {
       )}
 
       {phase === "tourney-online-menu" && (
-        <div className="order-picker">
+        <div className="order-picker tournoi-ligne">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Tournoi en ligne</h2>
           <div className="sub">Huit Commandants, trois tours. Créez un tournoi et partagez son code, ou rejoignez avec celui d'un ami.</div>
-          {/* L'enjeu, annonce AVANT de confirmer quoi que ce soit. */}
+          {/* L'enjeu, annonce AVANT de confirmer quoi que ce soit. Deux badges
+              depuis la maquette C : la ligne unique en gris de 12 px se lisait
+              mal, et c'est le montant qu'on paie. Les libelles sont ecrits en
+              clair pour le lecteur d'ecran, la gemme etant decorative. */}
           <div className="tournoi-enjeu">
-            <span className="gemme-icone" aria-hidden="true" />
-            Mise : {TOURNOI_ENJEU.entree} gemmes · Vainqueur : {TOURNOI_ENJEU.prixVainqueur} gemmes
+            <span className="tournoi-badge" aria-label={`Mise : ${TOURNOI_ENJEU.entree} gemmes`}>
+              <span className="tournoi-badge-libelle" aria-hidden="true">Mise</span>
+              <span className="tournoi-badge-valeur" aria-hidden="true">
+                <span className="gemme-icone" aria-hidden="true" />{TOURNOI_ENJEU.entree}
+              </span>
+            </span>
+            <span className="tournoi-badge" aria-label={`Vainqueur : ${TOURNOI_ENJEU.prixVainqueur} gemmes`}>
+              <span className="tournoi-badge-libelle" aria-hidden="true">Vainqueur</span>
+              <span className="tournoi-badge-valeur" aria-hidden="true">
+                <span className="gemme-icone" aria-hidden="true" />{TOURNOI_ENJEU.prixVainqueur}
+              </span>
+            </span>
           </div>
           <button className="reset-btn" onClick={creerTournoiEnLigne}>Créer un tournoi</button>
-          <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
+          <div className="tournoi-ou">ou rejoindre avec un code</div>
           <input
             className="join-code-input"
             placeholder="CODE"
@@ -20327,18 +20410,37 @@ export default function Emprise() {
         const suisChampion = champion && tournoiData.champion === myUid;
 
         return (
-          <div className="order-picker">
+          <div className="order-picker tournoi-ligne">
             <button className="back-btn" onClick={goBack}>← Retour</button>
             <h2>Tournoi en ligne</h2>
             {/* Le prix COURANT, en permanence : celui du document du tournoi
                 (fige a la completion), sinon le plafond des humains presents.
-                Jamais un recalcul local d ecran a ecran (02/09). */}
+                Jamais un recalcul local d ecran a ecran (02/09).
+                Les memes badges qu au menu (01/09) : le prix bouge avec le
+                nombre de Commandants presents, et c est justement pour cela
+                qu il doit se lire d un coup d oeil. */}
             <div className="tournoi-enjeu">
-              <span className="gemme-icone" aria-hidden="true" />
               {(() => {
-                if (!tournoiData) return `Mise : ${TOURNOI_ENJEU.entree} gemmes · Vainqueur : ${TOURNOI_ENJEU.prixVainqueur} gemmes`;
-                const p = prixDuTournoi(tournoiData);
-                return `Mise : ${TOURNOI_ENJEU.entree} gemmes · Vainqueur : ${p.gemmes} gemmes (${p.humains} Commandant${p.humains > 1 ? "s" : ""})`;
+                const p = tournoiData ? prixDuTournoi(tournoiData) : null;
+                const gains = p ? p.gemmes : TOURNOI_ENJEU.prixVainqueur;
+                const note = p ? `${p.humains} Commandant${p.humains > 1 ? "s" : ""}` : "";
+                return (
+                  <>
+                    <span className="tournoi-badge" aria-label={`Mise : ${TOURNOI_ENJEU.entree} gemmes`}>
+                      <span className="tournoi-badge-libelle" aria-hidden="true">Mise</span>
+                      <span className="tournoi-badge-valeur" aria-hidden="true">
+                        <span className="gemme-icone" aria-hidden="true" />{TOURNOI_ENJEU.entree}
+                      </span>
+                    </span>
+                    <span className="tournoi-badge" aria-label={`Vainqueur : ${gains} gemmes${note ? ` (${note})` : ""}`}>
+                      <span className="tournoi-badge-libelle" aria-hidden="true">Vainqueur</span>
+                      <span className="tournoi-badge-valeur" aria-hidden="true">
+                        <span className="gemme-icone" aria-hidden="true" />{gains}
+                      </span>
+                      {note && <span className="tournoi-badge-note" aria-hidden="true">({note})</span>}
+                    </span>
+                  </>
+                );
               })()}
             </div>
             {statut === "waiting" && (
