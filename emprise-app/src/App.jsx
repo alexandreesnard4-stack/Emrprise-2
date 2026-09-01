@@ -3140,6 +3140,14 @@ const BANNIERES = [
   { cle: "prestige-comete", nom: "La Comète", image: "/bannieres/prestige-comete.webp", source: "prestige", prixGemmes: 600 },
   { cle: "prestige-portail", nom: "Le Portail Céleste", image: "/bannieres/prestige-portail.webp", source: "prestige", prixGemmes: 600 },
   { cle: "prestige-couronne", nom: "La Couronne Brisée", image: "/bannieres/prestige-couronne.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "pieces-bibliotheque", nom: "La Bibliothèque Endormie", image: "/bannieres/pieces-bibliotheque.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-pont", nom: "Le Pont des Brumes", image: "/bannieres/pieces-pont.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-forge", nom: "La Forge Éteinte", image: "/bannieres/pieces-forge.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-lande", nom: "Les Bannières Déchirées", image: "/bannieres/pieces-lande.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-lanternes", nom: "La Ruelle aux Lanternes", image: "/bannieres/pieces-lanternes.webp", source: "pieces", prix: 2000 },
+  { cle: "pieces-citadelle", nom: "La Citadelle de l'Aube", image: "/bannieres/pieces-citadelle.webp", source: "pieces", prix: 2500 },
+  { cle: "pieces-armada", nom: "L'Armada Noire", image: "/bannieres/pieces-armada.webp", source: "pieces", prix: 3000 },
+  { cle: "pieces-colosse", nom: "Le Colosse Endormi", image: "/bannieres/pieces-colosse.webp", source: "pieces", prix: 3000 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
