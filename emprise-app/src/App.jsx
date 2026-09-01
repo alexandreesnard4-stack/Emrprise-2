@@ -18161,8 +18161,13 @@ export default function Emprise() {
                   <div className="boutique-grille">
                     {/* La selection du jour (01/09) : le MEME predicat que le
                         chemin d achat, si bien que l affichage et l achat ne
-                        peuvent pas se contredire. */}
-                    {PLATEAUX.filter((p) => enRotation(p.cle)).map((p) => {
+                        peuvent pas se contredire.
+                        L offert ferme le rayon, HORS rotation : sans lui, un
+                        joueur ne pourrait plus revenir a son plateau d origine.
+                        Il n a pas de prix, donc il n entre dans aucune
+                        selection et le chemin d achat le refuse deja -- on ne
+                        l affiche que pour pouvoir le rechoisir. */}
+                    {[...PLATEAUX.filter((p) => enRotation(p.cle)), ...PLATEAUX.filter((p) => !(p.prix > 0))].map((p) => {
                       const choisi = cosmetiques.plateau === p.cle;
                       const possede = possedeCosmetique(bourse, "plateau", p.cle);
                       return (
@@ -18195,7 +18200,7 @@ export default function Emprise() {
                   <h2 className="boutique-titre second">Dos de cartes</h2>
                   <p className="boutique-sous">L&apos;étoffe de votre Réserve, vue par l&apos;adversaire.</p>
                   <div className="boutique-grille">
-                    {DOS_CARTES.filter((d) => enRotation(d.cle)).map((d) => {
+                    {[...DOS_CARTES.filter((d) => enRotation(d.cle)), ...DOS_CARTES.filter((d) => !(d.prix > 0) && !(d.prixGemmes > 0))].map((d) => {
                       const choisi = cosmetiques.dos === d.cle;
                       const possede = possedeCosmetique(bourse, "dos", d.cle);
                       return (
