@@ -2186,7 +2186,11 @@ async function loadStats() {
 // camps du PLATEAU : une egalite etant impossible, leur somme vaut toujours gamesPlayed
 // et ne peut donc pas servir de compteur personnel — le profil affichait ainsi autant de
 // "victoires" que de parties jouees, defaites comprises.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false, adversaireClasse = null) {
+// releveSucces (01/09) : ce que la partie a produit, pour les medaillons de
+// succes -- { resonances, ondes, mortSubite }. Un objet en queue plutot qu un
+// treizieme parametre positionnel : la liste est deja longue, et un champ de
+// plus s y ajoutera sans compter les virgules.
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false, adversaireClasse = null, releveSucces = null) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -2282,11 +2286,16 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     // porte du profil en plus : Histoire, Echos, Confluence, tournois solo et
     // bac a sable ne la nourrissent jamais. La premiere partie classee du jour
     // seulement -- nourrirFlamme refuse d'elle-meme un second jour identique.
+    let flammePleine = false;
     if (classee && compteAuProfil) {
       const feu = await nourrirFlamme();
       if (feu.jourNouveau) {
         stats.xpDePartie = { ...stats.xpDePartie, flamme: { jour: feu.flamme.serie, pieces: feu.piecesVersees } };
       }
+      // La Flamme pleine, c est SEPT JOURS de serie -- un duel classe par jour,
+      // sept jours d affilee. Ce n est pas sept parties dans la journee :
+      // nourrirFlamme refuse d elle-meme un second jour identique.
+      flammePleine = (feu.flamme.serie || 0) >= FLAMME_PARTS;
     }
     // ---------- L'Etendard de l'Echo ----------
     // Premiere victoire en partie LIBRE contre un Echo de cette difficulte :
@@ -2313,11 +2322,37 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
     // cote qu on ne le donne jamais deux fois. Le champ medaillonDebloque
     // voyage vers l ecran de fin, jamais vers la sauvegarde.
     const seuil = medaillonRang().min;
+    const gagne = async (cle) => {
+      const res = await possederMedaillon(cle, false);
+      if (res.ajoutee && !stats.medaillonDebloque) stats.medaillonDebloque = cle;
+    };
     for (const md of MEDAILLONS) {
       if (md.source !== "ordre") continue;
       if (maitriseOrdre(stats, md.ordre).parties < seuil) continue;
-      const res = await possederMedaillon(md.cle, false);
-      if (res.ajoutee && !stats.medaillonDebloque) stats.medaillonDebloque = md.cle;
+      await gagne(md.cle);
+    }
+    // ---------- Les medaillons de SUCCES (01/09) ----------
+    // Des compteurs PASSIFS : ils observent la partie qui vient de finir et ne
+    // changent rien a son deroulement. Les Resonances et les Ondes viennent du
+    // releve des quetes, qui les comptait deja coup par coup -- rien de neuf
+    // dans le moteur, on ne fait que cumuler. Les seuils vivent au catalogue,
+    // jamais recopies ici.
+    const rel = releveSucces || {};
+    stats.resonancesTotal = (stats.resonancesTotal || 0) + Math.max(0, Math.floor(rel.resonances || 0));
+    stats.ondesTotal = (stats.ondesTotal || 0) + Math.max(0, Math.floor(rel.ondes || 0));
+    // Les victoires par Ordre, jumelles d orderPlays : mesOrdres est la liste
+    // de MES deux Ordres, la seule qui vaille -- orderKeys mele les deux camps.
+    if (victoire && Array.isArray(mesOrdres)) {
+      if (!stats.orderWins) stats.orderWins = {};
+      [...new Set(mesOrdres)].forEach((k) => { stats.orderWins[k] = (stats.orderWins[k] || 0) + 1; });
+    }
+    const seuilDe = (cle) => (medaillonDeCle(cle) || {}).seuil || 0;
+    if (flammePleine) await gagne("flamme");
+    if (victoire && rel.mortSubite) await gagne("mort-subite");
+    if (stats.resonancesTotal >= seuilDe("resonance")) await gagne("resonance");
+    if (stats.ondesTotal >= seuilDe("onde")) await gagne("onde");
+    if (ORDERS.filter((o) => isOrderAvailable(o)).every((o) => ((stats.orderWins || {})[o.key] || 0) > 0)) {
+      await gagne("pantheon");
     }
   }
   return stats;
@@ -2941,6 +2976,9 @@ const CONVERSIONS = [
 // retombe jamais, et les pieces deja versees ne se reprennent jamais.
 // AUCUNE protection de Flamme payante -- ni gemmes, ni pieces, ni publicite,
 // ni rachat d'aucune sorte : ne jamais en ajouter une.
+// Les sept parts de la Flamme : un duel classe par jour, sept jours d affilee.
+// FlammeVivante remplit un septieme par jour ; ce nombre-ci sert au succes.
+const FLAMME_PARTS = 7;
 const FLAMME_PALIERS = [
   { jours: 7,   pieces: 200 },
   { jours: 30,  pieces: 1000 },
@@ -3205,11 +3243,19 @@ const MEDAILLONS = [
   { cle: "arene-or", nom: "L'Arène d'Or", image: "/medaillons/arene-or.webp", source: "arene", ligue: "Or" },
   { cle: "arene-platine", nom: "L'Arène de Platine", image: "/medaillons/arene-platine.webp", source: "arene", ligue: "Platine" },
   { cle: "arene-legende", nom: "L'Arène de Légende", image: "/medaillons/arene-legende.webp", source: "arene", ligue: "Légende" },
-  { cle: "flamme", nom: "La Flamme du Commandant", image: "/medaillons/flamme.webp", source: "pieces", prix: 1500 },
-  { cle: "mort-subite", nom: "La Mort Subite", image: "/medaillons/mort-subite.webp", source: "pieces", prix: 1500 },
-  { cle: "resonance", nom: "La Résonance", image: "/medaillons/resonance.webp", source: "pieces", prix: 2000 },
-  { cle: "onde", nom: "L'Onde", image: "/medaillons/onde.webp", source: "pieces", prix: 2000 },
-  { cle: "pantheon", nom: "Le Panthéon", image: "/medaillons/pantheon.webp", source: "pieces", prix: 3000 },
+  // Les cinq SUCCES (01/09) : ils ne s achetent plus, ils se gagnent. Chacun
+  // porte sa phrase d obtention ; les autres sources la deduisent de leur
+  // catalogue, dans obtentionMedaillon.
+  { cle: "flamme", nom: "La Flamme du Commandant", image: "/medaillons/flamme.webp", source: "succes",
+    obtention: "Remplir la Flamme du Commandant (7 jours de série)" },
+  { cle: "mort-subite", nom: "La Mort Subite", image: "/medaillons/mort-subite.webp", source: "succes",
+    obtention: "Gagner une partie décidée en Mort Subite" },
+  { cle: "resonance", nom: "La Résonance", image: "/medaillons/resonance.webp", source: "succes",
+    obtention: "Déclencher 25 Résonances", compteur: "resonances", seuil: 25 },
+  { cle: "onde", nom: "L'Onde", image: "/medaillons/onde.webp", source: "succes",
+    obtention: "Déclencher 10 Ondes", compteur: "ondes", seuil: 10 },
+  { cle: "pantheon", nom: "Le Panthéon", image: "/medaillons/pantheon.webp", source: "succes",
+    obtention: "Vaincre avec chacun des Ordres disponibles", compteur: "ordresVaincus" },
 ];
 const MEDAILLON_REPLI = "depart-duel";
 function medaillonDeCle(cle) { return MEDAILLONS.find((m) => m.cle === cle) || null; }
@@ -3227,7 +3273,23 @@ function imageMedaillon(cle) {
 // jamais un piege.
 function medaillonRang() { return MAITRISE_RANGS.find((r) => r.nom === "Disciple"); }
 // Ce qu il faut faire pour l obtenir, en toutes lettres, sous un medaillon
-// encore verrouille. Les noms d arene portent deja leur article.
+// encore verrouille. Un succes porte sa phrase ; les autres la deduisent de
+// leur catalogue -- le seuil de maitrise vient de MAITRISE_RANGS, jamais
+// recopie, et les noms d arene portent deja leur article.
+function obtentionMedaillon(m) {
+  if (!m) return "";
+  if (m.obtention) return m.obtention;
+  if (m.source === "depart") return "Offert dès le départ";
+  if (m.source === "ordre") {
+    const o = ORDERS.find((x) => x.key === m.ordre);
+    const r = medaillonRang();
+    return `Rang ${r.nom} des ${o ? nomOrdreAffiche(o) : "?"} (${r.min} parties avec l'Ordre)`;
+  }
+  if (m.source === "arene") return `Atteindre ${m.nom.replace(/^L'/, "l'")}`;
+  return "";
+}
+// La ligne courte du panneau de choix, sous le nom : la meme chose, en plus
+// bref -- une grille de vingt-quatre ne tient pas des phrases entieres.
 function conditionMedaillon(m) {
   if (!m) return "";
   if (m.source === "ordre") {
@@ -3235,7 +3297,7 @@ function conditionMedaillon(m) {
     return `${medaillonRang().nom} des ${o ? nomOrdreAffiche(o) : "?"}`;
   }
   if (m.source === "arene") return `Atteindre ${m.nom.replace(/^L'/, "l'")}`;
-  if (m.source === "pieces") return `${m.prix} pièces`;
+  if (m.source === "succes") return "Succès";
   return "";
 }
 
@@ -3588,19 +3650,9 @@ async function equiperMedaillon(cle) {
   return b;
 }
 
-// Seuls les medaillons de la source pieces ont un prix : les offerts, ceux de
-// maitrise et ceux d arene n en ont pas, donc pas de chemin d achat.
-async function acheterMedaillonPieces(cle) {
-  const b = await loadBourse();
-  const item = medaillonDeCle(cle);
-  if (!item || !(item.prix > 0)) return { bourse: b, fait: false };
-  if (b.possessions.medaillons.includes(cle)) return { bourse: b, fait: true };
-  if (b.pieces < item.prix) return { bourse: b, fait: false };
-  b.pieces -= item.prix;
-  b.possessions.medaillons = [...b.possessions.medaillons, cle];
-  await writeBourseRaw(JSON.stringify(b));
-  return { bourse: b, fait: true };
-}
+// Aucun chemin d achat pour un medaillon (01/09) : les vingt-quatre se
+// gagnent, pas un ne se vend. possederMedaillon reste la seule porte, et elle
+// n est ouverte que par un deblocage.
 
 // ---------- Cosmetiques choisis (meme mecanisme de stockage hybride que les stats) ----------
 // Un seul objet pour toute la famille : le jour ou s'ajoutent les dos de cartes et les
@@ -5766,17 +5818,24 @@ const APP_STYLES = `
         }
         .choix-medaillon.choisi .choix-medaillon-etat { color: var(--gold-bright); }
         .choix-medaillon:not(:disabled):active { transform: scale(0.94); }
-        /* Le medaillon au rayon et dans sa fenetre d achat : le meme sceau
-           rond, deux tailles. La carte du rayon garde le gabarit des autres. */
-        .boutique-medaillon {
-          width: 96px; height: 96px; border-radius: 50%; object-fit: cover; display: block;
-          border: 2px solid rgba(203,164,86,0.35); box-sizing: border-box;
-          background-color: #14101d;
-        }
-        .achat-medaillon {
+        /* Le panneau d un succes encore a gagner (01/09) : son sceau en grand,
+           sa condition en toutes lettres, et sa progression quand elle se
+           compte. Rien ne s y achete -- il n y a pas de bouton d acquisition,
+           seulement de quoi savoir quoi faire. */
+        .succes-medaillon {
           width: 128px; height: 128px; border-radius: 50%; object-fit: cover; display: block;
-          margin: 0 auto; border: 2px solid var(--gold); box-sizing: border-box;
+          margin: 0 auto; border: 2px solid rgba(203,164,86,0.4); box-sizing: border-box;
           background-color: #14101d;
+          filter: grayscale(0.5) brightness(0.88);
+        }
+        .succes-obtention {
+          font-size: 12.5px; line-height: 1.45; color: var(--bone);
+          text-align: center; margin: 10px 0 0;
+        }
+        .succes-progression {
+          font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700;
+          color: var(--gold-bright); text-align: center; margin-top: 8px;
+          font-variant-numeric: tabular-nums;
         }
         /* L avatar du profil se touche pour en changer : c est un bouton, il
            faut donc lui reprendre les habitudes du navigateur. */
@@ -12897,7 +12956,30 @@ export default function Emprise() {
   // L'achat de banniere en cours (l'article du catalogue), et le panneau de
   // choix parmi les possedees ouvert depuis le profil.
   const [achatBanniere, setAchatBanniere] = useState(null);
-  const [achatMedaillon, setAchatMedaillon] = useState(null); // l achat d un avatar (03/09)
+  const [medaillonRegarde, setMedaillonRegarde] = useState(null); // le succes qu on regarde sans l avoir (01/09)
+  // La progression d un medaillon, quand elle se compte. Elle LIT les stats,
+  // elle n ecrit rien : les compteurs sont nourris en fin de partie, ici on ne
+  // fait que les montrer. Rend null quand il n y a rien a chiffrer -- la Mort
+  // Subite se gagne ou ne se gagne pas, elle ne se compte pas.
+  const progressionMedaillon = (md) => {
+    if (!md) return null;
+    if (md.source === "ordre") {
+      const r = medaillonRang();
+      return `Parties : ${Math.min(maitriseOrdre(stats, md.ordre).parties, r.min)}/${r.min}`;
+    }
+    if (md.source === "arene") {
+      const l = LEAGUES.find((x) => x.name === md.ligue);
+      return l ? `Trophées : ${Math.min(stats.trophies || 0, l.min)}/${l.min}` : null;
+    }
+    if (md.compteur === "resonances") return `Résonances : ${Math.min(stats.resonancesTotal || 0, md.seuil)}/${md.seuil}`;
+    if (md.compteur === "ondes") return `Ondes : ${Math.min(stats.ondesTotal || 0, md.seuil)}/${md.seuil}`;
+    if (md.compteur === "ordresVaincus") {
+      const dispo = ORDERS.filter((o) => isOrderAvailable(o));
+      const faits = dispo.filter((o) => ((stats.orderWins || {})[o.key] || 0) > 0).length;
+      return `Ordres vaincus : ${faits}/${dispo.length}`;
+    }
+    return null;
+  };
   const [selectionBanniere, setSelectionBanniere] = useState(false);
   const [selectionMedaillon, setSelectionMedaillon] = useState(false); // le choix de l avatar (03/09)
   // Un seul choix de depart EN VOL : le meme patron que siegeEnCoursRef des
@@ -14030,7 +14112,14 @@ export default function Emprise() {
         partieEcourtee,
         // L uid adverse d une partie d appariement : la rencontre du jour se
         // compte, declassee comprise.
-        partieClassee && adversaireUid ? adversaireUid : null
+        partieClassee && adversaireUid ? adversaireUid : null,
+        // Ce que la partie a produit, pour les medaillons de succes (01/09) :
+        // le releve des quetes comptait deja Resonances et Ondes coup par coup,
+        // on ne fait que le lui emprunter. mortSubiteRonde dit si la partie est
+        // passee par la Mort Subite.
+        { resonances: quetesReleveRef.current.resonances,
+          ondes: quetesReleveRef.current.ondes,
+          mortSubite: mortSubiteRonde > 0 }
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
@@ -18022,37 +18111,9 @@ export default function Emprise() {
                     })}
                   </div>
 
-                  {/* Le rayon des medaillons (03/09), apres les bannieres et au
-                      meme gabarit. SEULS les cinq de la source pieces y sont :
-                      ceux d Ordre se gagnent a la maitrise, ceux d arene en
-                      atteignant la ligue, et les trois du depart sont offerts --
-                      aucun ne s achete, c est ce qui leur donne leur valeur. */}
-                  <h2 className="boutique-titre second">Médaillons</h2>
-                  <p className="boutique-sous">L&apos;avatar qui vous représente, partout où l&apos;on vous voit.</p>
-                  <div className="boutique-grille">
-                    {MEDAILLONS.filter((x) => x.source === "pieces").map((md) => {
-                      const possede = bourse.possessions.medaillons.includes(md.cle);
-                      const equipe = bourse.medaillonEquipe === md.cle;
-                      return (
-                        <button
-                          key={md.cle}
-                          className={`boutique-carte ${equipe ? "choisi" : ""}`}
-                          onClick={() => possede
-                            ? equiperMedaillon(md.cle).then(setBourse)
-                            : setAchatMedaillon(md)}
-                          aria-pressed={equipe}
-                          aria-label={`Médaillon ${md.nom}.${equipe ? " Équipé." : possede ? " Possédé." : ` ${md.prix} pièces.`}`}
-                        >
-                          <img className="boutique-medaillon" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" loading="lazy" />
-                          <span className="boutique-nom">{md.nom}</span>
-                          {equipe || possede
-                            ? <span className="boutique-etat">{equipe ? "Équipé" : "Possédé"}</span>
-                            : <span className="boutique-prix"><span className="piece-icone" aria-hidden="true" />{md.prix}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-
+                  {/* Le rayon des medaillons a vecu (01/09) : ils ne s achetent
+                      plus, ils se gagnent. Chacun a sa condition, et le panneau
+                      de choix la dit. Rien ne les vend nulle part. */}
                   <h2 className="boutique-titre second">Gemmes</h2>
                   <p className="boutique-sous">La monnaie des étals, taillée dans l&apos;améthyste.</p>
                   <div className="boutique-grille">
@@ -18979,12 +19040,17 @@ export default function Emprise() {
                   {MEDAILLONS.map((md) => {
                     const acquis = bourse.possessions.medaillons.includes(md.cle);
                     const equipe = bourse.medaillonEquipe === md.cle;
+                    // Un verrouille se touche aussi (01/09) : il n equipe rien,
+                    // il DIT ce qu il faut faire, et la progression quand elle
+                    // se compte.
                     return (
-                      <button key={md.cle} type="button" disabled={!acquis}
+                      <button key={md.cle} type="button"
                               className={`choix-medaillon ${equipe ? "choisi" : ""} ${acquis ? "" : "verrouille"}`}
                               aria-pressed={equipe}
-                              aria-label={acquis ? `${md.nom}${equipe ? ", équipé" : ""}` : `${md.nom}, verrouillé : ${conditionMedaillon(md)}`}
-                              onClick={() => equiperMedaillon(md.cle).then((b) => { setBourse(b); setSelectionMedaillon(false); })}>
+                              aria-label={acquis ? `${md.nom}${equipe ? ", équipé" : ""}` : `${md.nom}, à gagner : ${obtentionMedaillon(md)}`}
+                              onClick={() => acquis
+                                ? equiperMedaillon(md.cle).then((b) => { setBourse(b); setSelectionMedaillon(false); })
+                                : setMedaillonRegarde(md)}>
                         <img className="choix-medaillon-image" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" loading="lazy" />
                         <span className="choix-medaillon-nom">{md.nom}</span>
                         <span className="choix-medaillon-etat">
@@ -21448,25 +21514,20 @@ export default function Emprise() {
         );
       })()}
 
-      {/* L'achat d'un medaillon (03/09) : le meme panneau que la banniere en
-          pieces. Acquis, il s'equipe dans la foulee, comme tous les
-          cosmetiques -- on achete un avatar pour le porter. */}
-      {achatMedaillon && (() => {
-        const md = achatMedaillon;
+      {/* Le succes qu on n a pas encore (01/09) : son sceau eteint, ce qu il
+          faut faire en toutes lettres, et le compte quand il se compte. Aucun
+          bouton d acquisition -- il n y a rien a acheter, seulement a jouer. */}
+      {medaillonRegarde && (() => {
+        const md = medaillonRegarde;
+        const avance = progressionMedaillon(md);
         return (
-          <div className="info-overlay" onClick={() => setAchatMedaillon(null)}>
+          <div className="info-overlay" onClick={() => setMedaillonRegarde(null)}>
             <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
               <div className="info-panel-title">{md.nom}</div>
-              <img className="achat-medaillon" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" />
-              <div className="achat-prix"><span className="piece-icone" aria-hidden="true" />{md.prix}<span className="lecteur-seul"> pièces</span></div>
-              {bourse.pieces < md.prix && <div className="achat-solde">Il vous manque {md.prix - bourse.pieces} pièces.</div>}
-              <button className="reset-btn" disabled={bourse.pieces < md.prix}
-                      onClick={() => acheterMedaillonPieces(md.cle).then(({ bourse: b, fait }) => {
-                        setBourse(b);
-                        if (fait) equiperMedaillon(md.cle).then(setBourse);
-                        setAchatMedaillon(null);
-                      })}>Acquérir</button>
-              <button className="landing-link" onClick={() => setAchatMedaillon(null)}>Fermer</button>
+              <img className="succes-medaillon" src={imageMedaillon(md.cle)} alt="" aria-hidden="true" width="256" height="256" />
+              <p className="succes-obtention">{obtentionMedaillon(md)}</p>
+              {avance && <div className="succes-progression">{avance}</div>}
+              <button className="reset-btn" onClick={() => setMedaillonRegarde(null)}>Fermer</button>
             </div>
           </div>
         );

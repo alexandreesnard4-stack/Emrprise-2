@@ -67,7 +67,7 @@ const A_EXPOSER = ["ORDERS", "ROWS", "COLS", "CELLS", "setBoardSize", "makeHand"
   // Les medaillons (03/09) : le catalogue et ses trois lectures s eprouvent
   // dans la vraie portee du module, la ou ORDERS et MAITRISE_RANGS existent.
   "MEDAILLONS", "MEDAILLON_REPLI", "medaillonDeCle", "imageMedaillon",
-  "conditionMedaillon", "medaillonRang", "MAITRISE_RANGS"];
+  "conditionMedaillon", "obtentionMedaillon", "medaillonRang", "MAITRISE_RANGS"];
 const dispo = A_EXPOSER.filter((n) => new RegExp("(function|const|let|var)\\s+" + n + "\\b").test(compile));
 const moteur = new Function("require", "module", "exports",
   compile + "\nreturn {" + dispo.join(", ") + "};")(requireStub, module_, module_.exports);
