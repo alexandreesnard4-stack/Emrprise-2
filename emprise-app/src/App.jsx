@@ -6421,12 +6421,14 @@ const APP_STYLES = `
         }
         .heraut-etat { font-size: 10.5px; color: var(--muted); }
         .heraut-etat.verrouille { font-style: italic; }
-        /* Pas encore gagne : le cadre s eteint, sans jamais disparaitre -- on
-           doit voir ce qu il y a a gagner, et le lire. A 0,75 de gris et 0,7 de
-           lumiere il ne restait plus rien de la lave ni du vert des Archers :
-           mesure a l ecran, 0,5 et 0,88 eteignent sans effacer. Aucune
-           animation, c est un etat. */
-        .heraut-carte:not(.acquis) .heraut-cadre { filter: grayscale(0.5) brightness(0.88); }
+        /* Le cadre d un Heraut pas encore gagne ne s eteint plus (01/09).
+           Il portait grayscale(0.5) brightness(0.88) pour dire l etat ; le
+           Commandant le lisait comme un defaut d affichage, et il avait
+           raison -- la gravure et la lave y perdaient pour rien.
+           L information n est pas perdue : elle n a jamais tenu a la couleur.
+           Elle est ecrite en toutes lettres sous le cadre, "Acquis" ou le
+           chapitre a terminer, et .heraut-etat.verrouille l ecrit en italique.
+           C est la regle de la maison : jamais une couleur seule. */
         .heraut-carte.acquis .heraut-etat { color: var(--gold-bright); }
         /* L apercu du panneau d achat (01/09). La dalle prend la largeur du
            panneau moins ses marges, et sa hauteur se deduit du rapport des
@@ -11890,7 +11892,17 @@ const APP_STYLES = `
         .diff-miroirs .diff-illustration {
           position: absolute; inset: 0; width: 100%; height: 100%;
           object-fit: cover; object-position: 50% 22%;
-          opacity: 0.62; pointer-events: none;
+          /* Pleine lumiere (01/09). Le portrait etait voile a 0,62 : c est le
+             SEUL assombrissement de cet ecran, et il portait sur les quatre
+             glaces a l identique. Aucune carte n a jamais eu de regle a elle.
+             Ce que le Commandant voyait -- Novice lumineuse, les trois autres
+             sombres -- vient des toiles : mesure a l ecran, les Gardiens
+             tombent a 29,7 de luminance moyenne quand l Eveil monte a 65,4.
+             Le voile leve, les quatre gagnent en lumiere ensemble ; l ecart
+             entre les peintures, lui, reste celui des peintures.
+             Le masque en fondu reste : c est LUI qui assoit le texte, pas
+             l opacite. */
+          opacity: 1; pointer-events: none;
           -webkit-mask-image: linear-gradient(180deg, #000 0, #000 46%, transparent 86%);
           mask-image: linear-gradient(180deg, #000 0, #000 46%, transparent 86%);
         }
