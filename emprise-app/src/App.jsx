@@ -12357,6 +12357,21 @@ const APP_STYLES = `
         .tb-coupe {
           display: block; width: 20px; height: 20px; margin: 2px auto 3px;
         }
+        /* La coupe du tournoi EN LIGNE (01/09), une image a fond transparent.
+           Le SVG de 20 px reste au tournoi solo : .tb-coupe n est pas touchee.
+           La hauteur est en coordonnees d arbre -- l arbre entier porte un
+           transform: scale, donc la coupe suit l echelle du plateau comme les
+           plaques et les liens. A 390 de large, l echelle mesuree donne une
+           coupe d une centaine de pixels a l ecran.
+           left/translateX : elle est plus large que le conteneur de 60 px qui
+           marque le milieu de l arbre. Sans cela, un bloc trop large ne se
+           centre pas, il deborde vers la droite. C est un placement, pas une
+           animation -- rien ici ne bouge. */
+        .tb-coupe-image {
+          display: block; height: 124px; width: auto;
+          margin: 0 auto 2px;
+          position: relative; left: 50%; transform: translateX(-50%);
+        }
         .tb-trophee-nom {
           font-family: 'Cinzel', serif; font-size: 8.5px; letter-spacing: 0.16em;
           text-transform: uppercase; color: var(--gold); margin-top: 1px;
@@ -20539,19 +20554,22 @@ export default function Emprise() {
                 }}
               >
                 <div className="tb-trophee" style={{ left: centerX - 30, width: 60 }}>
-                  <svg className="tb-coupe" viewBox="0 0 24 24" aria-hidden="true">
-                    <defs>
-                      <linearGradient id="tb-or-online" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#f2dda2" />
-                        <stop offset="45%" stopColor="#e8c877" />
-                        <stop offset="100%" stopColor="#b8944a" />
-                      </linearGradient>
-                    </defs>
-                    <path fill="url(#tb-or-online)" d="M8 4 H16 V10.5 C16 12.5 14.2 14 12 14 C9.8 14 8 12.5 8 10.5 Z" />
-                    <path fill="url(#tb-or-online)" d="M11 14 H13 V17 H15.5 V19 H8.5 V17 H11 Z" />
-                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M8 5.5 C5.5 5.5 4.5 7 5.2 9 C5.8 10.6 7.2 11.2 8 11" />
-                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M16 5.5 C18.5 5.5 19.5 7 18.8 9 C18.2 10.6 16.8 11.2 16 11" />
-                  </svg>
+                  {/* La coupe dessinee (01/09) : elle etait un SVG de 20 px,
+                      un pictogramme. Ici elle devient l objet du tournoi, et
+                      c est ce qu on vient chercher dans ce salon.
+                      width/height HTML au rapport du fichier : la place est
+                      reservee avant le chargement, la ligne "Champion" ne
+                      saute pas quand l image arrive.
+                      Elle deborde son conteneur de 60 px et se recentre en
+                      transform : le conteneur donne le milieu de l arbre, la
+                      coupe s y accroche sans que la geometrie change. */}
+                  <img
+                    className="tb-coupe-image"
+                    src="/icones/coupe-tournoi.webp"
+                    alt="Coupe du tournoi"
+                    width="535"
+                    height="640"
+                  />
                   <div className="tb-trophee-nom">Champion</div>
                 </div>
                 <div
