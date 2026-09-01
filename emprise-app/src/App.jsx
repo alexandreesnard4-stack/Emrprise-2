@@ -12354,11 +12354,10 @@ const APP_STYLES = `
         .tb-trophee {
           position: absolute; top: 0; text-align: center; color: var(--gold-bright); z-index: 2;
         }
-        .tb-coupe {
-          display: block; width: 20px; height: 20px; margin: 2px auto 3px;
-        }
-        /* La coupe du tournoi EN LIGNE (01/09), une image a fond transparent.
-           Le SVG de 20 px reste au tournoi solo : .tb-coupe n est pas touchee.
+        /* La coupe des DEUX tournois (01/09), une image a fond transparent.
+           Le pictogramme SVG de 20 px qu elle remplace a disparu des deux
+           arbres, et sa regle .tb-coupe avec lui : plus personne ne s en
+           servait.
            La hauteur est en coordonnees d arbre -- l arbre entier porte un
            transform: scale, donc la coupe suit l echelle du plateau comme les
            plaques et les liens. A 390 de large, l echelle mesuree donne une
@@ -20707,24 +20706,19 @@ export default function Emprise() {
                 }}
               >
                 <div className="tb-trophee" style={{ left: centerX - 30, width: 60 }}>
-                  {/* Coupe simplifiee a l'extreme : une vasque et un pied en silhouette
-                      pleine, deux anses en trait fin, rien d'autre. Une coupe avec des
-                      reliefs ou des anses pleines redevenait un griffonnage a cette
-                      taille ; ramenee a 2 formes + 2 traits, elle se lit aussi vite que
-                      le losange qu'elle remplace. */}
-                  <svg className="tb-coupe" viewBox="0 0 24 24" aria-hidden="true">
-                    <defs>
-                      <linearGradient id="tb-or" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#f2dda2" />
-                        <stop offset="45%" stopColor="#e8c877" />
-                        <stop offset="100%" stopColor="#b8944a" />
-                      </linearGradient>
-                    </defs>
-                    <path fill="url(#tb-or)" d="M8 4 H16 V10.5 C16 12.5 14.2 14 12 14 C9.8 14 8 12.5 8 10.5 Z" />
-                    <path fill="url(#tb-or)" d="M11 14 H13 V17 H15.5 V19 H8.5 V17 H11 Z" />
-                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M8 5.5 C5.5 5.5 4.5 7 5.2 9 C5.8 10.6 7.2 11.2 8 11" />
-                    <path fill="none" stroke="#e8c877" strokeWidth="1.6" strokeLinecap="round" d="M16 5.5 C18.5 5.5 19.5 7 18.8 9 C18.2 10.6 16.8 11.2 16 11" />
-                  </svg>
+                  {/* La meme coupe qu au tournoi en ligne (01/09). Les deux
+                      arbres ont la meme geometrie et le meme trophee au bout :
+                      les laisser avec deux images differentes n avait plus de
+                      raison des que celle-ci a existe. Le pictogramme SVG de
+                      20 px qui vivait ici a donc disparu, et .tb-coupe avec
+                      lui -- plus personne ne s en servait. */}
+                  <img
+                    className="tb-coupe-image"
+                    src="/icones/coupe-tournoi.webp"
+                    alt="Coupe du tournoi"
+                    width="535"
+                    height="640"
+                  />
                   <div className="tb-trophee-nom">Champion</div>
                 </div>
                 {/* Cadre d'arene autour du duel central : le point d'orgue de l'ecran. */}
