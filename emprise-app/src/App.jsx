@@ -1731,6 +1731,17 @@ const HEROES = [
 ];
 function isHeroUnlocked(hero, trophies) { return hero.unlockAt != null && trophies >= hero.unlockAt; }
 
+// L ordre d affichage du rayon de la boutique, demandé par le Commandant. Il
+// ne touche pas à HEROES, qui sert aussi la cérémonie de déblocage et les
+// paliers de trophées : réordonner la source aurait déplacé ces deux-là aussi.
+const HERAUTS_RAYON = ["cendres", "percee", "portee", "maudits", "poison", "guardian", "scribes", "devoreuse"];
+function herautsDuRayon() {
+  const ranges = HERAUTS_RAYON.map((k) => HEROES.find((h) => h.orderKey === k)).filter(Boolean);
+  // Un Héraut ajouté plus tard sans être rangé ici ne disparaît pas du rayon :
+  // il se pose à la fin plutôt que de manquer sans que personne le voie.
+  return ranges.concat(HEROES.filter((h) => !HERAUTS_RAYON.includes(h.orderKey)));
+}
+
 // Étincelles de la cérémonie de déblocage d'un Héraut : positions et minutages calculés
 // une fois pour toutes plutôt qu'au hasard à chaque rendu — sinon elles se replaceraient
 // à chaque re-rendu de React et l'effet sauterait.
@@ -6354,26 +6365,42 @@ const APP_STYLES = `
         .herauts-galerie { display: flex; flex-direction: column; gap: 12px; width: 100%; }
         .heraut-carte { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
         .heraut-cadre {
-          position: relative; width: 100%; aspect-ratio: 1024 / 585;
+          position: relative; width: 100%; aspect-ratio: 960 / 505;
           background-size: cover; background-position: center; background-repeat: no-repeat;
           border-radius: 8px;
         }
-        /* Le texte reste DANS l ouverture du cadre : 13 % de retrait de chaque
-           cote, mesure sur les images, pour qu il ne morde jamais l ornement. */
+        /* L ouverture du cadre grave. Les huit images ont ete recadrees a la
+           meme taille, sans marge noire autour de la pierre : la fenetre est
+           donc LA MEME pour les huit -- 12 % de retrait a gauche et a droite,
+           18 % en haut et en bas. Le portrait de l Ordre tient la gauche, le
+           texte la droite. */
         .heraut-dedans {
-          position: absolute; inset: 13% 13%;
+          position: absolute; top: 18%; bottom: 18%; left: 12%; right: 12%;
+          display: flex; align-items: stretch; gap: 9px;
+        }
+        /* center top : c est ce cadrage qui pose le visage au bon endroit pour
+           les onze portraits, quelle que soit leur hauteur. */
+        .heraut-portrait {
+          width: 38%; flex: none; border-radius: 4px;
+          background-size: cover; background-position: center top; background-repeat: no-repeat;
+        }
+        .heraut-texte {
+          flex: 1; min-width: 0;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           gap: 4px; text-align: center;
-          /* Un voile sombre au centre de l ouverture : les cadres sont textures
-             (pierre fendue, lave, ecorce) et le texte s y perdait. Le degrade
-             s eteint avant le bord, l ornement reste intact. */
-          background: radial-gradient(ellipse 62% 58% at 50% 50%, rgba(8,6,14,0.72) 0%, rgba(8,6,14,0) 78%);
         }
+        /* La pierre gravee est claire par endroits. L ombre portee tient lieu
+           de fond sous les lettres, sans poser de voile sur l ornement --
+           c est ce que faisait l ancien degrade, qui ternissait la gravure. */
         .heraut-nom {
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
           color: var(--gold-bright); letter-spacing: 0.04em;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85);
         }
-        .heraut-effet { font-size: 10.5px; line-height: 1.35; color: var(--bone); }
+        .heraut-effet {
+          font-size: 10.5px; line-height: 1.35; color: var(--bone);
+          text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85);
+        }
         .heraut-etat { font-size: 10.5px; color: var(--muted); }
         .heraut-etat.verrouille { font-style: italic; }
         /* Pas encore gagne : le cadre s eteint, sans jamais disparaitre -- on
@@ -18160,7 +18187,7 @@ export default function Emprise() {
                   <p className="boutique-sous">La capacité supérieure d&apos;un Ordre, gagnée en terminant son chapitre.</p>
                   <p className="boutique-mention">Les Hérauts se jouent contre l&apos;Écho et en défi entre amis, jamais en Classé ni en tournoi. En défi, les deux camps en bénéficient.</p>
                   <div className="herauts-galerie">
-                    {HEROES.map((h) => {
+                    {herautsDuRayon().map((h) => {
                       const order = ORDERS.find((o) => o.key === h.orderKey);
                       if (!order) return null;
                       const acquis = storyProgress.completedChapters.includes(h.orderKey);
@@ -18168,8 +18195,11 @@ export default function Emprise() {
                         <div key={h.orderKey} className={`heraut-carte ${acquis ? "acquis" : ""}`}>
                           <div className="heraut-cadre" style={{ backgroundImage: `url("/herauts/${h.orderKey}.webp")` }}>
                             <div className="heraut-dedans">
-                              <span className="heraut-nom">{h.name}</span>
-                              <span className="heraut-effet">{h.desc}</span>
+                              <div className="heraut-portrait" style={{ backgroundImage: `url("${order.portrait}")` }} aria-hidden="true" />
+                              <div className="heraut-texte">
+                                <span className="heraut-nom">{h.name}</span>
+                                <span className="heraut-effet">{h.desc}</span>
+                              </div>
                             </div>
                           </div>
                           <span className={`heraut-etat ${acquis ? "" : "verrouille"}`}>
