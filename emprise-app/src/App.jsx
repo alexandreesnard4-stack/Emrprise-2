@@ -3351,6 +3351,38 @@ const BOUTIQUE_JOURS = 8;
 function jourAbsoluBoutique(maintenant) {
   return Math.floor(((maintenant == null ? Date.now() : maintenant) - BOUTIQUE_REFERENCE) / 86400000);
 }
+// ---------- L outil de test de la rotation (01/09) ----------
+// Verifier les huit journees demandait d attendre huit jours. Un decalage en
+// jours s ajoute donc a l index de rotation -- a LUI SEUL. Le vrai jour, lui,
+// ne bouge pas : les quetes, la Flamme, les tournois et le minuteur de la
+// boutique continuent de lire jourAbsoluBoutique sans rien savoir de tout ceci.
+// L outil n existe que si l URL le demande. Sans le drapeau, decalerBoutique
+// refuse net et le decalage reste a zero quoi qu il arrive : un joueur ne peut
+// pas tomber dessus, ni par hasard ni en cherchant.
+// Il vit en memoire et nulle part ailleurs -- rien en base, rien dans la
+// sauvegarde, rien dans le stockage local. Recharger sans le drapeau rend la
+// boutique au vrai jour, sans avoir rien laisse derriere.
+const TEST_ROTATION = typeof window !== "undefined"
+  && new URLSearchParams(window.location.search).get("test-rotation") === "1";
+let decalageBoutique = 0;
+function decalerBoutique(jours) {
+  if (!TEST_ROTATION) return 0;
+  // Ramene dans 0..7 : au huitieme clic on revient au jour de depart, sans
+  // qu un compteur ne file a l infini.
+  decalageBoutique = ((jours % BOUTIQUE_JOURS) + BOUTIQUE_JOURS) % BOUTIQUE_JOURS;
+  return decalageBoutique;
+}
+// L index que LISENT les rayons. Vrai jour plus decalage, et le decalage vaut
+// zero pour tout le monde sauf derriere le drapeau.
+function jourBoutiqueAffiche() {
+  return jourAbsoluBoutique() + decalageBoutique;
+}
+// Le rang 0..7 de la journee montree, pour que le panneau puisse le DIRE. Les
+// rayons gardent leur propre calcul : on ne touche pas a la rotation.
+function jourDuCycleBoutique() {
+  const j = jourBoutiqueAffiche();
+  return ((j % BOUTIQUE_JOURS) + BOUTIQUE_JOURS) % BOUTIQUE_JOURS;
+}
 // mulberry32, ecrit a la main : aucune dependance, et le meme flux de nombres
 // sur tous les appareils pour une graine donnee.
 function graineBoutique(n) {
@@ -3425,7 +3457,7 @@ function tranchesBoutique(familleIndex, numeroCycle) {
 // ne bascule pas, et il n a rien a faire dans une boucle de rendu.
 let selectionMemo = { jour: null, valeur: null };
 function selectionBoutique(jourAbsolu) {
-  const jour = jourAbsolu == null ? jourAbsoluBoutique() : jourAbsolu;
+  const jour = jourAbsolu == null ? jourBoutiqueAffiche() : jourAbsolu;
   if (selectionMemo.jour === jour) return selectionMemo.valeur;
   const numeroCycle = Math.floor(jour / BOUTIQUE_JOURS);
   // Le modulo double protege d une horloge reglee avant la date de reference.
@@ -3451,7 +3483,7 @@ function enRotation(cle) {
 function herautDuJour(jourAbsolu) {
   const liste = herautsDuRayon();
   if (!liste.length) return null;
-  const jour = jourAbsolu == null ? jourAbsoluBoutique() : jourAbsolu;
+  const jour = jourAbsolu == null ? jourBoutiqueAffiche() : jourAbsolu;
   // Le modulo double protege d une horloge reglee avant la date de reference,
   // exactement comme jourDuCycle dans selectionBoutique.
   const jourDuCycle = ((jour % BOUTIQUE_JOURS) + BOUTIQUE_JOURS) % BOUTIQUE_JOURS;
@@ -6376,6 +6408,34 @@ const APP_STYLES = `
           color: var(--muted); text-align: center; margin: 0 0 8px;
           font-variant-numeric: tabular-nums;
         }
+        /* L outil de test de la rotation (01/09). Il n apparait que derriere
+           ?test-rotation=1 -- aucun joueur ne le rencontre. Volontairement
+           sobre : ce n est pas un element de jeu, c est un instrument.
+           Pose au-dessus de la barre du bas (68 px d onglet plus 17 de
+           marges) pour ne rien cacher de l etal, et a gauche pour ne pas
+           tomber sous le pouce qui fait defiler. */
+        .test-rotation {
+          position: fixed; z-index: 60;
+          left: 10px; bottom: calc(93px + env(safe-area-inset-bottom, 0px));
+          display: flex; align-items: center; gap: 8px;
+          padding: 6px 9px; border-radius: 9px;
+          background: rgba(10,8,15,0.93);
+          border: 1px solid rgba(203,164,86,0.45);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+          font-size: 11px; color: var(--bone);
+        }
+        .test-rotation-jour {
+          font-family: 'Cinzel', serif; letter-spacing: 0.04em;
+          color: var(--gold-bright); font-variant-numeric: tabular-nums;
+        }
+        .test-rotation button {
+          font: inherit; font-size: 11px; color: var(--bone);
+          background: rgba(52,40,74,0.75);
+          border: 1px solid rgba(203,164,86,0.3);
+          border-radius: 7px; padding: 4px 8px; cursor: pointer;
+        }
+        /* La pression seule, en transform : rien d autre ne s anime ici. */
+        .test-rotation button:active { transform: scale(0.96); }
         .boutique-mention {
           font-size: 10.5px; line-height: 1.4; color: var(--muted);
           margin: 0 0 8px; text-align: center; max-width: 380px;
@@ -13496,6 +13556,21 @@ export default function Emprise() {
     const t = setInterval(() => setResteRotation(resteAvantRotation()), 60000);
     return () => clearInterval(t);
   }, [hubPage]);
+  // L outil de test de la rotation (01/09). Le decalage vit dans le module,
+  // c est lui que lisent les rayons ; cet etat ne sert qu a redemander un
+  // rendu apres l avoir change. Sans ?test-rotation=1, decalerBoutique rend
+  // toujours zero : le compteur ne bouge pas et rien ne s affiche.
+  // Le "+1" se compte sur le decalage du MODULE, jamais sur cet etat : un
+  // remontage du composant remet l etat a zero sans toucher au module, et le
+  // bouton aurait alors saute en arriere. Une seule source, celle que les
+  // rayons lisent.
+  // Un simple compteur de rendus : sa valeur ne veut rien dire, elle change
+  // seulement pour que React redessine. Si l etat portait le decalage, un
+  // "Reel" alors qu il vaut deja zero ne changerait rien et React ne
+  // redessinerait pas -- l etal resterait sur l ancien jour.
+  const [, redessiner] = useState(0);
+  const avancerJourTest = () => { decalerBoutique(decalageBoutique + 1); redessiner((n) => n + 1); };
+  const rendreJourReel = () => { decalerBoutique(0); redessiner((n) => n + 1); };
   const [historique, setHistorique] = useState(() => lireHistorique());
   // Le cadenas de l'arene : refus au toucher, et ceremonie d'ouverture.
   const [cadenasRefuse, setCadenasRefuse] = useState(null);   // { nom, n } de la ligue qui tremble
@@ -18192,6 +18267,17 @@ export default function Emprise() {
                     (pointer-events none). width/height HTML : la place est
                     reservee d avance, aucun saut de mise en page. */}
                 <img className="boutique-auvent" src="/boutique/auvent.webp" alt="" aria-hidden="true" width="1472" height="280" />
+                {/* L outil de test de la rotation (01/09) : visible seulement
+                    derriere ?test-rotation=1, et seulement sur la boutique --
+                    c est le seul ecran qu il fait bouger. Il n ecrit nulle
+                    part : le decalage vit en memoire et meurt avec l onglet. */}
+                {TEST_ROTATION && (
+                  <div className="test-rotation" role="group" aria-label="Test de la rotation">
+                    <span className="test-rotation-jour">Jour {jourDuCycleBoutique() + 1}/{BOUTIQUE_JOURS}</span>
+                    <button type="button" onClick={avancerJourTest}>+1 jour</button>
+                    <button type="button" onClick={rendreJourReel}>Réel</button>
+                  </div>
+                )}
                 <div className="boutique-page">
                   {/* Le minuteur de la rotation (01/09), en tete d etal : il se
                       calcule sur le prochain 00:00 UTC et se rafraichit a la
