@@ -6383,6 +6383,30 @@ const APP_STYLES = `
            animation, c est un etat. */
         .heraut-carte:not(.acquis) .heraut-cadre { filter: grayscale(0.5) brightness(0.88); }
         .heraut-carte.acquis .heraut-etat { color: var(--gold-bright); }
+        /* L apercu du panneau d achat (01/09). La dalle prend la largeur du
+           panneau moins ses marges, et sa hauteur se deduit du rapport des
+           cases : rien n est fige en pixels, elle suit l ecran. Le nombre de
+           colonnes vient des constantes du jeu, pose en style, pas ici. */
+        .achat-plateau {
+          display: grid; gap: 4px;
+          width: 100%; padding: 8px; border-radius: 10px; box-sizing: border-box;
+          margin: 2px 0 6px;
+          background: var(--plateau-dalle);
+          border: 1px solid var(--plateau-bord);
+          box-shadow: inset 0 1px 0 var(--plateau-lueur), inset 0 0 16px rgba(0,0,0,0.45);
+        }
+        .achat-plateau-case {
+          aspect-ratio: 3 / 4; border-radius: 4px;
+          background: var(--plateau-case);
+          border: 1px solid var(--plateau-case-bord);
+        }
+        .achat-dos {
+          display: block; width: 160px; aspect-ratio: 3 / 4;
+          margin: 4px auto 8px; border-radius: 9px; box-sizing: border-box;
+          background: var(--dos-fond);
+          border: 1px solid var(--dos-bord);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.55);
+        }
         .boutique-dos-pile {
           position: relative; width: 100%; aspect-ratio: 3 / 4;
           display: block; margin-bottom: 2px;
@@ -21714,6 +21738,27 @@ export default function Emprise() {
           <div className="info-overlay" onClick={() => setAchatEnCours(null)}>
             <div className="info-panel achat-panneau" onClick={(e) => e.stopPropagation()}>
               <div className="info-panel-title">Acquérir {achatEnCours.nom}</div>
+              {/* L apercu avant de payer (01/09). La dalle prend la geometrie
+                  REELLE du plateau de jeu, tiree des constantes : la vignette du
+                  rayon n en montre que six cases, raccourci qui n a pas sa place
+                  au moment de payer. Le dos, lui, prend la proportion d une
+                  carte, et sa matiere vient de variablesDos comme la vignette --
+                  les dos illustres portent leur image dans --dos-fond, ils s
+                  affichent donc sans un cas particulier de plus. */}
+              {achatEnCours.famille === "plateau" && (
+                <span
+                  className="achat-plateau"
+                  style={{ ...variablesPlateau(achatEnCours.cle), gridTemplateColumns: `repeat(${STANDARD_COLS}, 1fr)` }}
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: STANDARD_ROWS * STANDARD_COLS }, (_, i) => (
+                    <span key={i} className="achat-plateau-case" />
+                  ))}
+                </span>
+              )}
+              {achatEnCours.famille === "dos" && (
+                <span className="achat-dos" style={variablesDos(achatEnCours.cle)} aria-hidden="true" />
+              )}
               <div className="achat-prix"><span className={enGemmes ? "gemme-icone" : "piece-icone"} aria-hidden="true" />{montant}<span className="lecteur-seul"> {unite}</span></div>
               {assez ? (
                 <div className="achat-solde">Solde après l&apos;acquisition : {solde - montant} {unite}</div>
