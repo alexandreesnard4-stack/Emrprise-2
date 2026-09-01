@@ -7213,11 +7213,23 @@ const APP_STYLES = `
           border: 1px solid rgba(201, 160, 240, 0.5); border-radius: 999px; padding: 2px 8px;
         }
         .conversion-pilule .gemme-icone { width: 11px; height: 11px; }
+        /* Le prix, grossi (01/09) : a 11 px il se lisait mal sur un telephone,
+           alors que c est l information qui decide de l achat. La classe est
+           partagee par tous les rayons, une seule regle les sert tous.
+           line-height a 1 et la marge du haut a zero rattrapent l essentiel de
+           la hauteur gagnee : mesure a l ecran en 390 de large, la carte passe
+           de 218 a 223 px, la ligne de prix de 12 a 19. Les grilles gardent
+           leurs colonnes (2, 2, 1, 2, 2, 3) et aucun des 62 prix ne deborde ni
+           ne passe a la ligne. */
         .boutique-prix {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; color: #c9a0f0;
-          margin-top: 2px; font-variant-numeric: tabular-nums;
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: 'Cinzel', serif; font-size: 15.5px; font-weight: 700; color: #c9a0f0;
+          line-height: 1; margin-top: 0; font-variant-numeric: tabular-nums;
         }
+        /* L icone suit le nombre, en proportion. Elle reste alignee par le
+           centre du flex, sans decalage a corriger. */
+        .boutique-prix .piece-icone,
+        .boutique-prix .gemme-icone { width: 19px; height: 19px; }
         /* ---------- La vitrine des packs ---------- */
         /* Les cartes reprennent .boutique-carte : coherence avant nouveaute. Seules les
            pieces neuves ont leur classe. La mention est un petit bandeau pose sur la
