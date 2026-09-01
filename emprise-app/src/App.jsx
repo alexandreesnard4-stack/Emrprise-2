@@ -3134,6 +3134,12 @@ const BANNIERES = [
   { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prixGemmes: 600 },
   { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prixGemmes: 600 },
   { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "pieces-cathedrale", nom: "La Cathédrale Engloutie", image: "/bannieres/pieces-cathedrale.webp", source: "pieces", prix: 2500 },
+  { cle: "pieces-trone-vide", nom: "Le Trône Vide", image: "/bannieres/pieces-trone-vide.webp", source: "pieces", prix: 2500 },
+  { cle: "prestige-dragon", nom: "Le Dragon d'Or", image: "/bannieres/prestige-dragon.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-comete", nom: "La Comète", image: "/bannieres/prestige-comete.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-portail", nom: "Le Portail Céleste", image: "/bannieres/prestige-portail.webp", source: "prestige", prixGemmes: 600 },
+  { cle: "prestige-couronne", nom: "La Couronne Brisée", image: "/bannieres/prestige-couronne.webp", source: "prestige", prixGemmes: 600 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
