@@ -2201,7 +2201,7 @@ async function loadStats() {
 // succes -- { resonances, ondes, mortSubite }. Un objet en queue plutot qu un
 // treizieme parametre positionnel : la liste est deja longue, et un champ de
 // plus s y ajoutera sans compter les virgules.
-async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false, adversaireClasse = null, releveSucces = null) {
+async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = [], compteAuProfil = false, monCamp = null, partieHistoire = false, difficulteEcho = null, ecartScore = null, mesOrdres = null, partieEcourtee = false, adversaireClasse = null, releveSucces = null, classiqueEnLigne = false) {
   const stats = await loadStats();
   stats.gamesPlayed += 1;
   if (monCamp && winner === monCamp) stats.mesVictoires = (stats.mesVictoires || 0) + 1;
@@ -2231,7 +2231,7 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
   // et abandon compris : la 5e et la 6e restent amicales jusqu a demain. Le
   // forfait d avant-match ne passe jamais par cette fonction : une partie
   // jamais jouee ne brule pas de rencontre.
-  if (adversaireClasse) await compterRencontre(adversaireClasse);
+  if (adversaireClasse) await compterRencontre(adversaireClasse, classiqueEnLigne ? "classique" : "classe");
   // ---------- L'XP de la partie ----------
   // La MEME porte que le profil (compteAuProfil et monCamp), plus l'Histoire par son
   // signal dedie : le bac a sable, le mode test, les duels locaux et le bot-contre-bot
@@ -2261,6 +2261,27 @@ async function recordGameStats(winner, orderKeys, trophyGain = 0, comboKeys = []
         : XP_PARTIES.victoireClasseBase + XP_PARTIES.victoireClasseParLigue * indexLigue;
       const base = PIECES_PARTIES.classe.baseVictoire + PIECES_PARTIES.classe.parLigue * indexLigue;
       piecesDetail = { base, marge: PIECES_PARTIES.classe.parEcart * marge, prime: 0, histoire: 0 };
+    } else if (victoire && classiqueEnLigne) {
+      // La Partie classique (01/09) : le bareme du Classe, a la moitie. Elle
+      // apparie deux humains comme lui, elle en garde donc l echelle -- mais
+      // elle ne coute ni ne rapporte un seul trophee, et son butin ne doit pas
+      // valoir celui d une partie ou l on risque son rang.
+      // La moitie se prend sur CHAQUE part, a l entier inferieur, pour que
+      // l ecran de fin garde son detail. Le plancher d une piece garantit
+      // qu une victoire ne rapporte jamais rien.
+      const indexLigue = Math.max(0, LEAGUES.indexOf(getLeague(stats.trophies)));
+      const pleinBase = PIECES_PARTIES.classe.baseVictoire + PIECES_PARTIES.classe.parLigue * indexLigue;
+      const pleinMarge = PIECES_PARTIES.classe.parEcart * marge;
+      let demiBase = Math.floor(pleinBase / 2);
+      const demiMarge = Math.floor(pleinMarge / 2);
+      if (demiBase + demiMarge < 1) demiBase = 1;
+      piecesDetail = { base: demiBase, marge: demiMarge, prime: 0, histoire: 0 };
+      // L XP suit le chemin des parties non classees, inchange : la mission ne
+      // portait que sur les pieces, et la table de l Echo est celle que toute
+      // partie sans trophee emprunte deja.
+      montant = partieEcourtee
+        ? Math.ceil(XP_PARTIES.victoireEcho.intermediaire / 2)
+        : XP_PARTIES.victoireEcho.intermediaire;
     } else if (victoire) {
       // L'Histoire est un combat de bot comme un autre : meme table, plus sa prime.
       const table = XP_PARTIES.victoireEcho;
@@ -2941,7 +2962,9 @@ async function loadRencontres() {
     if (!lu || lu.jour !== propre.jour) return propre;
     if (lu.parAdversaire && typeof lu.parAdversaire === "object") {
       for (const [uid, n] of Object.entries(lu.parAdversaire)) {
-        if (!uid || typeof uid !== "string" || uid.length > 128) continue;
+        // 132 et non 128 : la famille classique prefixe sa cle de deux
+        // caracteres, un uid a la borne d avant se serait fait jeter.
+        if (!uid || typeof uid !== "string" || uid.length > 132) continue;
         if (!Number.isFinite(n)) continue;
         propre.parAdversaire[uid] = Math.max(0, Math.min(1000, Math.floor(n)));
       }
@@ -2952,19 +2975,27 @@ async function loadRencontres() {
   }
 }
 
-// Combien de classees deja TERMINEES aujourd hui contre cet adversaire precis.
-async function rencontresContre(uid) {
+// Les deux familles appariees comptent SEPAREMENT (01/09) : trois classees et
+// trois classiques par jour contre le meme adversaire, chacune son quota. Une
+// seule table, deux espaces de cles -- la classique prefixe le sien, si bien
+// qu aucune partie ne peut consommer le quota de l autre famille.
+function cleRencontre(uid, famille) { return famille === "classique" ? "c:" + uid : uid; }
+
+// Combien de parties appariees deja TERMINEES aujourd hui contre cet
+// adversaire precis, dans CETTE famille.
+async function rencontresContre(uid, famille = "classe") {
   if (!uid) return 0;
   const r = await loadRencontres();
-  return r.parAdversaire[uid] || 0;
+  return r.parAdversaire[cleRencontre(uid, famille)] || 0;
 }
 
-// Une classee TERMINEE de plus contre cet adversaire -- declassee comprise :
-// la 5e et la 6e restent amicales jusqu a demain.
-async function compterRencontre(uid) {
+// Une partie appariee TERMINEE de plus contre cet adversaire -- declassee
+// comprise : la 5e et la 6e restent amicales jusqu a demain.
+async function compterRencontre(uid, famille = "classe") {
   if (!uid) return;
   const r = await loadRencontres();
-  r.parAdversaire[uid] = Math.min(1000, (r.parAdversaire[uid] || 0) + 1);
+  const cle = cleRencontre(uid, famille);
+  r.parAdversaire[cle] = Math.min(1000, (r.parAdversaire[cle] || 0) + 1);
   await writeRencontresRaw(JSON.stringify(r));
 }
 // Conversion, a sens unique strict : les gemmes deviennent des pieces,
@@ -13037,6 +13068,16 @@ export default function Emprise() {
   // Vrai pour une partie née de l'appariement (mode Classé) : c'est ce qui décide de
   // jouer dans l'arène de sa ligue plutôt que sur le plateau nu.
   const [partieClassee, setPartieClassee] = useState(false);
+  // La Partie classique (01/09) : appariee comme le Classe, mais sans trophees
+  // ni ligue, et AVEC les Herauts. Les deux drapeaux s'excluent -- une partie
+  // est classee OU classique, jamais les deux, et c'est ce qui garantit que
+  // les Herauts ne peuvent pas entrer en Classe.
+  const [partieClassique, setPartieClassique] = useState(false);
+  // La file ou je cherche en ce moment. Elle nomme le DOCUMENT de salon :
+  // l'ecoute, l'annulation et la liberation doivent viser le meme que la
+  // recherche, sinon un joueur classique libererait la place d'un joueur
+  // classe.
+  const [fileCourante, setFileCourante] = useState("classe");
   // Trophees des deux camps, lus depuis le document de la partie classee.
   const [trophesPartie, setTrophesPartie] = useState(null);
   const [titresPartie, setTitresPartie] = useState(null); // titres de style des deux camps
@@ -13612,6 +13653,13 @@ export default function Emprise() {
       lancer: () => chooseMode("local") },
     { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", image: "/modes/confluence2.webp",
       lancer: () => chooseConfluenceLocal() },
+    // La Partie classique (01/09) : appariee comme le Classe, mais sans
+    // trophees ni ligue, et avec les Herauts. Sa file est un AUTRE document de
+    // salon : les deux ne se melangent jamais.
+    // L'image est celle du jeu entre amis, faute d'un visuel propre : elle dit
+    // deja "a distance, contre quelqu'un", ce qui est vrai ici aussi.
+    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/modes/ami.webp",
+      lancer: () => chercherAdversaire("classique") },
     { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", image: "/modes/ami.webp",
       lancer: () => { setOnlineError(""); venuDesAmisRef.current = false; setPhase("online-menu"); } },
     { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", image: "/modes/bac.webp",
@@ -14048,8 +14096,14 @@ export default function Emprise() {
   }
   // Un Ordre affiche son encoche s'il possède un Héraut ET que son chapitre d'Histoire
   // est terminé. Dorés et Chimères n'ont pas de Héraut : jamais d'encoche pour eux.
+  // 01/09 : la Partie classique ouvre l'encoche a son tour. Le Classe, lui,
+  // reste ferme -- c'est partieClassique qui ouvre, jamais partieClassee, et
+  // les deux drapeaux s'excluent. En classique le Heraut coche part dans MA
+  // main seule : applyOrderChoice ne construit que la main de son camp, et
+  // chaque camp choisit ses Ordres sur son propre appareil. Rien a inventer,
+  // c'est deja ainsi que la main se fabrique.
   const encocheVisible = (order) =>
-    mode === "bot" &&
+    (mode === "bot" || partieClassique) &&
     HEROES.some((h) => h.orderKey === order.key) &&
     storyProgress.completedChapters.includes(order.key);
   const encocheCochee = (order) => herautsCoches.includes(order.key);
@@ -14134,7 +14188,11 @@ export default function Emprise() {
   // cotes, tarifs non classes. La regle se lit du MEME document sur les deux
   // appareils (rencontresPartie est le max des deux declarations) : le
   // complice qui efface son stockage local est trahi par le compteur d en face.
-  const partieDeclassee = partieClassee && rencontresPartie >= RENCONTRES_CLASSEES_JOUR;
+  // 01/09 : la classique tombe sous la meme regle, avec son propre compteur.
+  // Elle n a pas de trophee a retirer ; ce qu elle perd, ce sont ses pieces --
+  // le drapeau passe a recordGameStats s eteint, et le bareme retombe sur
+  // celui d une partie sans enjeu.
+  const partieDeclassee = (partieClassee || partieClassique) && rencontresPartie >= RENCONTRES_CLASSEES_JOUR;
 
   // ---------- Perspective : chacun joue EN BAS de son écran ----------
   // En ligne, un joueur Écarlate voyait sa main en haut, comme s'il jouait "chez
@@ -14487,14 +14545,20 @@ export default function Emprise() {
         partieEcourtee,
         // L uid adverse d une partie d appariement : la rencontre du jour se
         // compte, declassee comprise.
-        partieClassee && adversaireUid ? adversaireUid : null,
+        // La classique compte ses rencontres comme la classee, dans son propre
+        // espace de cles : trois par jour et par adversaire, de chaque cote.
+        (partieClassee || partieClassique) && adversaireUid ? adversaireUid : null,
         // Ce que la partie a produit, pour les medaillons de succes (01/09) :
         // le releve des quetes comptait deja Resonances et Ondes coup par coup,
         // on ne fait que le lui emprunter. mortSubiteRonde dit si la partie est
         // passee par la Mort Subite.
         { resonances: quetesReleveRef.current.resonances,
           ondes: quetesReleveRef.current.ondes,
-          mortSubite: mortSubiteRonde > 0 }
+          mortSubite: mortSubiteRonde > 0 },
+        // La Partie classique : elle choisit le bareme de pieces et l espace
+        // de cles de l anti-complices. Une DECLASSEE n en est plus une pour
+        // les pieces -- comme en Classe, le zero suffit a tout.
+        partieClassique && !partieDeclassee
       ).then((st) => {
         setStats(st); setXpDernierePartie(st.xpDePartie || null); rafraichirProgression();
         // La flamme du hub se remplira a la prochaine venue au hub : purement
@@ -14691,7 +14755,7 @@ export default function Emprise() {
     setTourney({ active: false, round: 0, ban: null });
     setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
-    setPartieClassee(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
+    setPartieClassee(false); setPartieClassique(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
     setRencontresPartie(0);
     setAdversaireUid(null); setDefiEnvoye(null); setAmitieAvis("");
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
@@ -15108,7 +15172,7 @@ export default function Emprise() {
     setBlueHand([]); setRedHand([]);
     setGameOver(false);
     tournoiResultatRef.current = null;
-    setPartieClassee(false);
+    setPartieClassee(false); setPartieClassique(false);
     setOnlineGameId(m.gameId);
     setOnlineRole(m.a === myUid ? "blue" : "red");
     setMode("online");
@@ -15665,7 +15729,7 @@ export default function Emprise() {
           // Sans cette purge, le vainqueur forcé qu'on vient de dériver survivait au
           // retour au menu et s'imposait à TOUTES les parties suivantes, solo comprises.
           setVainqueurForce(null); setFinMotif(null);
-          setPartieClassee(false);
+          setPartieClassee(false); setPartieClassique(false);
           oublierPartieEnLigne();
           setAvisBon(false);
           setOnlineError(
@@ -15737,8 +15801,16 @@ export default function Emprise() {
   // attendant : une offre, jamais un automatisme -- la recherche continue
   // tant que le bouton n est pas touche, et jamais un bot deguise en humain.
   const ATTENTE_PROPOSE_ECHO_S = 45;
+  // DEUX files, DEUX documents (01/09). Le Classe garde "lobby", la Partie
+  // classique prend "classique". Deux documents et non deux champs dans le
+  // meme : c'est ce qui rend le melange IMPOSSIBLE plutot qu'improbable --
+  // celui qui cherche en classique ne lit meme pas le document du Classe, et
+  // la transaction qui l'apparie ne peut donc apparier qu'un joueur de sa
+  // propre file. Les regles Firestore bornent la collection a ces deux noms.
+  const FILES_APPARIEMENT = { classe: "lobby", classique: "classique" };
 
-  async function chercherAdversaire() {
+  async function chercherAdversaire(fileCle = "classe") {
+    const enClassique = fileCle === "classique";
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return; }
     setOnlineError("");
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
@@ -15746,13 +15818,17 @@ export default function Emprise() {
     setTestMode(false);
     setPickerChoice([]);
     setMode("online");
+    // La file AVANT l'attente : l'ecouteur du salon depend d'elle, et s'il
+    // s'abonnait au document du Classe pendant une recherche classique il
+    // prendrait l'annonce d'un autre.
+    setFileCourante(enClassique ? "classique" : "classe");
     setFileAttente(true);
     statsRecordedRef.current = false;
     venuDesAmisRef.current = false;
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
     try {
-      const lobbyRef = doc(db, "matchmaking", "lobby");
+      const lobbyRef = doc(db, "matchmaking", FILES_APPARIEMENT[enClassique ? "classique" : "classe"]);
       const apparie = await runTransaction(db, async (tx) => {
         const lobbySnap = await tx.get(lobbyRef);
         const lobby = lobbySnap.exists() ? lobbySnap.data() : {};
@@ -15806,6 +15882,12 @@ export default function Emprise() {
           turn: premier, firstPlayer: premier,
           gameOver: false,
           appariement: true, // partie née d'un appariement, pas d'un code partagé
+          // La file d'ou sort cette partie (01/09). C'est le DOCUMENT qui le
+          // dit, jamais l'etat local : celui qui attendait est annonce par un
+          // inconnu et n'a que ce champ pour savoir ce qu'il joue. Un champ de
+          // plus dans /games ne demande aucune republication de regles -- la
+          // creation y est libre, contrairement au salon et a son hasOnly.
+          classique: enClassique,
           // Trophees des deux camps au moment de l'appariement : la seule source que les
           // deux ecrans peuvent lire a l'identique. Avant, chaque client affichait ses
           // propres trophees pour lui et 0 pour l'autre, et les deux ecrans se
@@ -15845,7 +15927,11 @@ export default function Emprise() {
         setOnlineStatus("");
         setOnlineGameId(apparie.code);
         setOnlineRole("red");
-        setPartieClassee(true);
+        // Les deux drapeaux s'excluent : une partie est classee OU classique,
+        // jamais les deux. Le Classe garde ses trophees et refuse les Herauts,
+        // la classique fait l'inverse.
+        setPartieClassee(!enClassique);
+        setPartieClassique(enClassique);
         setPhase("select-blue");
       }
     } catch (e) {
@@ -15916,7 +16002,7 @@ export default function Emprise() {
     // demandait un code d'ami qu'il n'a pas. Le drapeau du Classé est levé au passage,
     // sans quoi la partie entre amis lancée juste après aurait compté des trophées.
     const venaitDuClasse = partieClassee;
-    setPartieClassee(false);
+    setPartieClassee(false); setPartieClassique(false);
     if (tournoiOnlineId) setPhase("tourney-online");
     else if (venaitDuClasse || venuDesAmisRef.current) { setMode(null); setPhase("landing"); }
     else setPhase("online-menu");
@@ -15926,14 +16012,22 @@ export default function Emprise() {
   function quitterPartieEnLigne() {
     if (onlineGameId && !gameOver) {
       deposerAbandon(onlineGameId, onlineRole, "abandon", null);
-      if (partieClassee && !statsRecordedRef.current) {
+      // 01/09 : la classique passe ici aussi. Elle n a pas de trophee a
+      // perdre, mais quitter une partie engagee doit lui couter sa rencontre
+      // du jour -- sans quoi on abandonnerait a volonte pour rejouer le meme
+      // adversaire indefiniment.
+      if ((partieClassee || partieClassique) && !statsRecordedRef.current) {
         statsRecordedRef.current = true;
         // Un abandon compte comme une partie jouee avec SES Ordres, pas ceux d'en face.
         const orderKeys = (onlineRole === "red" ? redOrders : blueOrders).map((l) => l.key);
         // Une partie DECLASSEE abandonnee ne coute rien non plus (zero des
         // deux cotes), mais elle COMPTE une rencontre du jour, comme chez le
         // vainqueur : l uid adverse part en dernier argument.
-        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys, partieDeclassee ? 0 : TROPHEES_DEFAITE, [], false, onlineRole, false, null, null, null, false, adversaireUid || null).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
+        recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys,
+          // La classique ne retire aucun trophee : elle n en donne pas non plus.
+          partieClassique || partieDeclassee ? 0 : TROPHEES_DEFAITE,
+          [], false, onlineRole, false, null, null, null, false, adversaireUid || null,
+          null, partieClassique && !partieDeclassee).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
         // Une partie abandonnee ne fait avancer aucune quete, et l ecran de fin
         // ne doit pas rejouer les accomplissements de la partie d avant.
         setQuetesDernierePartie(null);
@@ -16161,7 +16255,7 @@ export default function Emprise() {
   async function libererAppariement(code) {
     try {
       await runTransaction(db, async (tx) => {
-        const ref = doc(db, "matchmaking", "lobby");
+        const ref = doc(db, "matchmaking", FILES_APPARIEMENT[fileCourante] || "lobby");
         const snap = await tx.get(ref);
         if (!snap.exists()) return;
         if (snap.data().matchedGameId !== code) return;
@@ -16177,7 +16271,7 @@ export default function Emprise() {
     setOnlineStatus("");
     if (!myUid) return;
     try {
-      const lobbyRef = doc(db, "matchmaking", "lobby");
+      const lobbyRef = doc(db, "matchmaking", FILES_APPARIEMENT[fileCourante] || "lobby");
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(lobbyRef);
         if (!snap.exists()) return;
@@ -16195,7 +16289,7 @@ export default function Emprise() {
   // uid et le code de la partie qu'il vient de créer. Je la rejoins alors en Azur.
   useEffect(() => {
     if (!fileAttente || !myUid) return;
-    const unsub = onSnapshot(doc(db, "matchmaking", "lobby"), (snap) => {
+    const unsub = onSnapshot(doc(db, "matchmaking", FILES_APPARIEMENT[fileCourante] || "lobby"), (snap) => {
       if (!snap.exists()) return;
       const lobby = snap.data();
       // Un appariement ne vaut que s'il vient d'être annoncé (quelques secondes) et
@@ -16229,14 +16323,19 @@ export default function Emprise() {
             setOnlineRole("blue");
             setMode("online");
             setPickerChoice([]);
-            setPartieClassee(true);
+            // Azur lit la file sur le DOCUMENT, jamais sur son etat local : il
+            // est annonce par un inconnu, et c'est la partie elle-meme qui dit
+            // ce qu'elle est. Un vieux document sans le champ vaut Classe,
+            // comme avant.
+            setPartieClassee(!d.classique);
+            setPartieClassique(!!d.classique);
             setPhase("select-blue");
           } catch (e) { /* on reste en file : l'annonce suivante fera foi */ }
         })();
       }
     }, () => setOnlineError("Recherche interrompue. Vérifiez votre connexion."));
     return unsub;
-  }, [fileAttente, myUid]);
+  }, [fileAttente, myUid, fileCourante]);
 
 
   // (L'ancien bouton "Nouvelle partie" ouvrait un ecran de choix de Voie ; le hub
@@ -16646,7 +16745,9 @@ export default function Emprise() {
     // aujourd hui contre CET adversaire, lue de MA sauvegarde locale. Meme
     // porte que le niveau : a cet instant on est participant, tout champ est
     // permis, rien a republier (verifie dans firestore.rules).
-    const rencontresJour = partieClassee && adversaireUid ? await rencontresContre(adversaireUid) : 0;
+    const rencontresJour = (partieClassee || partieClassique) && adversaireUid
+      ? await rencontresContre(adversaireUid, partieClassique ? "classique" : "classe")
+      : 0;
     const field = onlineRole === "blue"
       ? { blueOrderKeys: ordres.map((l) => l.key), blueHand: hand.map(stripForSave), blueReserve: choisies.map(stripForSave),
           blueParties: moi.parties, blueVictoires: moi.victoires, blueCombos: moi.combos,
@@ -16810,7 +16911,7 @@ export default function Emprise() {
     } else if (phase === "online-waiting") {
       // Recherche en cours : on libère d'abord sa place dans la salle d'attente, sinon
       // le prochain joueur serait apparié à quelqu'un qui a quitté l'écran.
-      if (fileAttente) { annulerRecherche(); setMode(null); setPartieClassee(false); setPhase("landing"); return; }
+      if (fileAttente) { annulerRecherche(); setMode(null); setPartieClassee(false); setPartieClassique(false); setPhase("landing"); return; }
       // Match de tournoi : revenir en arrière avant le début NE vaut PAS abandon — le
       // match reste en attente dans l'arbre et se rejoue via "Jouer votre duel". Sans ça,
       // un simple tap sur Retour pendant le choix des Ordres éliminait du tournoi, sans
@@ -20825,7 +20926,7 @@ export default function Emprise() {
                     className="attente-propose-bouton"
                     onClick={() => {
                       annulerRecherche();
-                      setPartieClassee(false);
+                      setPartieClassee(false); setPartieClassique(false);
                       chooseMode("bot");
                     }}
                   >Défier un Écho en attendant</button>

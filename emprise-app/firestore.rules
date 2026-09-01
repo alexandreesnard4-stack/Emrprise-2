@@ -88,10 +88,16 @@ service cloud.firestore {
             || request.resource.data.matchedAt is int);
     }
 
-    // UN SEUL document, "lobby" : le joker /{docId} laissait creer autant de documents
-    // qu'on voulait dans cette collection, que personne ne lit jamais.
-    match /matchmaking/lobby {
-      allow read: if request.auth != null;
+    // DEUX documents nommes, et deux seulement : "lobby" pour le Classe,
+    // "classique" pour la Partie classique (01/09). Le joker /{docId} laissait
+    // creer autant de documents qu'on voulait dans cette collection ; la liste
+    // fermee garde cette porte close tout en ouvrant la seconde file.
+    // Deux documents et non deux champs dans le meme : c'est ce qui rend le
+    // melange des files IMPOSSIBLE, pas seulement improbable. Un joueur en
+    // file classique n'ecrit ni ne lit jamais le document du Classe.
+    function fileConnue(f) { return f == 'lobby' || f == 'classique'; }
+    match /matchmaking/{file} {
+      allow read: if request.auth != null && fileConnue(file);
 
       // Les champs sont fixes, et la place d'attente ne se prend QUE pour soi : on ne
       // peut plus inscrire un autre joueur dans la file, ni y deposer n'importe quoi.
@@ -102,7 +108,7 @@ service cloud.firestore {
       // client acharne peut donc vider la file ; App Check est la vraie reponse, comme
       // pour /games. La victime, elle, est protegee cote client : elle verifie que la
       // partie annoncee la designe bien comme Azur avant d'y entrer.
-      allow create: if request.auth != null && salonBienForme()
+      allow create: if request.auth != null && fileConnue(file) && salonBienForme()
         && (request.resource.data.waitingUid == null
             || request.resource.data.waitingUid == request.auth.uid);
 
@@ -110,7 +116,7 @@ service cloud.firestore {
       // refusait une ecriture legitime : celui qui nettoie l annonce qui lui etait
       // adressee ne touche pas a la place d attente, mais un troisieme joueur a pu s y
       // mettre entre-temps, et le document portait alors SON uid.
-      allow update: if request.auth != null && salonBienForme()
+      allow update: if request.auth != null && fileConnue(file) && salonBienForme()
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['waitingUid'])
             || request.resource.data.waitingUid == null
             || request.resource.data.waitingUid == request.auth.uid);
