@@ -3327,6 +3327,115 @@ const FONDS_ECRANS = {
   "tutorial": "/fonds/fond-tutoriel.webp",
 };
 
+// ---------- La rotation de la boutique (01/09) ----------
+// La boutique ne montre plus tout le catalogue : une selection change toutes
+// les 24 h, sur un cycle de huit jours, IDENTIQUE POUR TOUS au meme instant.
+// Elle se CALCULE, elle ne se tire pas : aucun hasard a l execution, rien en
+// base, rien dans la sauvegarde. Deux appareils du meme joueur voient donc la
+// meme boutique, et deux joueurs aussi.
+// La bascule est a 00:00 UTC, jamais a l heure locale : sinon la boutique
+// changerait a des instants differents selon le fuseau.
+const BOUTIQUE_REFERENCE = Date.UTC(2026, 8, 1);
+const BOUTIQUE_JOURS = 8;
+function jourAbsoluBoutique(maintenant) {
+  return Math.floor(((maintenant == null ? Date.now() : maintenant) - BOUTIQUE_REFERENCE) / 86400000);
+}
+// mulberry32, ecrit a la main : aucune dependance, et le meme flux de nombres
+// sur tous les appareils pour une graine donnee.
+function graineBoutique(n) {
+  let a = (n >>> 0) + 0x6D2B79F5;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function melangeDeterministe(liste, graine) {
+  const t = [...liste];
+  const rnd = graineBoutique(graine);
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [t[i], t[j]] = [t[j], t[i]];
+  }
+  return t;
+}
+// L index de chaque famille sert de decalage de graine : NE JAMAIS reordonner
+// cette liste, la selection de tous les cycles passes en dependrait.
+// Les seuils de prix se LISENT sur les entrees : un article ajoute au
+// catalogue entre dans la rotation tout seul, sans toucher a ce code.
+const BOUTIQUE_FAMILLES = [
+  { cle: "plateaux", quota: 2, articles: () => PLATEAUX.filter((a) => a.prix > 0) },
+  { cle: "dosPieces", quota: 4, articles: () => DOS_CARTES.filter((a) => a.prix > 0) },
+  { cle: "dosGemmes", quota: 2, articles: () => DOS_CARTES.filter((a) => a.prixGemmes > 0) },
+  { cle: "bannieresBasses", quota: 2, articles: () => BANNIERES.filter((a) => a.source === "pieces" && a.prix <= 2000) },
+  { cle: "banniereesHautes", quota: 2, articles: () => BANNIERES.filter((a) => a.source === "pieces" && a.prix > 2000) },
+  { cle: "banniereesGemmes", quota: 2, articles: () => BANNIERES.filter((a) => a.prixGemmes > 0) },
+];
+// La file d une famille sur un cycle : des melanges COMPLETS et distincts du
+// catalogue, mis bout a bout jusqu a remplir les huit journees. Chaque article
+// y passe donc un nombre de fois presque egal -- c est ce qui garantit que rien
+// n est oublie pendant un cycle entier.
+function fileBoutique(familleIndex, numeroCycle) {
+  const fam = BOUTIQUE_FAMILLES[familleIndex];
+  const cat = fam.articles();
+  if (!cat.length) return [];
+  const slots = fam.quota * BOUTIQUE_JOURS;
+  const file = [];
+  for (let n = 0; file.length < slots; n++) {
+    file.push(...melangeDeterministe(cat, numeroCycle * 1000 + familleIndex * 10 + n));
+  }
+  return file.slice(0, slots);
+}
+// Les huit tranches d un cycle, doublons corriges. La correction se fait sur
+// les HUIT dans l ordre, avant qu on choisisse celle du jour : deux appareils
+// qui ne corrigeraient que leur propre journee pourraient diverger.
+function tranchesBoutique(familleIndex, numeroCycle) {
+  const fam = BOUTIQUE_FAMILLES[familleIndex];
+  const file = fileBoutique(familleIndex, numeroCycle);
+  const t = [];
+  for (let j = 0; j < BOUTIQUE_JOURS; j++) t.push(file.slice(j * fam.quota, (j + 1) * fam.quota));
+  if (!file.length) return t;
+  for (let j = 0; j < BOUTIQUE_JOURS; j++) {
+    for (let i = 1; i < t[j].length; i++) {
+      if (!t[j].slice(0, i).some((x) => x.cle === t[j][i].cle)) continue;
+      // Un doublon : il ne nait qu a la jointure de deux melanges. On l echange
+      // avec un article de la tranche suivante absent de la tranche courante,
+      // et qui ne creera pas de doublon la-bas non plus.
+      const suiv = t[(j + 1) % BOUTIQUE_JOURS];
+      const k = suiv.findIndex((a, n) =>
+        !t[j].some((x) => x.cle === a.cle) && !suiv.some((x, m) => m !== n && x.cle === t[j][i].cle));
+      if (k >= 0) { const garde = t[j][i]; t[j][i] = suiv[k]; suiv[k] = garde; }
+    }
+  }
+  return t;
+}
+// La selection du jour, memoisee : le calcul est le meme tant que la journee
+// ne bascule pas, et il n a rien a faire dans une boucle de rendu.
+let selectionMemo = { jour: null, valeur: null };
+function selectionBoutique(jourAbsolu) {
+  const jour = jourAbsolu == null ? jourAbsoluBoutique() : jourAbsolu;
+  if (selectionMemo.jour === jour) return selectionMemo.valeur;
+  const numeroCycle = Math.floor(jour / BOUTIQUE_JOURS);
+  // Le modulo double protege d une horloge reglee avant la date de reference.
+  const jourDuCycle = ((jour % BOUTIQUE_JOURS) + BOUTIQUE_JOURS) % BOUTIQUE_JOURS;
+  const valeur = {};
+  BOUTIQUE_FAMILLES.forEach((fam, i) => { valeur[fam.cle] = tranchesBoutique(i, numeroCycle)[jourDuCycle]; });
+  selectionMemo = { jour, valeur };
+  return valeur;
+}
+// La question que pose le CHEMIN D ACHAT, pas seulement l affichage : sans
+// elle, la rotation ne serait qu un decor.
+function enRotation(cle) {
+  const sel = selectionBoutique();
+  return Object.keys(sel).some((f) => sel[f].some((a) => a.cle === cle));
+}
+// Le prochain 00:00 UTC, en millisecondes restantes.
+function resteAvantRotation(maintenant) {
+  const t = maintenant == null ? Date.now() : maintenant;
+  return BOUTIQUE_REFERENCE + (jourAbsoluBoutique(t) + 1) * 86400000 - t;
+}
+
 const BOURSE_ESSAI = 1000;
 const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "", medaillonEquipe: MEDAILLON_REPLI };
 let memoryBourse = null;
@@ -3538,6 +3647,9 @@ async function acheterCosmetique(famille, cle) {
   const item = f && f.catalogue.find((x) => x.cle === cle);
   if (!item || item.prix <= 0) return { bourse: b, fait: false };
   if (possedeCosmetique(b, famille, cle)) return { bourse: b, fait: true };
+  // Hors de la selection du jour, rien ne s achete (01/09) : le refus vit ICI,
+  // dans le chemin d achat, pas seulement dans l affichage.
+  if (!enRotation(cle)) return { bourse: b, fait: false };
   if (b.pieces < item.prix) return { bourse: b, fait: false };
   b.pieces -= item.prix;
   b.possessions[famille] = [...b.possessions[famille], cle];
@@ -3555,6 +3667,7 @@ async function acheterCosmetiqueGemmes(famille, cle) {
   const item = f && f.catalogue.find((x) => x.cle === cle);
   if (!item || !(item.prixGemmes > 0)) return { bourse: b, fait: false };
   if (possedeCosmetique(b, famille, cle)) return { bourse: b, fait: true };
+  if (!enRotation(cle)) return { bourse: b, fait: false };
   if (b.gemmes < item.prixGemmes) return { bourse: b, fait: false };
   b.gemmes -= item.prixGemmes;
   b.possessions[famille] = [...b.possessions[famille], cle];
@@ -3602,6 +3715,7 @@ async function acheterBannierePieces(cle) {
   const item = banniereDeCle(cle);
   if (!item || !(item.prix > 0)) return { bourse: b, fait: false };
   if (b.possessions.bannieres.includes(cle)) return { bourse: b, fait: true };
+  if (!enRotation(cle)) return { bourse: b, fait: false };
   if (b.pieces < item.prix) return { bourse: b, fait: false };
   b.pieces -= item.prix;
   b.possessions.bannieres = [...b.possessions.bannieres, cle];
@@ -3618,6 +3732,7 @@ async function acheterBanniereGemmes(cle) {
   const item = banniereDeCle(cle);
   if (!item || !(item.prixGemmes > 0)) return { bourse: b, fait: false };
   if (b.possessions.bannieres.includes(cle)) return { bourse: b, fait: true };
+  if (!enRotation(cle)) return { bourse: b, fait: false };
   if (b.gemmes < item.prixGemmes) return { bourse: b, fait: false };
   b.gemmes -= item.prixGemmes;
   b.possessions.bannieres = [...b.possessions.bannieres, cle];
@@ -6223,6 +6338,15 @@ const APP_STYLES = `
            Les huit visuels sont des CADRES ornes, vides au centre, aux couleurs
            de leur Ordre : le Heraut s ecrit DANS l ouverture. Une colonne, en
            16:9 comme les images -- deux par rangee les rendraient illisibles. */
+        /* Le minuteur de la rotation (01/09) : une ligne sobre en tete d etal,
+           qui dit quand la selection changera. Rien ne s y anime -- c est un
+           nombre qui descend d une minute a l autre, pas un compte a rebours
+           de seconde. */
+        .boutique-rotation {
+          font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.06em;
+          color: var(--muted); text-align: center; margin: 0 0 8px;
+          font-variant-numeric: tabular-nums;
+        }
         .boutique-mention {
           font-size: 10.5px; line-height: 1.4; color: var(--muted);
           margin: 0 0 8px; text-align: center; max-width: 380px;
@@ -13280,6 +13404,17 @@ export default function Emprise() {
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
+  // Le minuteur de la rotation (01/09). A la MINUTE, pas a la seconde : une
+  // seconde de plus serait un rendu de plus pour rien. Il ne vit que sur la
+  // page de la boutique et meurt avec elle. Pose ICI, apres hubPage : plus
+  // haut, il le lisait avant sa declaration et toute l application tombait.
+  const [resteRotation, setResteRotation] = useState(() => resteAvantRotation());
+  useEffect(() => {
+    if (hubPage !== "boutique") return;
+    setResteRotation(resteAvantRotation());
+    const t = setInterval(() => setResteRotation(resteAvantRotation()), 60000);
+    return () => clearInterval(t);
+  }, [hubPage]);
   const [historique, setHistorique] = useState(() => lireHistorique());
   // Le cadenas de l'arene : refus au toucher, et ceremonie d'ouverture.
   const [cadenasRefuse, setCadenasRefuse] = useState(null);   // { nom, n } de la ligue qui tremble
@@ -17977,6 +18112,16 @@ export default function Emprise() {
                     reservee d avance, aucun saut de mise en page. */}
                 <img className="boutique-auvent" src="/boutique/auvent.webp" alt="" aria-hidden="true" width="1472" height="280" />
                 <div className="boutique-page">
+                  {/* Le minuteur de la rotation (01/09), en tete d etal : il se
+                      calcule sur le prochain 00:00 UTC et se rafraichit a la
+                      minute. Le meme pour tous les joueurs, ou qu ils soient. */}
+                  <div className="boutique-rotation" role="status">
+                    {(() => {
+                      const h = Math.floor(resteRotation / 3600000);
+                      const mn = Math.floor((resteRotation % 3600000) / 60000);
+                      return `Nouvelle sélection dans ${h > 0 ? `${h} h ` : ""}${mn} min`;
+                    })()}
+                  </div>
                   {/* Plus de soldes en tete d'etal : le tresor du hub les affiche
                       deja, les popups d'achat disent le solde au moment de payer --
                       retire a la demande du Commandant. */}
@@ -18014,7 +18159,10 @@ export default function Emprise() {
                   <h2 className="boutique-titre second">Plateaux</h2>
                   <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
                   <div className="boutique-grille">
-                    {PLATEAUX.map((p) => {
+                    {/* La selection du jour (01/09) : le MEME predicat que le
+                        chemin d achat, si bien que l affichage et l achat ne
+                        peuvent pas se contredire. */}
+                    {PLATEAUX.filter((p) => enRotation(p.cle)).map((p) => {
                       const choisi = cosmetiques.plateau === p.cle;
                       const possede = possedeCosmetique(bourse, "plateau", p.cle);
                       return (
@@ -18047,7 +18195,7 @@ export default function Emprise() {
                   <h2 className="boutique-titre second">Dos de cartes</h2>
                   <p className="boutique-sous">L&apos;étoffe de votre Réserve, vue par l&apos;adversaire.</p>
                   <div className="boutique-grille">
-                    {DOS_CARTES.map((d) => {
+                    {DOS_CARTES.filter((d) => enRotation(d.cle)).map((d) => {
                       const choisi = cosmetiques.dos === d.cle;
                       const possede = possedeCosmetique(bourse, "dos", d.cle);
                       return (
@@ -18086,7 +18234,7 @@ export default function Emprise() {
                   <h2 className="boutique-titre second">Bannières</h2>
                   <p className="boutique-sous">L&apos;étendard de votre profil, porté avant chaque duel.</p>
                   <div className="boutique-grille bannieres-grille">
-                    {[...BANNIERES.filter((x) => x.source === "pieces"), ...BANNIERES.filter((x) => x.source === "prestige")].map((bn) => {
+                    {[...BANNIERES.filter((x) => x.source === "pieces"), ...BANNIERES.filter((x) => x.source === "prestige")].filter((bn) => enRotation(bn.cle)).map((bn) => {
                       const possede = bourse.possessions.bannieres.includes(bn.cle);
                       const equipee = bourse.banniereEquipee === bn.cle;
                       return (

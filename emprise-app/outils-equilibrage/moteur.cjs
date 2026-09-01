@@ -67,7 +67,12 @@ const A_EXPOSER = ["ORDERS", "ROWS", "COLS", "CELLS", "setBoardSize", "makeHand"
   // Les medaillons (03/09) : le catalogue et ses trois lectures s eprouvent
   // dans la vraie portee du module, la ou ORDERS et MAITRISE_RANGS existent.
   "MEDAILLONS", "MEDAILLON_REPLI", "medaillonDeCle", "imageMedaillon",
-  "conditionMedaillon", "obtentionMedaillon", "medaillonRang", "MAITRISE_RANGS"];
+  "conditionMedaillon", "obtentionMedaillon", "medaillonRang", "MAITRISE_RANGS",
+  // La rotation de la boutique (01/09) : le generateur et la repartition
+  // s eprouvent hors ecran, sur trois cycles complets.
+  "BOUTIQUE_REFERENCE", "BOUTIQUE_JOURS", "BOUTIQUE_FAMILLES", "jourAbsoluBoutique",
+  "graineBoutique", "melangeDeterministe", "tranchesBoutique", "selectionBoutique",
+  "enRotation", "resteAvantRotation", "PLATEAUX", "DOS_CARTES", "BANNIERES"];
 const dispo = A_EXPOSER.filter((n) => new RegExp("(function|const|let|var)\\s+" + n + "\\b").test(compile));
 const moteur = new Function("require", "module", "exports",
   compile + "\nreturn {" + dispo.join(", ") + "};")(requireStub, module_, module_.exports);
