@@ -6330,6 +6330,23 @@ const APP_STYLES = `
           padding: 7px 8px 7px 11px; border-radius: 11px;
           background: rgba(255,255,255,0.03); border: 1px solid rgba(203,164,86,0.2);
         }
+        /* La parure de l ami (01/09) : sa banniere en fond de ligne, son
+           medaillon en sceau a gauche. Le degrade sombre est la PREMIERE
+           couche du background, donc AU-DESSUS de l image : il est presque
+           opaque du cote du texte et s eclaircit vers la droite, la ou il n y
+           a que le bouton Defier. Le pseudo, le code et la presence gardent
+           ainsi le meme contraste qu avant. Sans banniere, aucune de ces deux
+           regles ne s applique et la ligne est celle d hier. */
+        .amis-ligne.avec-banniere {
+          background-size: cover; background-position: center;
+          border-color: rgba(203,164,86,0.34);
+        }
+        .amis-avatar {
+          flex: none; width: 36px; height: 36px; border-radius: 50%;
+          object-fit: cover; display: block; box-sizing: border-box;
+          border: 1px solid rgba(203,164,86,0.4);
+          background-color: #14101d;
+        }
         .amis-ligne-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
         .amis-point-vert {
           display: inline-block; width: 7px; height: 7px; border-radius: 50%;
@@ -6500,6 +6517,21 @@ const APP_STYLES = `
         .profil-fiche-identite {
           display: flex; align-items: center; gap: 12px; text-align: left;
           padding-bottom: 13px; border-bottom: 1px solid rgba(203,164,86,0.14);
+        }
+        /* La banniere en fond d en-tete (01/09). Les marges negatives valent le
+           rembourrage du panneau (18 en haut, 16 sur les cotes) : l image touche
+           ses bords, et le rembourrage rendu ici remet le contenu EXACTEMENT ou
+           il etait. Le rayon reprend celui du panneau moins son filet.
+           Les deux degrades sont les PREMIERES couches, donc au-dessus de
+           l image : l un fonce vers le bas jusqu a la couleur du panneau, si
+           bien que l image se fond dans le separateur ; l autre fonce vers la
+           gauche, la ou vivent le medaillon, le pseudo et le code. La croix de
+           fermeture, elle, garde du sombre sous elle en haut a droite. */
+        .profil-fiche-identite.avec-banniere {
+          margin: -18px -16px 0; padding: 18px 16px 13px;
+          border-radius: 14.5px 14.5px 0 0;
+          background-size: cover; background-position: center;
+          background-repeat: no-repeat;
         }
         .profil-fiche-medaillon {
           flex: none; width: 58px; height: 58px; border-radius: 50%;
@@ -12081,13 +12113,16 @@ export default function Emprise() {
         // L avatar (03/09), meme mefiance : une cle du catalogue, sinon vide --
         // l affichage se replie alors sur Le Premier Duel.
         const medaillon = medaillonDeCle(d.medaillon) ? d.medaillon : "";
+        // La banniere equipee (01/09), meme mefiance : une cle du catalogue,
+        // sinon vide -- la ligne d ami garde alors son fond ordinaire.
+        const banniere = banniereDeCle(d.banniere) ? d.banniere : "";
         // Le niveau de Commandant, borne aux niveaux du jeu ; undefined quand il
         // manque -- l'affichage se tait plutot que d'annoncer un niveau 0.
         const niveau = Number.isFinite(d.niveau) && d.niveau >= 1 && d.niveau <= NIVEAU_MAX ? Math.floor(d.niveau) : undefined;
         return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
           parties: entier(d.parties), victoires: entier(d.victoires), combos,
-          ordreFavori, medaillon, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
+          ordreFavori, medaillon, banniere, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
           lu: Date.now() }];
       } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
@@ -12375,8 +12410,24 @@ export default function Emprise() {
     const nom = nomAffiche(f && f.pseudo);
     const presence = presenceDe(f);
     const enLigne = estEnLigne(f);
+    // La parure de l ami (01/09). Les deux cles viennent du RESEAU : on ne
+    // construit une URL qu apres les avoir reconnues dans nos catalogues,
+    // jamais depuis la chaine recue. Absentes ou inconnues, la ligne garde
+    // exactement la forme qu elle avait -- ni cadre vide, ni fond noir.
+    const sonMedaillon = f && medaillonDeCle(f.medaillon) ? f.medaillon : null;
+    const saBanniere = f && banniereDeCle(f.banniere);
     return (
-      <div key={a.uid} className="amis-ligne">
+      <div
+        key={a.uid}
+        className={`amis-ligne ${saBanniere ? "avec-banniere" : ""}`}
+        style={saBanniere ? { backgroundImage: `linear-gradient(90deg, rgba(10,8,15,0.94) 0%, rgba(10,8,15,0.86) 46%, rgba(10,8,15,0.55) 100%), url("${saBanniere.image}")` } : undefined}
+      >
+        {/* L avatar : le medaillon equipe, en sceau rond a gauche du texte.
+            imageMedaillon garde le repli pour un medaillon dont l image n est
+            pas encore livree -- jamais une image cassee dans la liste. */}
+        {sonMedaillon && (
+          <img className="amis-avatar" src={imageMedaillon(sonMedaillon)} alt="" aria-hidden="true" width="36" height="36" loading="lazy" />
+        )}
         {/* Le nom ouvre la fiche de l'ami -- demande du Commandant. Le meme panneau
             que pour un adversaire de partie : il sait deja tout dire d'un joueur. */}
         <button
@@ -13337,9 +13388,12 @@ export default function Emprise() {
                  // Le niveau : l'XP d'une quete peut le faire monter sans qu'aucune
                  // statistique ne bouge -- il a donc sa place dans la cle.
                  niveauDepuisXp(progression.xpTotal).niveauJoueur,
-                 // L avatar : changer de medaillon ne touche aucune statistique,
-                 // il lui faut donc sa place dans la cle pour repartir.
-                 bourse.medaillonEquipe || ""].join("/");
+                 // L avatar et la banniere : en changer ne touche aucune
+                 // statistique, il leur faut donc leur place dans la cle pour
+                 // que l ami voie le changement sans attendre mon prochain
+                 // lancement. C est le seul point de republication : il couvre
+                 // TOUS les endroits ou l on s equipe, sans en oublier un.
+                 bourse.medaillonEquipe || "", bourse.banniereEquipee || ""].join("/");
     if (!myUid || !monCodeAmi || trophyRef.current === cle) return;
     trophyRef.current = cle;
     const moi = profilPublic();
@@ -13365,8 +13419,13 @@ export default function Emprise() {
     // ecriture echoue et rien d autre ne s en ressent -- le Pantheon et la
     // fiche d ami montrent alors Le Premier Duel, le repli, sans une erreur.
     updateDoc(doc(db, "users", myUid), { medaillon: bourse.medaillonEquipe || "" }).catch(() => {});
+    // La banniere equipee (01/09) part SEULE elle aussi, et pour la meme
+    // raison : elle n est pas encore dans les regles publiees. Groupee avec le
+    // medaillon, elle l aurait emporte dans sa chute -- la lecon hasOnly, pour
+    // la cinquieme fois. Elle rejoindra un convoi le jour de la publication.
+    updateDoc(doc(db, "users", myUid), { banniere: bourse.banniereEquipee || "" }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUid, monCodeAmi, stats, progression, bourse.medaillonEquipe]);
+  }, [myUid, monCodeAmi, stats, progression, bourse.medaillonEquipe, bourse.banniereEquipee]);
 
   // La presence se redit toutes les deux minutes tant que l'ecran est visible, sinon
   // « En ligne » (trois minutes) devient faux des la troisieme minute de jeu. Rien ne
@@ -21590,7 +21649,16 @@ export default function Emprise() {
               <button className="profil-fiche-croix" onClick={() => setProfilAdverse(null)}
                       aria-label="Fermer">&times;</button>
 
-              <div className="profil-fiche-identite">
+              {/* Sa banniere en fond d en-tete (01/09), du bord du panneau
+                  jusqu au separateur. La cle vient du RESEAU : on ne construit
+                  l URL qu apres l avoir reconnue dans le catalogue. Sans elle,
+                  aucune classe, aucun style, et l en-tete est celui d hier. */}
+              <div
+                className={`profil-fiche-identite ${banniereDeCle(f.banniere) ? "avec-banniere" : ""}`}
+                style={banniereDeCle(f.banniere)
+                  ? { backgroundImage: `linear-gradient(180deg, rgba(23,17,34,0.45) 0%, rgba(23,17,34,0.74) 62%, rgba(23,17,34,0.97) 100%), linear-gradient(90deg, rgba(23,17,34,0.72) 0%, rgba(23,17,34,0.3) 55%, rgba(23,17,34,0.12) 100%), url("${banniereDeCle(f.banniere).image}")` }
+                  : undefined}
+              >
                 {/* Son avatar : le medaillon qu'il a choisi (03/09), lu dans son
                     profil public. Le champ attend la publication des regles ; d'ici
                     la, imageMedaillon rend Le Premier Duel -- un repli, pas un trou. */}
