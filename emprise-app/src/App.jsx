@@ -6086,6 +6086,46 @@ const APP_STYLES = `
         /* La pile de dos : deux cartes decalees, comme celle qu'on pose a cote de sa main.
            Le rapport 3/4 est celui d'une carte -- l'apercu ne doit pas mentir sur la forme
            non plus. */
+        /* ---------- La galerie des Herauts (03/09) ----------
+           Les huit visuels sont des CADRES ornes, vides au centre, aux couleurs
+           de leur Ordre : le Heraut s ecrit DANS l ouverture. Une colonne, en
+           16:9 comme les images -- deux par rangee les rendraient illisibles. */
+        .boutique-mention {
+          font-size: 10.5px; line-height: 1.4; color: var(--muted);
+          margin: 0 0 8px; text-align: center; max-width: 380px;
+        }
+        .herauts-galerie { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+        .heraut-carte { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
+        .heraut-cadre {
+          position: relative; width: 100%; aspect-ratio: 1024 / 585;
+          background-size: cover; background-position: center; background-repeat: no-repeat;
+          border-radius: 8px;
+        }
+        /* Le texte reste DANS l ouverture du cadre : 13 % de retrait de chaque
+           cote, mesure sur les images, pour qu il ne morde jamais l ornement. */
+        .heraut-dedans {
+          position: absolute; inset: 13% 13%;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 4px; text-align: center;
+          /* Un voile sombre au centre de l ouverture : les cadres sont textures
+             (pierre fendue, lave, ecorce) et le texte s y perdait. Le degrade
+             s eteint avant le bord, l ornement reste intact. */
+          background: radial-gradient(ellipse 62% 58% at 50% 50%, rgba(8,6,14,0.72) 0%, rgba(8,6,14,0) 78%);
+        }
+        .heraut-nom {
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700;
+          color: var(--gold-bright); letter-spacing: 0.04em;
+        }
+        .heraut-effet { font-size: 10.5px; line-height: 1.35; color: var(--bone); }
+        .heraut-etat { font-size: 10.5px; color: var(--muted); }
+        .heraut-etat.verrouille { font-style: italic; }
+        /* Pas encore gagne : le cadre s eteint, sans jamais disparaitre -- on
+           doit voir ce qu il y a a gagner, et le lire. A 0,75 de gris et 0,7 de
+           lumiere il ne restait plus rien de la lave ni du vert des Archers :
+           mesure a l ecran, 0,5 et 0,88 eteignent sans effacer. Aucune
+           animation, c est un etat. */
+        .heraut-carte:not(.acquis) .heraut-cadre { filter: grayscale(0.5) brightness(0.88); }
+        .heraut-carte.acquis .heraut-etat { color: var(--gold-bright); }
         .boutique-dos-pile {
           position: relative; width: 100%; aspect-ratio: 3 / 4;
           display: block; margin-bottom: 2px;
@@ -17706,7 +17746,38 @@ export default function Emprise() {
                   {/* Plus de soldes en tete d'etal : le tresor du hub les affiche
                       deja, les popups d'achat disent le solde au moment de payer --
                       retire a la demande du Commandant. */}
-                  <h2 className="boutique-titre">Plateaux</h2>
+                  {/* ---------- Les Herauts, en tete de boutique (03/09) ----------
+                      Une GALERIE, rien a vendre : le Heraut d un Ordre se gagne
+                      en terminant son chapitre d Histoire, et le vendre aurait
+                      offert en gemmes ce qu un autre joueur a merite en jouant.
+                      Le rayon montre donc ce qu il y a a gagner, et comment.
+                      Les huit visuels sont des CADRES vides : le Heraut s ecrit
+                      dedans, le cadre porte la couleur de son Ordre. */}
+                  <h2 className="boutique-titre">Hérauts</h2>
+                  <p className="boutique-sous">La capacité supérieure d&apos;un Ordre, gagnée en terminant son chapitre.</p>
+                  <p className="boutique-mention">Les Hérauts se jouent contre l&apos;Écho et en défi entre amis, jamais en Classé ni en tournoi. En défi, les deux camps en bénéficient.</p>
+                  <div className="herauts-galerie">
+                    {HEROES.map((h) => {
+                      const order = ORDERS.find((o) => o.key === h.orderKey);
+                      if (!order) return null;
+                      const acquis = storyProgress.completedChapters.includes(h.orderKey);
+                      return (
+                        <div key={h.orderKey} className={`heraut-carte ${acquis ? "acquis" : ""}`}>
+                          <div className="heraut-cadre" style={{ backgroundImage: `url("/herauts/${h.orderKey}.webp")` }}>
+                            <div className="heraut-dedans">
+                              <span className="heraut-nom">{h.name}</span>
+                              <span className="heraut-effet">{h.desc}</span>
+                            </div>
+                          </div>
+                          <span className={`heraut-etat ${acquis ? "" : "verrouille"}`}>
+                            {acquis ? "Acquis" : `Terminez le chapitre des ${nomOrdreAffiche(order)}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <h2 className="boutique-titre second">Plateaux</h2>
                   <p className="boutique-sous">Le sol sur lequel se livrent vos duels.</p>
                   <div className="boutique-grille">
                     {PLATEAUX.map((p) => {
