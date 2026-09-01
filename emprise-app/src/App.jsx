@@ -5880,6 +5880,18 @@ const APP_STYLES = `
           display: flex; align-items: center; gap: 9px;
           padding: 7px 8px; border-bottom: 1px solid rgba(203,164,86,0.08);
         }
+        /* Une ligne qui mene a la fiche du Commandant (01/09) : c est un vrai
+           bouton, il faut donc lui reprendre les habitudes du navigateur et lui
+           rendre la largeur pleine. Sa propre ligne et une ligne sans identifiant
+           restent des div, inertes. */
+        .pantheon-ligne.ouvrable {
+          width: 100%; box-sizing: border-box; text-align: left;
+          font: inherit; color: inherit; background: none;
+          border: none; border-bottom: 1px solid rgba(203,164,86,0.08);
+          cursor: pointer; -webkit-appearance: none; appearance: none;
+        }
+        .pantheon-ligne.ouvrable:hover { background: rgba(203,164,86,0.06); }
+        .pantheon-ligne.ouvrable:active { transform: scale(0.99); }
         .pantheon-rang {
           flex: none; width: 26px; height: 20px; line-height: 20px; text-align: center;
           font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
@@ -19061,8 +19073,25 @@ export default function Emprise() {
             // Une ligne du classement. Les pseudos viennent du serveur mais ont ete ecrits
             // par des joueurs : ils passent par le filtre, comme partout ailleurs.
             const ligne = (l, rang) => {
+              // Toucher une ligne ouvre la fiche du Commandant (01/09). Elle lit
+              // users/{uid} directement, pas le classement : on y voit donc sa
+              // parure entiere, medaillon ET banniere, la ou la liste reste
+              // sobre. Pas de fiche sans uid, ni sur sa propre ligne -- la
+              // fiche adverse n est pas faite pour se regarder soi-meme.
+              const nomLigne = pseudoAffichable(l && l.pseudo) || "Commandant";
+              const ouvrable = !!(l && l.uid) && l.uid !== myUid;
+              const Balise = ouvrable ? "button" : "div";
               return (
-                <div key={(l && l.uid) || rang} className={`pantheon-ligne ${rang <= 3 ? `p${rang}` : ""}`}>
+                <Balise
+                  key={(l && l.uid) || rang}
+                  className={`pantheon-ligne ${rang <= 3 ? `p${rang}` : ""} ${ouvrable ? "ouvrable" : ""}`}
+                  {...(ouvrable ? {
+                    type: "button",
+                    onClick: () => setProfilAdverse({ uid: l.uid, nom: nomLigne }),
+                    "aria-haspopup": "dialog",
+                    "aria-label": `Voir le profil de ${nomLigne}`,
+                  } : {})}
+                >
                   <span className="pantheon-rang">{rang}</span>
                   {/* L'avatar choisi (03/09). Le document du classement est bati
                       par le serveur : tant que ses lignes ne portent pas le
@@ -19076,7 +19105,7 @@ export default function Emprise() {
                   <span className="pantheon-trophees">
                     <img src="/nav/trophee.webp" alt="" />{Math.max(0, Number(l && l.trophees) || 0)}
                   </span>
-                </div>
+                </Balise>
               );
             };
             return (
