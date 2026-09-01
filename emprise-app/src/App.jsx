@@ -1539,6 +1539,18 @@ const DOS_CARTES = [
   { cle: "amethyste", nom: "Améthyste", matiere: "Cristal du Trône, taillé net", prix: 3000,
     fond: "linear-gradient(118deg, rgba(255,255,255,0) 34%, rgba(214,170,255,0.16) 47%, rgba(255,255,255,0) 60%), radial-gradient(circle at 50% 40%, rgba(178,120,240,0.2) 0%, rgba(178,120,240,0) 62%), linear-gradient(160deg, #2c1e3e 0%, #120a1e 100%)",
     bord: "rgba(190,150,240,0.52)", anneau: "rgba(224,196,252,0.8)", socle: "#6a4696" },
+  { cle: "plumes", nom: "Plumes", matiere: "Plumes noires, un œil d'or",
+    prixGemmes: 150, image: "/dos/plumes.webp",
+    bord: "rgba(190,150,230,0.5)", anneau: "rgba(226,196,250,0.78)", socle: "#64488a" },
+  { cle: "chaines", nom: "Chaînes", matiere: "Chaînes d'or sur velours",
+    prixGemmes: 200, image: "/dos/chaines.webp",
+    bord: "rgba(222,186,110,0.52)", anneau: "rgba(246,220,156,0.8)", socle: "#8a6a2e" },
+  { cle: "ronces", nom: "Ronces", matiere: "Épines d'or, rose d'améthyste",
+    prixGemmes: 250, image: "/dos/ronces.webp",
+    bord: "rgba(206,150,196,0.5)", anneau: "rgba(238,198,230,0.78)", socle: "#7a3e6a" },
+  { cle: "astrolabe", nom: "Astrolabe", matiere: "Les anneaux du ciel gravé",
+    prixGemmes: 300, image: "/dos/astrolabe.webp",
+    bord: "rgba(150,170,226,0.5)", anneau: "rgba(208,220,248,0.78)", socle: "#46548a" },
 ];
 const DOS_DEFAUT = "blason";
 function dosDe(cle) { return DOS_CARTES.find((d) => d.cle === cle) || DOS_CARTES[0]; }
