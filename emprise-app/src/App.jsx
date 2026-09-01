@@ -3441,6 +3441,24 @@ function enRotation(cle) {
   const sel = selectionBoutique();
   return Object.keys(sel).some((f) => sel[f].some((a) => a.cle === cle));
 }
+// Le Heraut du jour (01/09). Le rayon n en montre plus qu UN, et c est le meme
+// pour tous : son rang vient de la MEME journee absolue que le reste de la
+// rotation, jamais d un tirage. Jour 0 du cycle -> premier Heraut de
+// HERAUTS_RAYON, jour 7 -> huitieme.
+// Il ne passe PAS par BOUTIQUE_FAMILLES : un Heraut ne se vend pas, il n a ni
+// prix ni quota, et le melange deterministe n aurait rien a repartir. La seule
+// chose qu il partage avec les autres rayons, c est la journee.
+function herautDuJour(jourAbsolu) {
+  const liste = herautsDuRayon();
+  if (!liste.length) return null;
+  const jour = jourAbsolu == null ? jourAbsoluBoutique() : jourAbsolu;
+  // Le modulo double protege d une horloge reglee avant la date de reference,
+  // exactement comme jourDuCycle dans selectionBoutique.
+  const jourDuCycle = ((jour % BOUTIQUE_JOURS) + BOUTIQUE_JOURS) % BOUTIQUE_JOURS;
+  // Le second modulo ne sert a rien tant qu il y a huit Herauts pour huit
+  // jours ; il evite un trou si la liste changeait de taille un jour.
+  return liste[jourDuCycle % liste.length];
+}
 // Le prochain 00:00 UTC, en millisecondes restantes.
 function resteAvantRotation(maintenant) {
   const t = maintenant == null ? Date.now() : maintenant;
@@ -18186,8 +18204,12 @@ export default function Emprise() {
                   <h2 className="boutique-titre">Hérauts</h2>
                   <p className="boutique-sous">La capacité supérieure d&apos;un Ordre, gagnée en terminant son chapitre.</p>
                   <p className="boutique-mention">Les Hérauts se jouent contre l&apos;Écho et en défi entre amis, jamais en Classé ni en tournoi. En défi, les deux camps en bénéficient.</p>
+                  {/* Un seul Heraut par jour (01/09), le meme pour tous. Les
+                      sept autres ne sont pas grises : ils ne sont pas rendus
+                      du tout. Le tableau d un seul element garde le corps du
+                      rendu intact -- rien d autre ne bouge dans le rayon. */}
                   <div className="herauts-galerie">
-                    {herautsDuRayon().map((h) => {
+                    {[herautDuJour()].filter(Boolean).map((h) => {
                       const order = ORDERS.find((o) => o.key === h.orderKey);
                       if (!order) return null;
                       const acquis = storyProgress.completedChapters.includes(h.orderKey);

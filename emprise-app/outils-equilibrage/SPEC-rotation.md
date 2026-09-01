@@ -91,9 +91,47 @@ Les seuils de prix ne doivent PAS être écrits en dur article par article : ils
 lisent sur les entrées. Un article ajouté au catalogue entre donc dans la rotation
 tout seul, sans toucher à ce code.
 
-Rayons **hors rotation**, inchangés : les packs de gemmes, Le Changeur, et le rayon
-Hérauts (un Héraut se gagne en terminant son chapitre, il n'a rien à faire dans un
-tirage). Les médaillons ne sont plus en boutique.
+Rayons **hors rotation**, inchangés : les packs de gemmes et Le Changeur. Les
+médaillons ne sont plus en boutique. Le rayon Hérauts a sa propre règle, plus simple,
+décrite juste en dessous.
+
+## 4 bis. Le Héraut du jour
+
+Le rayon Hérauts n'affiche **qu'un seul Héraut à la fois**, le même pour tous les
+joueurs au même instant. Les sept autres ne sont pas grisés ni listés : ils ne sont
+pas rendus du tout.
+
+Il ne passe **pas** par le générateur du §2 ni par les familles du §4 : un Héraut ne
+se vend pas, il n'a ni prix ni quota, et un mélange déterministe n'aurait rien à
+répartir. La seule chose qu'il partage avec le reste de la boutique, c'est la
+**journée** — la même `jourAbsolu`, la même bascule à 00:00 UTC.
+
+```
+jourDuCycle = ((jourAbsolu % 8) + 8) % 8      // exactement comme au §1
+Héraut du jour = HERAUTS_RAYON[jourDuCycle]
+```
+
+`HERAUTS_RAYON` est l'ordre d'affichage du rayon, distinct de `HEROES` (que lisent
+aussi la cérémonie de déblocage et les paliers de trophées) :
+
+| Jour du cycle | Héraut |
+|---|---|
+| 0 | Cendres |
+| 1 | Piques |
+| 2 | Archers |
+| 3 | Maudits |
+| 4 | Pestiférés |
+| 5 | Gardiens |
+| 6 | Scribes |
+| 7 | Abysses |
+
+Huit Hérauts pour huit jours : sur un cycle, chacun passe exactement une fois, et le
+cycle suivant est identique. Aucun tirage, rien en base.
+
+Ce qui **ne change pas** : le Héraut du jour garde la disposition validée (portrait de
+l'Ordre à gauche dans le cadre gravé, nom et capacité à droite), et son état sous le
+cadre — « Acquis » s'il est déjà gagné, sinon le chapitre à terminer. Un Héraut ne
+s'achète toujours pas : il se gagne en terminant le chapitre de son Ordre.
 
 ## 5. Ce que voit le joueur
 

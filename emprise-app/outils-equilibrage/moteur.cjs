@@ -72,7 +72,10 @@ const A_EXPOSER = ["ORDERS", "ROWS", "COLS", "CELLS", "setBoardSize", "makeHand"
   // s eprouvent hors ecran, sur trois cycles complets.
   "BOUTIQUE_REFERENCE", "BOUTIQUE_JOURS", "BOUTIQUE_FAMILLES", "jourAbsoluBoutique",
   "graineBoutique", "melangeDeterministe", "tranchesBoutique", "selectionBoutique",
-  "enRotation", "resteAvantRotation", "PLATEAUX", "DOS_CARTES", "BANNIERES"];
+  "enRotation", "resteAvantRotation", "PLATEAUX", "DOS_CARTES", "BANNIERES",
+  // Le Heraut du jour (01/09) : un seul par journee, eprouve sur plusieurs
+  // cycles hors ecran -- on ne peut pas avancer l horloge du navigateur.
+  "HEROES", "HERAUTS_RAYON", "herautsDuRayon", "herautDuJour"];
 const dispo = A_EXPOSER.filter((n) => new RegExp("(function|const|let|var)\\s+" + n + "\\b").test(compile));
 const moteur = new Function("require", "module", "exports",
   compile + "\nreturn {" + dispo.join(", ") + "};")(requireStub, module_, module_.exports);

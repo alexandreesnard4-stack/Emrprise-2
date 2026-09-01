@@ -8,7 +8,7 @@ Résonance : deux rangs exactement égaux parmi les voisines déclenchent une ra
 Onde : une carte capturée active sa capacité au service de son nouveau camp, et la chaîne peut se propager.
 Dix Ordres jouables, chacun avec sa capacité propre (échange de rangs, attraction, percée, tir à distance, renfort de meute, retournement, poison, bouclier, rangs cachés, rage des captures subies).
 Hérauts : la capacité supérieure d'un Ordre, gagnée en terminant son chapitre d'Histoire. Elle se joue contre l'Écho et en défi entre amis, jamais en Classé ni en tournoi ; en défi, les deux camps en bénéficient.
-La boutique ouvre sur une galerie des huit Hérauts : le portrait de leur Ordre dans un cadre gravé, ce qu'ils font, et le chapitre à terminer pour les obtenir. Rien ne s'y achète.
+La boutique ouvre sur le Héraut du jour : un seul à la fois, le même pour tous, avec le portrait de son Ordre dans un cadre gravé, ce qu'il fait, et le chapitre à terminer pour l'obtenir. Rien ne s'y achète.
 Mort Subite : à égalité parfaite, les Réserves des deux camps départagent sur les cases restantes.
 Réserve composée avant la partie : deux cartes gardées de côté, une par Ordre.
 Choix des deux Ordres avant le duel : à la main ou au dé, et le tirage du dé se confirme ou se relance avant de jouer.
