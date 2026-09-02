@@ -824,15 +824,19 @@ const TITRES_REPLI = {
 // Elles ne se detectent pas, ne comptent rien et n ouvrent aucun titre -- c est
 // un avis, pas une mecanique. Elles vivent ICI, a cote de COMBOS, et non dans
 // le rendu : la section du hub ne fait que les lire.
-// Les tirets cadratins de la redaction d origine sont devenus des virgules :
-// la maison n en veut aucun dans une chaine visible, et la batterie y veille.
+// ---------- ZONE A TIRETS CADRATINS, la seule du jeu ----------
+// Le Commandant a leve le garde-fou POUR CES TEXTES (01/09) : la redaction des
+// Traites les emploie a dessein, comme une respiration de recit. Le reste du
+// jeu n en veut toujours aucun, et la batterie continue de le tenir partout
+// ailleurs -- la sonde exclut nommement ce tableau et la section des Traites,
+// jamais le fichier entier.
 const COMBOS_RATES = [
   { paire: "Gardiens + Archers",
     texte: "le mur ne protège pas le 1 de l'Archer, et l'Archer n'offre aucune capture au Gardien." },
   { paire: "Pestiférés avec Héraut + Dorés",
-    texte: "le Héraut épargne votre camp, et L'Or Corrompu s'éteint." },
+    texte: "le Héraut épargne votre camp — L'Or Corrompu s'éteint." },
   { paire: "Dorés face aux Gardiens",
-    texte: "l'Éveil échange contre le rang défendu, bouclier compris, et le Gardien vend cher sa peau au troc." },
+    texte: "l'Éveil échange contre le rang défendu, bouclier compris — le Gardien vend cher sa peau au troc." },
   { paire: "Abysse en ouverture solitaire",
     texte: "à 16 de total sans banc, elle nourrit la Marée Montante… de l'adversaire." },
 ];
@@ -18991,7 +18995,7 @@ export default function Emprise() {
                       <div className="combos-etat">
                         {nomTitre
                           ? `Votre style : ${nomTitre}`
-                          : `Votre style se dessine : ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
+                          : `Votre style se dessine — ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
                       </div>
                       <div className="combos-liste">
                         {COMBOS.map((combo) => {
@@ -19044,7 +19048,7 @@ export default function Emprise() {
                         aria-expanded={combosRatesOuvert}
                         onClick={() => setCombosRatesOuvert((v) => !v)}
                       >
-                        <span>Les mariages ratés : ce qu&apos;aucun traité ne recommande</span>
+                        <span>Les mariages ratés — ce qu&apos;aucun traité ne recommande</span>
                         <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
                       </button>
                       {combosRatesOuvert && (
@@ -19055,10 +19059,15 @@ export default function Emprise() {
                         </div>
                       )}
 
+                      {/* « vous marchez en L Errant » ne se disait pas : les noms
+                          des titres portent leur article, et la phrase les
+                          accueille au lieu de les tronquer. Le commentaire est
+                          POSE AVANT le bloc : glisse entre deux lignes de
+                          texte, JSX y mange l espace et collait les mots. */}
                       <div className="combos-repli">
                         Aucun traité dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
-                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> ; sinon,
-                        vous marchez en <b>{TITRES_REPLI.errant.nom}</b>.
+                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> — sinon,
+                        vous restez <b>{TITRES_REPLI.errant.nom}</b>.
                       </div>
                     </section>
                   );
