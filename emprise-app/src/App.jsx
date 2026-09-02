@@ -14530,7 +14530,14 @@ export default function Emprise() {
   // d en face par le document de la partie, valide par titreDuJeu.
   function territoireVs(camp, monCamp, nom, fond, cartes, reserve) {
     const p = (profilPartie && profilPartie[camp]) || {};
-    const trophees = trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null;
+    // 01/09 : la Partie classique n en met AUCUN en jeu. Les montrer au
+    // face-a-face laissait croire que le rang se joue -- et le document les
+    // porte quand meme, puisqu il a la meme forme que celui du Classe. On les
+    // tait ici plutot que de les retirer du document : d autres ecrans les y
+    // lisent, et un champ absent se remarque plus tard, plus mal.
+    // Le Classe les garde : c est justement ce qu on y risque.
+    const trophees = partieClassique ? null
+      : (trophesPartie && typeof trophesPartie[camp] === "number" ? trophesPartie[camp] : null);
     const titreBrut = titresPartie && typeof titresPartie[camp] === "string" ? titresPartie[camp] : "";
     // Valide contre COMBOS ET TITRES_REPLI : un adversaire portant L'Errant
     // ou L'Alchimiste s'affichait vide avec la seule liste des combos.
