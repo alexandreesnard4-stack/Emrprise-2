@@ -95,3 +95,4 @@ Un pseudo compte 11 caractères au plus, pour se lire en entier sur la bande du 
 Contre l'Écho, après un Augure affiché, l'Écho ne joue pas la case suggérée tant qu'une autre case est libre.
 Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre.
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
+Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.

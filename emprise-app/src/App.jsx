@@ -4330,7 +4330,10 @@ function BouclierGardien({ dir, delai }) {
 const TENTACULE_ABYSSE_SRC = "/icones/tentacule-abysse.webp";
 function TentaculesAbysse({ events }) {
   const [finie, setFinie] = useState(false);
-  const renforcee = events.some((e) => e.kind === "devoreuse");
+  const vuRef = useRef(null);
+  const deja = effetsDejaJoues(events, vuRef);
+  useEffect(() => { vuRef.current = deja ? null : events; }, [events, deja]);
+  const renforcee = events.some((e) => e.kind === "devoreuse") && !deja;
   if (!renforcee || finie) return null;
   return (
     <span
@@ -4342,10 +4345,37 @@ function TentaculesAbysse({ events }) {
   );
 }
 
+// ONE-SHOT (02/09) : un evenement d animation ne joue qu UNE fois. Chaque objet
+// d evenement rendu par une carte ou un calque est inscrit ici a son premier
+// affichage. Si ses classes lui sont retirees (l apercu de glisser vide les
+// evenements des cases qu il touche ; une case se vide pendant l apercu d une
+// attraction, la carte est remontee) puis rendues -- ou si un re-rendu fait
+// renaitre la carte -- rien ne rejoue : la carte se montre dans son etat final.
+// Un re-rendu ordinaire, meme tableau d evenements sous les yeux, ne relance rien
+// (les classes ne changent pas). Le WeakSet suit les objets de flashes : une
+// nouvelle resolution en fabrique de nouveaux. C est le pendant, dans le temps,
+// de « une carte n a droit qu a une rotation par resolution ».
+const EFFETS_JOUES = new WeakSet();
+const AUCUN_EFFET = [];
+// Vrai si ces evenements ont deja ete affiches par un rendu precedent et que la
+// carte ne les a plus sous les yeux depuis (vuRef : le dernier tableau rendu).
+function effetsDejaJoues(events, vuRef) {
+  return events.length > 0 && vuRef.current !== events && events.every((e) => EFFETS_JOUES.has(e));
+}
+
 // Composant réutilisable : affiche une carte (portrait + 4 rangs), avec ses
 // animations d'événements le cas échéant. Remplace 6 copies identiques du même
 // JSX qui traînaient dans le plateau, les 2 mains, le tutoriel et l'aperçu.
-const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDown, extraClass = "", selected = false, concealed = false, poisoned = false, previewResonanceDirs = [], hiddenFromFoe = 0 }) {
+const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_EFFET, onClick, onPointerDown, extraClass = "", selected = false, concealed = false, poisoned = false, previewResonanceDirs = [], hiddenFromFoe = 0 }) {
+  // One-shot : voir EFFETS_JOUES. Des evenements deja joues sont rendus comme s il n y
+  // en avait pas ; la carte se montre dans son etat final, sans classe ni calque.
+  const vuRef = useRef(null);
+  const dejaJoues = effetsDejaJoues(evenementsRecus, vuRef);
+  // Collant : rendue « deja jouee », la carte oublie le tableau (vuRef null) pour le
+  // rester au rendu suivant -- sinon l effet l enregistrerait comme vu, et le rendu
+  // d apres le croirait continu et relancerait tout.
+  useEffect(() => { if (dejaJoues) { vuRef.current = null; return; } vuRef.current = evenementsRecus; evenementsRecus.forEach((e) => EFFETS_JOUES.add(e)); }, [evenementsRecus, dejaJoues]);
+  const events = dejaJoues ? AUCUN_EFFET : evenementsRecus;
   // La capture (same/basic/combo) s'affiche normalement. La croissance du Maudit
   // ("maudit-boost") est retardée (voir mauditBoostDelay plus bas) pour laisser au joueur
   // le temps de bien voir la capture avant de comprendre que la carte grandit en plus —
@@ -4382,19 +4412,8 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
     if (e.kind === "mue" && e.axis) return capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`;
     return `flash-${e.kind}`;
   }).filter(Boolean).join(" ");
-  // La carte marque qu elle a tourne pour CETTE resolution (le tableau d evenements
-  // vient de flashes : meme reference tant que la resolution vit). Si ses classes
-  // ont ete retirees entre-temps (l apercu de glisser vide les evenements de toutes
-  // les cartes) puis remises, rien ne rejoue : tour-deja-joue coupe l animation, la
-  // carte reste dans son etat final. Un simple re-rendu, classes identiques, ne
-  // relance rien de toute facon -- c est le retrait puis le retour qui rejouait.
-  const tourRef = useRef({ events: null, coupe: false });
-  const aUnTour = !!tourRetenu || events.some((e) => e.kind === "mue" && e.axis);
-  const dejaTourne = aUnTour && tourRef.current.events === events && tourRef.current.coupe;
-  useEffect(() => {
-    if (aUnTour) { if (tourRef.current.events !== events) tourRef.current = { events, coupe: false }; }
-    else if (events.length === 0 && tourRef.current.events) tourRef.current.coupe = true;
-  }, [events, aUnTour]);
+  // La marque « a deja tourne » d autrefois (tour-deja-joue) vit maintenant dans le
+  // registre EFFETS_JOUES, pour toutes les animations et tous les calques.
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
   // Le bouclier du Gardien (02/09) : un calque par cote concerne -- le cote attaque
@@ -4505,7 +4524,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   return (
     <div
       ref={carteRef}
-      className={`card ${owner} ${flashClasses} ${classesTrajet} ${dejaTourne ? "tour-deja-joue" : ""} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
+      className={`card ${owner} ${flashClasses} ${classesTrajet} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
       style={delaiTotal || pullStyle ? { ...(delaiTotal ? { animationDelay: `${delaiTotal}ms` } : {}), ...(pullStyle || {}) } : undefined}
       role="button" tabIndex={0} onClick={onClick} onKeyDown={KEY_ACTIVATE(onClick)}
       onPointerDown={onPointerDown}
@@ -10501,11 +10520,6 @@ const APP_STYLES = `
            la fin du trajet (--flip-delay) et le pas joue dans --anim-apres, comme
            pour une carte attiree puis prise par Resonance, capture de base ou Onde.
            Le trajet d abord, la carte se pose, PUIS le pivot ; jamais les deux. */
-        /* L invariant (02/09) : une carte dont le pivot a deja joue pour cette
-           resolution, et dont les classes reviennent apres avoir ete retirees, ne
-           rejoue rien -- elle reste dans son etat final. Cinq fois la classe pour
-           passer devant toutes les regles de pivot (quatre classes au plus). */
-        .card.tour-deja-joue.tour-deja-joue.tour-deja-joue.tour-deja-joue.tour-deja-joue { animation: none; }
         .card.flash-attraction-pull::before {
           content: ""; position: absolute; inset: -16px; border-radius: 16px; pointer-events: none; z-index: 4;
           background:
@@ -22687,7 +22701,11 @@ export default function Emprise() {
               const displayCard = (previewing && !cellConcealed) ? previewCard : cell;
               // En aperçu : AUCUNE animation de capacité — on montre uniquement les rangs
               // et couleurs hypothétiques. Les animations ne jouent qu'à la pose réelle.
-              const displayEvents = previewing ? [] : (flashes[i] || []);
+              // One-shot (02/09) : seules les cases que l apercu CHANGE perdent leurs
+              // effets (leur carte est hypothetique) ; les autres gardent les animations
+              // en cours du coup reellement pose -- rien ne se coupe ni ne se relance au
+              // passage du doigt. Et ce qui a ete retire ne rejoue jamais (EFFETS_JOUES).
+              const displayEvents = previewing && isBeingPreviewed ? AUCUN_EFFET : (flashes[i] || AUCUN_EFFET);
               // Pestiférés : cases qui deviendraient empoisonnées si on posait ici (pas encore
               // réellement empoisonnées tant qu'on n'a pas relâché).
               const willBePoisoned = previewing && !poisonedCells[i] && liveDragPreview.poisonedCells[i];
