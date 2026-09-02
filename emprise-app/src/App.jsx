@@ -6474,6 +6474,12 @@ const APP_STYLES = `
         }
         /* La pression seule, en transform : rien d autre ne s anime ici. */
         .test-rotation button:active { transform: scale(0.96); }
+        /* L ecran « Jouer avec un ami » quand la liste est vide (01/09). Une
+           phrase, pas un bouton : le panneau des Amis ne vit que dans le hub.
+           Plus large et plus aeree que .sub, qui sert a des lignes courtes. */
+        .amis-vide-ligne {
+          margin-top: 18px; max-width: 300px; line-height: 1.5; text-align: center;
+        }
         .boutique-mention {
           font-size: 10.5px; line-height: 1.4; color: var(--muted);
           margin: 0 0 8px; text-align: center; max-width: 380px;
@@ -20887,11 +20893,23 @@ export default function Emprise() {
           <button className="reset-btn" disabled={!joinCodeInput.trim()} onClick={() => joinOnlineGame()}>Rejoindre</button>
           {onlineError && <div className="online-error">{onlineError}</div>}
           {banniereDefi()}
-          {amis.length > 0 && (
+          {amis.length > 0 ? (
             <>
               <div className="sub" style={{ marginTop: 18 }}>ou défier un ami</div>
               <div className="amis-liste compacte">{amisTries.map((a) => ligneAmi(a, true))}</div>
             </>
+          ) : (
+            // 01/09 : sans ami, cet ecran restait nu depuis que le bouton
+            // « Creer une partie » a disparu -- un champ de code, et rien qui
+            // dise ou trouver quelqu un.
+            // Le message ENVOIE au hub au lieu d ouvrir le panneau : celui-ci
+            // ne vit que dans l ecran d accueil, un bouton d ici n aurait rien
+            // affiche. Mieux vaut une phrase juste qu un bouton mort.
+            <div className="sub amis-vide-ligne">
+              Vous n&apos;avez pas encore d&apos;ami. Revenez à l&apos;accueil et touchez l&apos;icône
+              Amis pour ajouter quelqu&apos;un avec son numéro : vous pourrez ensuite le défier
+              d&apos;ici, sans code à recopier.
+            </div>
           )}
         </div>
       )}
