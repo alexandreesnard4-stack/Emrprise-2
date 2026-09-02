@@ -91,3 +91,4 @@ La Portée des Archers se voit : une flèche vole du tireur à la cible, puis la
 L'attraction des Cendres se lit case par case : la carte attirée avance d'une case à la fois, marque un temps sur chacune, et le reste du coup attend qu'elle soit arrivée.
 Le minuteur de tour est une rangée de huit sceaux qui s'éteignent un à un, de droite à gauche ; au dernier, ils passent au rouge et il bat.
 Une carte prise par les Cendres pivote comme toute capture ; attirée, elle finit son trajet, se pose, puis pivote.
+Un pseudo compte 11 caractères au plus, pour se lire en entier sur la bande du hub.

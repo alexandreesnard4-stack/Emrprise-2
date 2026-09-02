@@ -958,22 +958,26 @@ function titrePrincipal(stats) {
 // perdre son nom en effacant ses parties serait une mauvaise surprise. Deux joueurs
 // peuvent porter le meme nom : c'est un affichage, l'identite reelle reste l'identifiant
 // anonyme de Firebase, invisible et unique.
-const PSEUDO_MAX = 14;
-// Le palier de taille du pseudo sur la bande du hub (01/09), par LONGUEUR.
-// Les seuils sont ICI, une seule fois ; le CSS porte les tailles. Calibres a
-// 375 px de large sur la vraie police : le texte y dispose d environ 78 px.
-//   0-7 signes  : taille pleine (14 px / 0,08 em), comme avant ;
-//   8-9         : moyen (12 px / 0,06 em) ;
-//   10-11       : long (11 px / 0,03 em) ;
-//   12-14       : tres long, le plancher lisible (10,5 px / 0,03 em).
-// Au plancher, un pseudo de 14 signes fait encore 100 px et plus : il ne
-// tient pas dans 78, et l ellipse reste le filet. Descendre sous 10 px ou
-// ecraser les lettres en scaleX n est pas une option.
+const PSEUDO_MAX = 11;
+// Le palier de taille du pseudo sur la bande du hub (01/09, recalibre le 02/09),
+// par LONGUEUR. Les seuils sont ICI, une seule fois ; le CSS porte les tailles.
+// Mesures sur la vraie bande a 375 px, sceau et carte de niveau en place : le
+// bouton du pseudo dispose de 83 px, soit 75 px de texte avec son rembourrage de
+// 4 px, 79 avec 2 px. Cinzel gras, lettres ordinaires :
+//   0-6 signes  : taille pleine (14 px / 0,08 em), 10,75 px par lettre ;
+//   7-8         : moyen (12 px / 0,06 em), 8,8 px par lettre ;
+//   9           : long (11 px / 0,03 em), 7,6 px par lettre ;
+//   10-11       : tres long, le plancher (10,5 px, sans interlettrage,
+//                 rembourrage 2 px), 7,1 px par lettre : ALEXANDRESJ = 82 / 82.
+// PSEUDO_MAX vaut 11 depuis le 02/09 : tout nom ordinaire tient en entier. Les
+// lettres larges (COMMANDANTS, MMMMMMMMMMM) et les noms d avant, plus longs,
+// gardent l ellipse en filet. Descendre sous 10,5 px ou ecraser les lettres en
+// scaleX n est pas une option.
 function palierPseudo(p) {
   const n = (p || "").length;
-  if (n >= 12) return "tres-long";
-  if (n >= 10) return "long";
-  if (n >= 8) return "moyen";
+  if (n >= 10) return "tres-long";
+  if (n >= 9) return "long";
+  if (n >= 7) return "moyen";
   return "";
 }
 const PSEUDO_MIN = 3;
@@ -1126,6 +1130,17 @@ const CIBLES_DE_HAINE = [
 ];
 for (const prefixe of PREFIXES_DE_HAINE) {
   for (const cible of CIBLES_DE_HAINE) NOMS_INTERDITS_PARTOUT.push(prefixe + cible);
+}
+// PSEUDO_MAX vaut 11 (02/09) : un nom est coupe a 11 signes AVANT tout jugement. Un
+// terme plus long ne pourrait donc plus jamais etre lu ; on le coupe a la meme
+// longueur, pour qu il attrape la forme tronquee que l on peut encore taper
+// (KillYourself -> KILLYOURSEL). Sans doublon : deux termes peuvent partager
+// leurs onze premieres lettres.
+for (let i = 0; i < NOMS_INTERDITS_PARTOUT.length; i++) NOMS_INTERDITS_PARTOUT[i] = NOMS_INTERDITS_PARTOUT[i].slice(0, PSEUDO_MAX);
+{
+  const uniques = [...new Set(NOMS_INTERDITS_PARTOUT)];
+  NOMS_INTERDITS_PARTOUT.length = 0;
+  NOMS_INTERDITS_PARTOUT.push(...uniques);
 }
 
 // LISTE LARGE — refusee seulement si le nom ENTIER s'y reduit, chiffres de queue mis a
@@ -6239,20 +6254,16 @@ const APP_STYLES = `
           font-size: 14px; color: var(--bone);
           text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
-        /* Quatre paliers selon la LONGUEUR du pseudo (01/09), au lieu d un seul
-           « long » a 11 px. Calibres sur la vraie police, a 375 px de large,
-           ou le texte dispose d environ 78 px une fois otes les marges de la
-           zone, le sceau, son ecart et le rembourrage du bouton.
-           Mesures (Cinzel gras, ALEXANDRESJZJA, 14 signes) : 145,6 px a
-           14/0,08 ; 121,4 a 12/0,06 ; 106,7 a 11/0,03 ; 101,8 a 10,5/0,03.
-           Le plancher de 10,5 px tient donc jusqu a 10 ou 11 signes selon les
-           lettres ; au-dela, l ellipse reste le filet -- un pseudo de 14
-           signes NE PEUT PAS tenir dans 78 px sans descendre sous 10 px, ce
-           que la lisibilite interdit. Jamais de scaleX : il deforme les lettres.
-           Les seuils vivent dans palierPseudo, cote JSX, une seule fois. */
+        /* Quatre paliers selon la LONGUEUR du pseudo (01/09, recalibres le 02/09).
+           Mesures sur la vraie bande a 375 px, sceau et carte de niveau en place :
+           83 px pour le bouton, 75 px de texte avec 4 px de rembourrage, 79 avec
+           2 px. A 10,5 px sans interlettrage, ALEXANDRESJ (11) fait 82 / 82 :
+           c est le plancher, et PSEUDO_MAX vaut 11 pour que tout nom ordinaire
+           tienne. Jamais de scaleX : il deforme les lettres. Les seuils vivent
+           dans palierPseudo, cote JSX, une seule fois. */
         .hub-banniere-pseudo.moyen { font-size: 12px; letter-spacing: 0.06em; }
         .hub-banniere-pseudo.long { font-size: 11px; letter-spacing: 0.03em; }
-        .hub-banniere-pseudo.tres-long { font-size: 10.5px; letter-spacing: 0.03em; }
+        .hub-banniere-pseudo.tres-long { font-size: 10.5px; letter-spacing: 0; padding: 2px 2px; }
         /* La carte, ENTIEREMENT A L'INTERIEUR de la banniere (demande du
            Commandant, 01/09, qui annule le chevauchement d'avant) : calee a
            8 px du bord droit et centree sur la hauteur -- 52 de banniere pour
