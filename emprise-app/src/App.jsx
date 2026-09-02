@@ -10197,9 +10197,16 @@ const APP_STYLES = `
            DANS le meme tour, en pourcentage. Les changer separement les
            desaccorderait du basculement de camp, qui tombe a mi-tour.
            --anim-deco garde la sienne : c est une lueur, pas un tour. */
-        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
-        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), var(--tour-nom, flip-resonance) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
-        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), var(--tour-nom, flip-combo) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
+        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), var(--tour-nom, flip-resonance) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
+        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), var(--tour-nom, flip-combo) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
+        /* Deux couloirs et un emplacement d apres (02/09) : --anim-deco, les decorations
+           sans rotation, AVANT le pivot ; --anim-apres, ce qui doit gagner pendant
+           l attente du pivot, APRES lui. Une animation a fill backwards impose deja sa
+           premiere image pendant son delai ; derniere de la liste, elle ecraserait
+           le transform d un pas de Cendres en cours. D ou le pas en dernier : il
+           gagne tant qu il joue, puis s efface (pas de fill) et laisse le pivot,
+           deja en route, prendre la main sur une carte posee. */
         /* Chimere ET capture (02/09) : la carte ne porte plus flash-mue-h/v mais
            flash-mue-capturee (voir flashClasses), qui ne definit QUE --tour-nom :
            aucune animation propre, rien dans --anim-deco. Le pivot de capture lit la
@@ -10215,11 +10222,11 @@ const APP_STYLES = `
            delai inline couvre le depart et le vol. Le tireur ne porte que
            flash-portee-tir : rien a jouer, la fleche est un element du plateau
            (.fleche-portee). L ancien portee-impact (anneau) est retire. */
-        .card.flash-portee.flash-portee.flash-portee { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        .card.flash-portee.flash-portee.flash-portee { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
         /* Cendres (02/09) : une carte PRISE par les Cendres pivote comme toute capture
            (elle n avait jamais eu de pivot : ember-flicker seulement). Adjacente, tout
            de suite ; attiree, voir plus bas : apres son dernier pas. */
-        .card.flash-attraction-prise.flash-attraction-prise.flash-attraction-prise { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        .card.flash-attraction-prise.flash-attraction-prise.flash-attraction-prise { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
         /* Renfort des Abysses (01/09) : la pulsation partagee, celle de l Onde --
            une montee en force, scale 1 a 1,08, 300 ms. L ancien devoreuse-void
            (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
@@ -10358,7 +10365,7 @@ const APP_STYLES = `
            en variables ; un pivot sur la meme carte (Resonance a l arrivee) attend la
            fin du trajet par --flip-delay. L ancien pull-in (glissement d un bloc en
            1,6 s, flou, rebond) est retire. */
-        .card.flash-attraction-pull.flash-attraction-pull { animation: var(--pull-anim, none); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-deco: var(--pull-anim, none); --flip-delay: var(--trajet, 0s); }
+        .card.flash-attraction-pull.flash-attraction-pull { animation: var(--anim-deco, none), var(--pull-anim, none); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-apres: var(--pull-anim, none); --flip-delay: var(--trajet, 0s); }
         .card.pull-pas-1 { --pull-anim: pull-pas-1 0.3s linear; --trajet: 0.3s; }
         .card.pull-pas-2 { --pull-anim: pull-pas-2 0.7s linear; --trajet: 0.7s; }
         .card.pull-pas-3 { --pull-anim: pull-pas-3 1.1s linear; --trajet: 1.1s; }
@@ -10370,18 +10377,12 @@ const APP_STYLES = `
         /* Le poison traverse (un seul evenement, cumule, a l arrivee -- il n existe
            aucun effet par case) se joue quand la carte ARRIVE : le voile et le nuage
            attendent la fin du trajet. Le badge de delta attend aussi (delai inline). */
-        .card.flash-attraction-pull.flash-poison { --anim-deco: var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
+        .card.flash-attraction-pull.flash-poison { --anim-deco: poison-hit 1.6s ease var(--trajet, 0s) both; }
         .card.flash-attraction-pull.flash-poison::before { animation-delay: var(--trajet, 0s); animation-fill-mode: backwards; }
-        /* Attiree ET prise : le trajet d abord, le pivot ensuite -- jamais les deux.
-           Le pivot attend la fin du trajet (delai --trajet, fill backwards) mais, en
-           attente, une animation a fill backwards impose deja sa premiere image : si
-           elle etait DERNIERE de la liste, son rotateY(0) et sa robe ecraseraient le
-           translate et la robe du pas (a propriete egale, la derniere de la liste
-           gagne). D ou l ordre inverse : le pivot d abord, le pas en dernier -- le pas
-           gagne tant qu il joue, puis s efface (pas de fill) et laisse le pivot, deja
-           en route, prendre la main sur une carte posee. */
-        .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none); }
-        .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise.flash-poison { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
+        /* Attiree ET prise (02/09) : rien de special -- le pivot de la prise attend
+           la fin du trajet (--flip-delay) et le pas joue dans --anim-apres, comme
+           pour une carte attiree puis prise par Resonance, capture de base ou Onde.
+           Le trajet d abord, la carte se pose, PUIS le pivot ; jamais les deux. */
         /* L invariant (02/09) : une carte dont le pivot a deja joue pour cette
            resolution, et dont les classes reviennent apres avoir ete retirees, ne
            rejoue rien -- elle reste dans son etat final. Cinq fois la classe pour
