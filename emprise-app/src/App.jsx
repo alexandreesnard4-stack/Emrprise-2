@@ -5706,7 +5706,10 @@ const APP_STYLES = `
            comme une carte qu on retourne a la main. Definie ICI une fois ; la
            Reserve la lit, le pivot de capture la lit, la Chimere la lit. */
         html { background: #0a0810; }
-        :root { --tour-duree: .9s; --tour-courbe: cubic-bezier(.45, .05, .25, 1); }
+        /* --tour-duree : le pivot de capture (02/09 : 1,4 s, il etait a 0,9 s).
+           --reserve-duree : la selection de la Reserve, decouplee -- a 1,4 s elle
+           trainait ; elle garde ses 0,9 s. Meme courbe pour les deux. */
+        :root { --tour-duree: 1.4s; --reserve-duree: .9s; --tour-courbe: cubic-bezier(.45, .05, .25, 1); }
         body { margin: 0; background: transparent; }
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap');
 
@@ -10480,17 +10483,18 @@ const APP_STYLES = `
         /* La meme, pour une carte a la fois VICTIME et emettrice : elle vient
            d etre capturee (le tour), puis elle agit (la pulsation). Jamais les
            deux en meme temps sur la meme carte : la pulsation attend la fin du
-           tour, en tenant l identite pendant 72 % de sa duree.
+           tour, en tenant l identite pendant 87,5 % de sa duree.
            POURQUOI dans les images-cles et non en delai d animation : les
            cartes d une chaine recoivent leur delai de maillon en style inline
            (animationDelay), qui ecrase le delai de chaque animation de la
            liste. Le seul endroit ou une attente survit, c est dans les
-           pourcentages. 82 % = 0,9 s de tour sur 1,1 s au total : si
-           --tour-duree change, ce pourcentage doit suivre. */
+           pourcentages. 87,5 % = 1,4 s de tour sur 1,6 s au total : si
+           --tour-duree change, ce pourcentage doit suivre (et la duree de
+           1,6 s des regles qui l emploient, pour garder 0,2 s de pulsation). */
         @keyframes combo-emit-pulse-apres {
-          0%, 82% { transform: scale(1); opacity: 1; }
-          91%     { transform: scale(1.08); opacity: 0.85; }
-          100%    { transform: scale(1); opacity: 1; }
+          0%, 87.5% { transform: scale(1); opacity: 1; }
+          93.75%    { transform: scale(1.08); opacity: 0.85; }
+          100%      { transform: scale(1); opacity: 1; }
         }
         .card.flash-combo-emit.flash-combo-emit {
           animation: combo-emit-pulse 0.2s ease, combo-emit-glow 1.6s ease;
@@ -10501,7 +10505,7 @@ const APP_STYLES = `
            et compose : pulsation retardee, lueur, puis le tour en dernier. */
         .card.flash-combo.flash-combo-emit,
         .card.flash-portee.flash-combo-emit {
-          --anim-deco: combo-emit-pulse-apres 1.1s ease, combo-emit-glow 1.6s ease;
+          --anim-deco: combo-emit-pulse-apres 1.6s ease, combo-emit-glow 1.6s ease;
         }
         @keyframes combo-emit-glow {
           0%, 100% { filter: drop-shadow(0 0 0 transparent); }
@@ -11104,7 +11108,7 @@ const APP_STYLES = `
           /* 0,9 s : un retournement de carte doit se REGARDER. A 0,45 s l'oeil ne
              voyait qu'un clignotement, pas une carte qui tourne. La courbe part
              lentement et finit doucement, comme une carte qu'on retourne a la main. */
-          transition: transform var(--tour-duree) var(--tour-courbe);
+          transition: transform var(--reserve-duree) var(--tour-courbe);
         }
         .reserve-case.prise .reserve-flip { transform: rotateY(180deg); }
         .reserve-face {
