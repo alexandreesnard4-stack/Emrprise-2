@@ -10795,16 +10795,9 @@ const APP_STYLES = `
           color: var(--bone); padding: 10px 8px; margin: 6px 0;
         }
         .join-code-input:focus { outline: none; border-color: var(--gold); }
-        /* Code de partie : c'est LA donnée que le joueur doit lire puis dicter à son
-           adversaire. Il occupe donc toute la largeur disponible et se dimensionne en vw
-           pour rester énorme sur un écran de téléphone, avec un plafond sur grand écran. */
-        .game-code-display {
-          font-family: 'Cinzel', serif; font-size: clamp(44px, 15vw, 76px); font-weight: 700;
-          letter-spacing: 0.16em; text-indent: 0.16em; line-height: 1.1; color: var(--gold-bright);
-          background: var(--panel); border: 2px solid rgba(203,164,86,0.55); border-radius: 14px;
-          padding: 18px 16px; margin: 12px 0; width: 100%; text-align: center;
-          text-shadow: 0 0 26px rgba(203,164,86,0.45); box-shadow: 0 0 0 1px rgba(203,164,86,0.18), 0 10px 30px rgba(0,0,0,0.45);
-        }
+        /* .game-code-display est partie avec l affichage du code de partie
+           (01/09) : plus personne ne saisit de code, plus personne n en dicte.
+           Le tournoi en ligne garde le sien, sous .code-tournoi. */
         .code-copie { font-size: 11px; color: var(--gold-bright); margin-top: -4px; min-height: 14px; }
         /* Textes d'attente : un encart discret, hauteur reservee pour que le bloc ne
            saute pas d'une phrase a l'autre. */
@@ -10983,11 +10976,9 @@ const APP_STYLES = `
         }
         .ordres-adversaire svg { width: 13px; height: 13px; fill: var(--bonus); }
         .ordres-adversaire.pret { color: var(--bonus); }
-        .code-rappel { font-size: 15px; color: var(--muted); margin-top: -4px; }
-        .code-rappel b {
-          font-family: 'Cinzel', serif; font-size: 24px; letter-spacing: 0.14em;
-          color: var(--gold-bright); margin-left: 6px; vertical-align: -2px;
-        }
+        /* .code-rappel est partie avec le rappel du code sur l ecran des Ordres
+           (01/09), comme .game-code-display avant elle. Plus aucun code de
+           partie ne s affiche hors du tournoi en ligne. */
         .online-error { color: var(--red-bright); font-size: 11.5px; margin-top: 10px; text-align: center; }
         /* Trophées et titre d'un joueur en Classé : des puces posées à côté de son nom. */
         .zone-main { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
@@ -16364,14 +16355,9 @@ export default function Emprise() {
     } catch (e) { /* le joueur lira le code a l'ecran */ }
   }
 
-  async function copierCode() {
-    if (!onlineGameId) return;
-    try {
-      if (!(await copierTexte(onlineGameId))) return;
-      setCodeCopie(true);
-      setTimeout(() => setCodeCopie(false), 2000);
-    } catch (e) { /* le joueur lira le code à l'écran */ }
-  }
+  // copierCode est partie avec l affichage du code (01/09) : il n y a plus de
+  // code a copier sur cet ecran. copierCodeTournoi, elle, reste : le tournoi
+  // en ligne a toujours son code a partager.
 
   // Efface l'annonce d'appariement une fois qu'elle a été prise, pour qu'elle ne soit
   // jamais rejouée. Conditionnée au code exact : si un nouvel appariement a déjà été
@@ -21155,9 +21141,13 @@ export default function Emprise() {
               Ordres s'ouvre, ce bloc avait le temps de montrer le code de la partie --
               une fraction de seconde, mais assez pour le lire, et rien n'invite plus a
               partager un duel classe que de voir son code s'afficher. */}
-          {!fileAttente && !partieClassee && !tournoiOnlineId && onlineRole === "blue" && onlineGameId && (
+          {/* 01/09 : le code de la partie ne s affiche plus du tout. Personne ne
+              peut plus en saisir un -- le champ a quitte l ecran des amis -- et
+              montrer un code que nul ne peut taper ne pouvait qu egarer. Il ne
+              reste ici que l etat du defi envoye. */}
+          {!fileAttente && !partieClassee && !tournoiOnlineId && onlineRole === "blue" && onlineGameId && defiEnvoye && (
             <>
-              {defiEnvoye ? (() => {
+              {(() => {
                 const f = fiches[defiEnvoye.uid];
                 const nom = nomAffiche(f && f.pseudo);
                 const absent = !f || !f.vuLe || maintenantServeur() - f.vuLe >= EN_LIGNE_MS;
@@ -21179,19 +21169,7 @@ export default function Emprise() {
                     </div>
                   </>
                 );
-              })() : (
-                <>
-                  <div className="sub">Partagez ce code avec votre adversaire :</div>
-                  <div className="game-code-display">{onlineGameId}</div>
-                </>
-              )}
-              {!defiEnvoye && <button className="bouton-copier" onClick={copierCode} aria-label="Copier le code" title="Copier le code">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M9 3h9a2 2 0 0 1 2 2v11h-2V5H9V3z" />
-                  <path d="M6 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h9V9H6z" />
-                </svg>
-              </button>}
-              <div className="code-copie">{!defiEnvoye && codeCopie ? "Code copié" : ""}</div>
+              })()}
             </>
           )}
           {/* Meme illustration plein ecran que la recherche d'adversaire : attendre qu'un
@@ -21310,9 +21288,9 @@ export default function Emprise() {
               defi est parti chez un ami, qui n'aura rien a taper — il ne dit plus rien a
               personne. En Classé l'appariement est automatique, en tournoi c'est l'arbre
               qui decide : jamais de code non plus. */}
-          {mode === "online" && onlineGameId && !partieClassee && !tournoiOnlineId && !defiEnvoye && !advPresent && (
-            <div className="code-rappel">Code de partie :<b>{onlineGameId}</b></div>
-          )}
+          {/* 01/09 : le rappel du code a disparu ici aussi. C etait le second et
+              dernier endroit qui en montrait un ; plus personne ne peut en
+              saisir, le repeter n aurait fait qu egarer. */}
           <div className="sub">
             {pickerChoice.length}/2 sélectionnées · 4 cartes de chaque Ordre
             {tourney.active && tourney.ban && ` · ${ORDERS.find((o) => o.key === tourney.ban)?.name} banni ce tour-ci`}
