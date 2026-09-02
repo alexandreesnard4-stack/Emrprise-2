@@ -104,6 +104,23 @@ function tailleAdoubement(nom) {
 const DEFI_BANDEAU_MS = 10000;
 const DEFI_GLISSE_MS = 250;                // son entree et sa sortie, par le bas
 const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes = en ligne
+// ---------- Le rythme d un tour (01/09) ----------
+// Trois delais de PRESENTATION, reunis ici pour qu on les lise d un coup. Ce
+// ne sont PAS les chronos d equite du jeu en ligne (TURN_SECONDS, le forfait,
+// l abandon) : ceux-la vivent ailleurs et ne bougent pas avec ceux-ci.
+//   - RYTHME_REFLEXION_ECHO_MS : l Echo attend avant de poser, comme un
+//     adversaire qui reflechit. Il attend AUSSI la fin d une chaine d Onde en
+//     cours, plus 400 ms, si elle depasse ce plancher.
+//   - RYTHME_POSE_ECHO_MS : entre la pose de l Echo et ses captures. Cale sur
+//     l animation card-land-bot (46 % de 3,5 s) : la carte finit d atterrir
+//     AVANT que quoi que ce soit ne bascule. A changer avec elle, jamais seul.
+//   - RYTHME_POSE_JOUEUR_MS : entre MA pose et mes captures. C etait zero --
+//     la carte tombait et le plateau basculait dans la meme image, on ne
+//     lisait ni l une ni l autre. Quatre cents millisecondes pour voir la
+//     pose, puis ce qu elle provoque.
+const RYTHME_REFLEXION_ECHO_MS = 3200;
+const RYTHME_POSE_ECHO_MS = 1610;
+const RYTHME_POSE_JOUEUR_MS = 400;
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
 // etiquettes de camp, sonnerait faux pour un ami.
 function nomAffiche(brut) {
@@ -5957,11 +5974,27 @@ const APP_STYLES = `
           position: absolute; inset: 0;
           padding-left: 8px; padding-right: 38px; box-sizing: border-box;
           display: flex; align-items: center; justify-content: center;
+          gap: 6px;
           pointer-events: none;
+        }
+        /* Le sceau du Commandant, a gauche de son pseudo (01/09). Meme ombre
+           portee que le nom : certaines bannieres ont la pierre claire, et un
+           sceau nu s y perdait comme le texte s y perdait.
+           Decoratif : aria-hidden dans le rendu, aucun clic -- le pseudo garde
+           le sien, et lui seul ouvre le profil. flex: none pour qu il ne se
+           laisse jamais ecraser par un nom long. */
+        .hub-banniere-sceau {
+          width: 22px; height: 22px; flex: none; border-radius: 50%;
+          background-color: #241c32; background-size: cover; background-position: center;
+          border: 1px solid rgba(203,164,86,0.55);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
         .hub-banniere-pseudo {
           pointer-events: auto; background: none; border: none; cursor: pointer;
-          padding: 2px 4px; max-width: 100%;
+          /* min-width 0 : sans lui, un bouton en flex refuse de retrecir sous
+             la largeur de son texte et l ellipse ne se declenche jamais --
+             c est le sceau voisin qui se serait fait pousser dehors. */
+          padding: 2px 4px; max-width: 100%; min-width: 0;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
           font-size: 14px; color: var(--bone);
@@ -10163,7 +10196,41 @@ const APP_STYLES = `
         .card.combo-hit-from-right { --knock-x: -5px; --knock-y: 0px; }
         /* Onde : la carte émettrice (qui vient de capturer et transmet le choc) clignote
            avec un drop-shadow néon violet, sans se retourner (elle a déjà basculé avant). */
-        .card.flash-combo-emit.flash-combo-emit { animation: combo-emit-glow 1.6s ease; --anim-deco: combo-emit-glow 1.6s ease; }
+        /* La pulsation de l emettrice (01/09) : la carte dont la capacite se
+           declenche au service de son nouveau camp se gonfle un instant au
+           moment ou elle agit -- pour montrer QUI cause QUOI dans la chaine.
+           transform et opacity seulement, 200 ms. Elle s ajoute a la lueur,
+           elle ne la remplace pas. */
+        @keyframes combo-emit-pulse {
+          0%   { transform: scale(1); opacity: 1; }
+          50%  { transform: scale(1.06); opacity: 0.85; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        /* La meme, pour une carte a la fois VICTIME et emettrice : elle vient
+           d etre capturee (le tour), puis elle agit (la pulsation). Jamais les
+           deux en meme temps sur la meme carte : la pulsation attend la fin du
+           tour, en tenant l identite pendant 72 % de sa duree.
+           POURQUOI dans les images-cles et non en delai d animation : les
+           cartes d une chaine recoivent leur delai de maillon en style inline
+           (animationDelay), qui ecrase le delai de chaque animation de la
+           liste. Le seul endroit ou une attente survit, c est dans les
+           pourcentages. 72 % = 0,52 s de tour sur 0,72 s au total : si
+           --flip-duree change, ce pourcentage doit suivre. */
+        @keyframes combo-emit-pulse-apres {
+          0%, 72% { transform: scale(1); opacity: 1; }
+          86%     { transform: scale(1.06); opacity: 0.85; }
+          100%    { transform: scale(1); opacity: 1; }
+        }
+        .card.flash-combo-emit.flash-combo-emit {
+          animation: combo-emit-pulse 0.2s ease, combo-emit-glow 1.6s ease;
+          --anim-deco: combo-emit-pulse 0.2s ease, combo-emit-glow 1.6s ease;
+        }
+        /* Victime ET emettrice : meme specificite que la regle du dessus, posee
+           APRES pour gagner. Le tour (regle a quatre classes) lit --anim-deco
+           et compose : pulsation retardee, lueur, puis le tour en dernier. */
+        .card.flash-combo.flash-combo-emit {
+          --anim-deco: combo-emit-pulse-apres 0.72s ease, combo-emit-glow 1.6s ease;
+        }
         @keyframes combo-emit-glow {
           0%, 100% { filter: drop-shadow(0 0 0 transparent); }
           40% { filter: drop-shadow(0 0 10px var(--combo)) drop-shadow(0 0 20px var(--combo)) brightness(1.5); }
@@ -13400,6 +13467,9 @@ export default function Emprise() {
   // L'Echo la consulte pour ne jamais poser sa carte au milieu d'une cascade — sa pose
   // remplacerait les classes d'animation en attente et les flips ne se joueraient jamais.
   const animsFinishAtRef = useRef(0);
+  // Vrai entre MA pose et sa resolution (RYTHME_POSE_JOUEUR_MS) : le verrou
+  // qui empeche de poser deux fois la meme carte pendant ce temps-la.
+  const poseEnAttenteRef = useRef(false);
   const shakeTimerRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
@@ -17409,6 +17479,11 @@ export default function Emprise() {
 
   function placeCardAt(owner, cardIdx, position, viaTouch = false) {
     if (gameOver || board[position]) return;
+    // Une pose attend encore sa resolution (01/09) : la carte est toujours
+    // dans la main, le tour est toujours a moi, et un second toucher aurait
+    // pose la meme carte deux fois. On refuse, sans rien dire -- la fenetre
+    // dure 400 ms, personne ne la voit se fermer.
+    if (poseEnAttenteRef.current) return;
     const hand = owner === "blue" ? blueHand : redHand;
     const card = hand[cardIdx];
     if (!card) return;
@@ -17605,16 +17680,26 @@ export default function Emprise() {
       // 3,5s de l'animation — voir card-land-bot dans le CSS).
       setBoard(newBoard);
       flashEvents([{ index: position, kind: placeKind }, ...revealEvents]);
-      setTimeout(resolveRest, 1610);
+      setTimeout(resolveRest, RYTHME_POSE_ECHO_MS);
     } else {
-      // Coup du joueur : tout se résout dans la foulée. On n'appelle flashEvents qu'UNE
-      // seule fois, depuis resolveRest — un premier appel suivi aussitôt d'un second
-      // remplaçait la liste d'effets à peine posée, ce qui pouvait relancer depuis le
-      // début les animations de pose et de capture. Le double appel n'est nécessaire
-      // que pour la pose lente du bot, où les deux étapes sont réellement séparées
-      // dans le temps.
+      // Coup du joueur (01/09) : la pose d abord, les captures ensuite -- le
+      // meme deux temps que l Echo, en plus court. C etait resolveRest() dans
+      // la foulee : la carte tombait et le plateau basculait dans la meme
+      // image, on ne lisait ni l une ni l autre.
+      // Le double appel de flashEvents est SANS DANGER ici, et la raison
+      // merite d etre dite : resolveRest reinclut l evenement de pose, si bien
+      // que la carte posee garde exactement la meme classe entre les deux
+      // appels. React ne touche pas a un attribut inchange, et une animation
+      // CSS ne redemarre que si sa classe change -- la chute continue, seules
+      // les captures s ajoutent. C est le mecanisme que la pose lente de
+      // l Echo utilise deja.
+      // Le verrou : pendant ces 400 ms, la carte est encore dans la main et
+      // c est toujours mon tour. Un second toucher rapide aurait pose la meme
+      // carte deux fois. placeCardAt refuse tant que la resolution attend.
       setBoard(newBoard);
-      resolveRest();
+      flashEvents([{ index: position, kind: placeKind }, ...revealEvents]);
+      poseEnAttenteRef.current = true;
+      setTimeout(() => { poseEnAttenteRef.current = false; resolveRest(); }, RYTHME_POSE_JOUEUR_MS);
     }
   }
 
@@ -18022,7 +18107,7 @@ export default function Emprise() {
     // L'Echo ne joue jamais au milieu d'une cascade d'Onde : si des flips differes du
     // coup precedent sont encore programmes, il attend leur fin, plus 400 ms de
     // respiration. Sans chaine en cours, son rythme reste inchange (3,2 s).
-    const attente = Math.max(3200, animsFinishAtRef.current - Date.now() + 400);
+    const attente = Math.max(RYTHME_REFLEXION_ECHO_MS, animsFinishAtRef.current - Date.now() + 400);
     const timer = setTimeout(() => {
       const move = botChooseMove(board, redHand, blueHand, "red", "blue", botDifficulty, poisonedCells);
       if (move) placeCardAt("red", move.cardIdx, move.cellIdx);
@@ -18393,6 +18478,20 @@ export default function Emprise() {
                     )}
                     <span className="hub-banniere-voile" aria-hidden="true" />
                     <span className="hub-banniere-pseudo-zone">
+                      {/* Le sceau du Commandant (01/09), a gauche de son nom.
+                          MEME source que l avant-partie : bourse.medaillonEquipe
+                          passe par imageMedaillon, l unique porte d affichage.
+                          La garde porte sur le CHAMP, pas sur l image :
+                          imageMedaillon rend toujours quelque chose (le repli),
+                          si bien qu un test sur elle aurait affiche un sceau a
+                          qui n en a choisi aucun. Ici, sans choix, rien. */}
+                      {bourse.medaillonEquipe && (
+                        <span
+                          className="hub-banniere-sceau"
+                          style={{ backgroundImage: `url("${imageMedaillon(bourse.medaillonEquipe)}")` }}
+                          aria-hidden="true"
+                        />
+                      )}
                       <button
                         className={`hub-banniere-pseudo ${pseudo && pseudo.length > 10 ? "long" : ""}`}
                         onClick={() => setActiveModal("profil")}
