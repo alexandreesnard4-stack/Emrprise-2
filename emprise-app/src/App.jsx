@@ -5682,12 +5682,34 @@ function simulerMatchEchos(graine) {
 // ---------- Timer bar ----------
 // Vert au-dessus de 66% du temps restant, orange entre 33% et 66%, rouge en dessous
 // (avec pulsation) — seuils faciles à ajuster si besoin.
+// La barre pleine : elle ne sert plus qu au tirage (draft.timeLeft). Le minuteur
+// de TOUR est rendu par SceauxTour, ci-dessous.
 function TimerBar({ timeLeft, max = TURN_SECONDS }) {
   const pct = Math.max(0, Math.min(1, timeLeft / max));
   const color = pct > 0.66 ? "green" : pct > 0.33 ? "orange" : "red";
   return (
     <div className="timer-bar-wrap">
       <div className={`timer-bar-fill ${color}`} style={{ width: `${pct * 100}%` }} />
+    </div>
+  );
+}
+
+// Les sceaux (02/09) : le minuteur de tour, huit segments biseautes qui
+// s eteignent un a un, de droite a gauche -- le temps se consume vers la gauche,
+// comme la barre qu ils remplacent (son remplissage etait ancre a gauche).
+// Sceaux allumes = ceil(fraction du temps restant x 8). Quand il n en reste qu un,
+// les sceaux allumes passent au rouge et le dernier pulse, en opacite seulement.
+// Presentation pure : timeLeft, max et l echeance viennent du meme minuteur.
+const NB_SCEAUX = 8;
+function SceauxTour({ timeLeft, max = TURN_SECONDS }) {
+  const fraction = Math.max(0, Math.min(1, timeLeft / max));
+  const allumes = Math.ceil(fraction * NB_SCEAUX);
+  const urgence = allumes === 1;
+  return (
+    <div className={`sceaux-tour ${urgence ? "urgence" : ""}`} role="img" aria-label={`Temps restant : ${allumes} sceaux sur ${NB_SCEAUX}`}>
+      {Array.from({ length: NB_SCEAUX }, (_, i) => (
+        <span key={i} className={`sceau ${i < allumes ? "allume" : ""} ${urgence && i === 0 ? "dernier" : ""}`} />
+      ))}
     </div>
   );
 }
@@ -11210,6 +11232,17 @@ const APP_STYLES = `
         .timer-bar-fill.orange { background: #a87a30; }
         .timer-bar-fill.red { background: #99403a; animation: pulse-timer 0.8s ease infinite; }
         @keyframes pulse-timer { 0%,100%{opacity:1} 50%{opacity:0.55} }
+        /* Les sceaux (02/09) : le minuteur de tour. Meme boite que la barre (largeur
+           100 %, 180 px au plus, 10 px de haut), huit segments en flex, 5 px d ecart,
+           biseau skewX(-18deg) statique. Allume : or, ombre statique ; eteint :
+           voile blanc a 7 %, sans ombre. Urgence (un seul sceau) : rouge, et le
+           dernier pulse en opacite seulement. Rien d autre n est anime. */
+        .sceaux-tour { position: relative; width: 100%; max-width: 180px; height: 10px; display: flex; align-items: center; gap: 5px; }
+        .sceau { flex: 1; height: 8px; transform: skewX(-18deg); border-radius: 2px; background: rgba(255,255,255,.07); }
+        .sceau.allume { background: linear-gradient(180deg, #f0cf7e, #b4842a); box-shadow: 0 0 5px rgba(233,198,93,.35); }
+        .sceaux-tour.urgence .sceau.allume { background: linear-gradient(180deg, #f08a6a, #9a2a22); box-shadow: 0 0 6px rgba(232,90,74,.5); }
+        .sceaux-tour.urgence .sceau.dernier { animation: sceau-pulse .8s ease-in-out infinite; }
+        @keyframes sceau-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
 
         .reset-btn { font-family: 'Cinzel', serif; letter-spacing: 0.1em; font-size: 12px; text-transform: uppercase;
           color: var(--bg); background: linear-gradient(180deg, var(--gold-bright), var(--gold)); border: none;
@@ -22313,7 +22346,7 @@ export default function Emprise() {
 
           {/* En ligne, campHaut est TOUJOURS l'adversaire : sa barre s'affiche pendant
               son tour, mesuree depuis notre ecran. En local, la regle d'origine. */}
-          {((isHumanTurn && turn === campHaut) || tourEnLigneAdverse) && !testMode && <TimerBar timeLeft={timeLeft} />}
+          {((isHumanTurn && turn === campHaut) || tourEnLigneAdverse) && !testMode && <SceauxTour timeLeft={timeLeft} />}
 
           {/* ═══ TEMPORAIRE — sélecteur d'arène, à retirer avant publication ═══ */}
           {testMode && (
@@ -22502,7 +22535,7 @@ export default function Emprise() {
             <FlechesPortee flashes={flashes} />
           </div>
 
-          {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}
+          {isHumanTurn && turn === campBas && !testMode && <SceauxTour timeLeft={timeLeft} />}
 
           {/* La capsule de quete : informative, jamais bloquante, hors de portee
               du toucher. Le lecteur d'ecran recoit la meme nouvelle par la zone
