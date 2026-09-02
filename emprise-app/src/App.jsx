@@ -4144,7 +4144,31 @@ function storyDifficultyFor(gameIndex, numGames) {
 //               cible pivote, PUIS la chaine reprend son pas de 300 ms.
 let compteurTirs = 0;
 function delaiMaillon(niveau) { return typeof niveau === "number" ? 4000 + niveau * 300 : 0; }
-function regrouperEffets(events) {
+// Le Heraut des Gardiens (02/09) : le moteur n emet rien pour son +1 en attaque (atkRank
+// l ajoute en silence). Les cotes de la carte posee qui frappent un ennemi se deduisent ici,
+// comme l apercu le fait deja : un ennemi encore adjacent apres le coup (il a resiste), ou
+// une voisine capturee par le choc de rang (basic, sans dir a la pose, ou same). Un
+// evenement de presentation, guardian-frappe, par cote -- jamais dans le moteur ni dans
+// Firestore (les deux clients le deduisent chacun du plateau apres le coup).
+function frappesDuHeraut(events, plateau, position) {
+  if (!plateau || position == null) return [];
+  const posee = plateau[position];
+  if (!posee || posee.ability !== "guardian" || !posee.heroActive) return [];
+  const pr = Math.floor(position / COLS), pc = position % COLS;
+  const frappes = [];
+  DIRS.forEach((d) => {
+    const nr = pr + d.dr, nc = pc + d.dc;
+    if (!inBounds(nr, nc)) return;
+    const ni = idx(nr, nc);
+    const cell = plateau[ni];
+    const ennemie = !!cell && cell.owner !== posee.owner;
+    const priseIci = events.some((e) => e.index === ni && (e.kind === "basic" || e.kind === "same"));
+    if (ennemie || priseIci) frappes.push({ index: position, kind: "guardian-frappe", dir: d.my });
+  });
+  return frappes;
+}
+function regrouperEffets(events, plateau, position) {
+  events = [...events, ...frappesDuHeraut(events, plateau, position)];
   const map = {};
   const ordres = new Map();
   events.filter((e) => e.kind === "devoreuse").sort((a, b) => a.index - b.index).forEach((e, k) => ordres.set(e, k));
@@ -4287,6 +4311,22 @@ function delaisDeCarte(events) {
 // sa pulsation, une seule animation a la fois sur elle. Au meme delai que la carte
 // (delaisDeCarte, decalage de 80 ms par Abysse compris) ; cree au declenchement,
 // retire du DOM a la fin de son animation.
+const BOUCLIER_GARDIEN_SRC = "/icones/bouclier-gardien.webp";
+// Le bouclier du Gardien (02/09) : l image (338 x 420), centree sur le bord concerne
+// de la carte, 34 px de haut. Fondu et leger pop (0,7 -> 1, 200 ms), tenue 450 ms,
+// fondu de sortie 200 ms. Cree au declenchement, retire du DOM a la fin.
+function BouclierGardien({ dir, delai }) {
+  const [finie, setFinie] = useState(false);
+  if (finie) return null;
+  return (
+    <span
+      className={`bouclier-fx bouclier-${dir}`}
+      style={{ "--bouclier-delai": `${delai}ms`, backgroundImage: `url("${BOUCLIER_GARDIEN_SRC}")` }}
+      aria-hidden="true"
+      onAnimationEnd={() => setFinie(true)}
+    />
+  );
+}
 const TENTACULE_ABYSSE_SRC = "/icones/tentacule-abysse.webp";
 function TentaculesAbysse({ events }) {
   const [finie, setFinie] = useState(false);
@@ -4337,6 +4377,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => {
     if (faitTourner(e) && e.kind !== tourRetenu) return e.kind === "attraction" ? "flash-attraction" : "";
     if (e.kind === "portee" && !e.dir) return "flash-portee-tir";
+    if (e.kind === "guardian" || e.kind === "guardian-frappe") return "";
     if (e.kind === "attraction" && !poseeIci) return "flash-attraction flash-attraction-prise";
     if (e.kind === "mue" && e.axis) return capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`;
     return `flash-${e.kind}`;
@@ -4356,7 +4397,12 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   }, [events, aUnTour]);
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
-  const guardianEvent = events.find((e) => e.kind === "guardian" && e.dir);
+  // Le bouclier du Gardien (02/09) : un calque par cote concerne -- le cote attaque
+  // (guardian, du moteur) ou, avec le Heraut, le cote qui frappe (guardian-frappe,
+  // deduit a l affichage). Calque independant, comme le renfort des Maudits : la
+  // carte garde une seule animation a la fois. Au delai de la capture de la carte
+  // (un Gardien attaque en chaine se defend au tour de son maillon).
+  const boucliers = events.filter((e) => (e.kind === "guardian" || e.kind === "guardian-frappe") && e.dir).map((e) => e.dir);
   // Cendres : la carte attirée doit se VOIR arriver. Sans point de départ, l'animation ne
   // faisait que la redimensionner sur sa case d'arrivée — elle semblait se téléporter.
   // On lui donne donc un décalage de départ, dans le sens inverse de son déplacement et
@@ -4472,7 +4518,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
           Seules les piques haut/bas subsistent ; la poussée de la carte attaquante
           (.flash-percee-self) reste le retour visuel principal de la Percée. */}
       {perceeEvent && (perceeEvent.dir === "top" || perceeEvent.dir === "bottom") && <span className={`percee-spikes spikes-from-${perceeEvent.dir}`} />}
-      {guardianEvent && <span className={`guardian-edge edge-from-${guardianEvent.dir}`} />}
+      {boucliers.map((dir) => <BouclierGardien key={dir} dir={dir} delai={delaiCapture} />)}
       {hiddenFromFoe > 0 && (
         <span className="scribe-hidden-badge" title={`Cachée à l'adversaire, ${hiddenFromFoe} tour(s)`}>
           <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
@@ -10479,7 +10525,6 @@ const APP_STYLES = `
           65%  { opacity: 0.85; transform: scale(0.75) rotate(25deg); }
           100% { opacity: 0; transform: scale(0.25) rotate(45deg); }
         }
-        .card.flash-guardian.flash-guardian { animation: guardian-shield 1.6s ease; position: relative; --anim-deco: guardian-shield 1.6s ease; }
         .card.flash-guardian-place.flash-guardian-place { animation: guardian-raise 1.6s ease; --anim-deco: guardian-raise 1.6s ease; }
         .card.flash-poison.flash-poison { animation: poison-hit 1.6s ease; position: relative; --anim-deco: poison-hit 1.6s ease; }
 
@@ -10512,19 +10557,28 @@ const APP_STYLES = `
           70% { scale: 0.96; }
           100% { scale: 1; }
         }
-        .card.flash-guardian::after {
-          content: ""; position: absolute; inset: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%;
-          pointer-events: none; border: 3px solid #9cc0e6;
-          animation: guardian-ring 1.6s ease; z-index: 4;
+        /* Le bouclier du Gardien (02/09) : l image, centree sur le bord concerne de la
+           carte (le cote attaque ; avec le Heraut, le cote qui frappe), 34 px de haut.
+           Fondu + leger pop (0,7 -> 1, 200 ms), tenue 450 ms, fondu de sortie 200 ms :
+           transform et opacity seulement. Remplace le champ de force sur le bord
+           (guardian-edge / shield-edge), la secousse de la carte (guardian-shield) et
+           l anneau (guardian-ring), retires. Le flash de pose (guardian-raise) et le
+           +1 vert de la pastille (rank-boosted, a l apercu) ne bougent pas. */
+        .bouclier-fx {
+          position: absolute; width: 27px; height: 34px; pointer-events: none; z-index: 7;
+          background-size: contain; background-repeat: no-repeat; background-position: center;
+          opacity: 0; transform: translate(-50%, -50%) scale(0.7);
+          animation: bouclier-pop 0.85s ease; animation-delay: var(--bouclier-delai, 0ms); animation-fill-mode: both;
         }
-        /* Champ de force sur le bord attaqué : barre bleu-acier lumineuse qui encaisse le choc */
-        .guardian-edge {
-          position: absolute; pointer-events: none; z-index: 6; border-radius: 5px;
-          background: linear-gradient(90deg, transparent, #cfe4f7, #9cc0e6, #cfe4f7, transparent);
-          box-shadow: 0 0 10px #9cc0e6, 0 0 20px rgba(75,127,168,0.75); opacity: 0;
-        }
-        .guardian-edge.edge-from-left, .guardian-edge.edge-from-right {
-          background: linear-gradient(0deg, transparent, #cfe4f7, #9cc0e6, #cfe4f7, transparent);
+        .bouclier-fx.bouclier-top { left: 50%; top: 0; }
+        .bouclier-fx.bouclier-bottom { left: 50%; top: 100%; }
+        .bouclier-fx.bouclier-left { left: 0; top: 50%; }
+        .bouclier-fx.bouclier-right { left: 100%; top: 50%; }
+        @keyframes bouclier-pop {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+          24%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          76%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
         }
         /* Résonance : onde de choc circulaire qui part du point de contact (le bord qui a matché) */
         .resonance-ring {
@@ -10538,16 +10592,6 @@ const APP_STYLES = `
         .resonance-ring.ring-from-left { top: 50%; left: 0; }
         .resonance-ring.ring-from-right { top: 50%; left: 100%; }
         @keyframes resonance-shockwave { 0% { opacity: 1; scale: 1; } 60% { opacity: 0.7; } 100% { opacity: 0; scale: 9; } }
-        .edge-from-top { left: 8%; width: 84%; top: -3px; height: 5px; animation: shield-edge 1.2s ease; }
-        .edge-from-bottom { left: 8%; width: 84%; bottom: -3px; height: 5px; animation: shield-edge 1.2s ease; }
-        .edge-from-left { top: 8%; height: 84%; left: -3px; width: 5px; animation: shield-edge 1.2s ease; }
-        .edge-from-right { top: 8%; height: 84%; right: -3px; width: 5px; animation: shield-edge 1.2s ease; }
-        @keyframes shield-edge {
-          0% { opacity: 0; filter: brightness(2.2); }
-          22% { opacity: 1; }
-          60% { opacity: 0.9; }
-          100% { opacity: 0; }
-        }
         .card.flash-poison::before {
           content: ""; position: absolute; inset: -6px; border-radius: 14px; pointer-events: none;
           background: radial-gradient(circle, rgba(94,201,120,0.65), rgba(94,201,120,0.3) 55%, transparent 75%);
@@ -10841,8 +10885,6 @@ const APP_STYLES = `
 
         /* Gardiens, flash de pose (bouclier qui se lève) + onde de choc en défense */
         @keyframes guardian-raise { 0%,100%{transform:scale(1); box-shadow:none} 40%{transform:scale(1.05); box-shadow:0 0 18px rgba(203,164,86,0.5)} }
-        @keyframes guardian-shield { 0%,100%{transform:translate(0,0) scale(1)} 18%{transform:translate(0,1px) scale(0.98); box-shadow:0 0 0 3px rgba(140,185,220,0.55), 0 0 24px rgba(75,127,168,0.65)} 42%{transform:translate(0,0) scale(1.03); box-shadow:0 0 0 6px rgba(140,185,220,0.18), 0 0 14px rgba(75,127,168,0.35)} 65%{transform:scale(1)} }
-        @keyframes guardian-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(10)} }
 
         /* Pestiférés, nuage toxique bien visible, la carte vire au vert */
         @keyframes poison-hit { 0%,100%{filter:brightness(1) saturate(1)} 40%{filter:brightness(0.65) saturate(2) hue-rotate(60deg); box-shadow:0 0 26px var(--poison)} }
@@ -16474,7 +16516,7 @@ export default function Emprise() {
             && coupDistant.id !== dernierCoupDistantRef.current) {
           dernierCoupDistantRef.current = coupDistant.id;
           setDernierCoup(coupDistant.position);
-          flashEvents([{ index: coupDistant.position, kind: "place" }, ...(coupDistant.events || [])]);
+          flashEvents([{ index: coupDistant.position, kind: "place" }, ...(coupDistant.events || [])], data.board, coupDistant.position);
           if (coupDistant.freshPoison && coupDistant.freshPoison.length) {
             setJustPoisoned(coupDistant.freshPoison);
             clearTimeout(poisonTimerRef.current);
@@ -17139,7 +17181,7 @@ export default function Emprise() {
     nb[cellIdx] = { ...step.handCard, owner: "blue" };
     const { board: resolved, events } = resolvePlacement(nb, cellIdx, "blue");
     // Les memes effets que la partie (evenements complets, fleche de Portee comprise).
-    const map = regrouperEffets([{ index: cellIdx, kind: "place" }, ...events]);
+    const map = regrouperEffets([{ index: cellIdx, kind: "place" }, ...events], resolved, cellIdx);
     setTut((t) => ({ ...t, board: resolved, flashes: map, resolved: true }));
   }
 
@@ -17912,10 +17954,10 @@ export default function Emprise() {
   // du joueur. Partout ailleurs, plateau nu comme avant.
   const areneActive = areneTest || (partieClassee ? getLeague(stats.trophies || 0).name : null);
 
-  function flashEvents(events) {
+  function flashEvents(events, plateau, position) {
     // Regroupement par case et numerotations de presentation (ordre des Abysses,
     // tirs de Portee, retards de chaine) : voir regrouperEffets.
-    const map = regrouperEffets(events);
+    const map = regrouperEffets(events, plateau, position);
     // FUSION, pas remplacement. Les effets differes du tour precedent (flips d'Onde
     // programmes a 4000 ms et plus) doivent survivre a la pose suivante : avant, le coup
     // de l'Echo a 3200 ms remplacait toute la carte des effets et retirait les classes
@@ -18089,7 +18131,7 @@ export default function Emprise() {
       // On réinclut l'événement de pose ici : sinon ce second appel remplacerait la
       // liste d'effets et retirerait la classe d'animation de la carte posée en plein
       // vol, coupant net sa chute avant la fin (elle n'est qu'à 46% à ce stade).
-      flashEvents([{ index: position, kind: placeKind }, ...revealEvents, ...events]);
+      flashEvents([{ index: position, kind: placeKind }, ...revealEvents, ...events], resolvedBoard, position);
 
       // Pestiférés : cases qui viennent tout juste d'être empoisonnées → bouffée de brume,
       // puis on ne garde que le marquage persistant (nettoyage après l'animation).

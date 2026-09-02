@@ -94,3 +94,4 @@ Une carte prise par les Cendres pivote comme toute capture ; attirée, elle fini
 Un pseudo compte 11 caractères au plus, pour se lire en entier sur la bande du hub.
 Contre l'Écho, après un Augure affiché, l'Écho ne joue pas la case suggérée tant qu'une autre case est libre.
 Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre.
+Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
