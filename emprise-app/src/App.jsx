@@ -14936,7 +14936,11 @@ export default function Emprise() {
     setTestMode(false); setConfirmQuit(false);
     setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null); setTourneyBanPick(null);
     setTourney({ active: false, round: 0, ban: null });
-    setOnlineGameId(null); setOnlineRole(null); setJoinCodeInput(""); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
+    // setJoinCodeInput a ete retire ici le 01/09 : l etat avait disparu avec le
+    // champ de code, mais l appel etait reste. reset() levait donc une
+    // ReferenceError a chaque sortie de partie -- TOUS modes confondus -- et
+    // le bouton Quitter ne faisait plus rien du tout.
+    setOnlineGameId(null); setOnlineRole(null); setOnlineError(""); setAvisBon(false); setOnlineStatus("");
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setPartieClassique(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
     setRencontresPartie(0);
