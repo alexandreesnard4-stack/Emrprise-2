@@ -23,6 +23,7 @@ Confluence : huit Ordres draftés, la même main pour les deux camps (contre l'�
 Bac à sable : tous les Ordres en main pour essayer librement.
 Partie classée en ligne : appariement automatique, trophées, ligues de Bronze à Légende, arène visuelle selon la ligue.
 Partie classique en ligne : appariement automatique dans sa propre file, avec les Hérauts, sans trophée ni ligue. Elle verse la moitié des pièces d'une classée.
+L'Écho joue avec son propre dos de cartes, différent de celui offert au départ.
 Quand la recherche d'un adversaire classé s'étire, l'écran propose de défier un Écho en attendant ; la recherche continue tant qu'on n'a pas accepté.
 Jouer avec un ami par code de partie.
 Défis entre amis : Duel classique ou Confluence, avec ou sans Hérauts, bannière d'invitation au hub.

@@ -1553,6 +1553,13 @@ const DOS_CARTES = [
     bord: "rgba(150,170,226,0.5)", anneau: "rgba(208,220,248,0.78)", socle: "#46548a" },
 ];
 const DOS_DEFAUT = "blason";
+// Le dos de l Echo (01/09). En face, c etait le Blason offert -- exactement
+// celui que le joueur a a ses debuts, si bien que les deux camps se
+// ressemblaient trait pour trait. L Echo prend donc un dos du catalogue,
+// l Obsidienne, qui s achete en pieces.
+// Il ne le POSSEDE pas : rien ne se debloque, rien ne se verse, aucune
+// possession n est touchee. C est un decor, seulement ce qu on voit en face.
+const DOS_ECHO = "obsidienne";
 function dosDe(cle) { return DOS_CARTES.find((d) => d.cle === cle) || DOS_CARTES[0]; }
 // Les deux variables que le dos lit. Le dos est desormais un MOTIF PUR (03/09) :
 // plus de portrait d Ordre en medaillon au centre. Il ne disait rien qu on ne
@@ -14310,8 +14317,10 @@ export default function Emprise() {
   // la meme porte que le niveau et le titre -- et lu assaini par dosRecu (une
   // cle hors catalogue tombe, et dosDe retombe sur le defaut : jamais un
   // plantage). Champ absent -- vieille partie, vieux client -- : defaut.
-  // Hors ligne, le defaut reste en face : un Echo n achete rien, l Histoire
-  // non plus, et le duel local partage un seul profil.
+  // Hors ligne : face a un Echo (mode bot -- l Echo, l Histoire, la Confluence
+  // contre lui et le tournoi solo), c est DOS_ECHO qu on voit. Le duel local
+  // et le bac a sable gardent le defaut : ils partagent un seul profil, et
+  // personne n y tient le role de l Echo.
   // composeMien : l ecran de composition de la Reserve est TOUJOURS le mien
   // -- personne d autre ne le voit -- et il doit montrer le dos choisi en
   // boutique dans tous les modes, duel local compris (demande du Commandant,
@@ -14323,7 +14332,7 @@ export default function Emprise() {
     // La carte elle-meme ne sert plus a rien ici depuis que le dos est un
     // motif pur (03/09) : elle ne portait que le portrait du medaillon central.
     // La signature garde son parametre, les appelants la passent encore.
-    return variablesDos(mien ? cosmetiques.dos : (transporte || DOS_DEFAUT));
+    return variablesDos(mien ? cosmetiques.dos : (transporte || (mode === "bot" ? DOS_ECHO : DOS_DEFAUT)));
   }
   // Ce qu'il reste a poser : les cartes des rondes deja jouees sont passees en main.
   function reserveRestante(camp) { return reserveDe(camp).slice(mortSubiteRonde); }
