@@ -13765,11 +13765,14 @@ export default function Emprise() {
     // La Partie classique (01/09) : appariee comme le Classe, mais sans
     // trophees ni ligue, et avec les Herauts. Sa file est un AUTRE document de
     // salon : les deux ne se melangent jamais.
-    // L'image est celle du jeu entre amis, faute d'un visuel propre : elle dit
-    // deja "a distance, contre quelqu'un", ce qui est vrai ici aussi.
-    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/modes/ami.webp",
+    // 01/09 : elle a son visuel, l arene violette et or. Le chemin est le seul
+    // changement -- la banniere le pose dans .mode-banniere-fond comme celui de
+    // tous les autres modes, avec le meme cadrage et le meme voile.
+    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/fonds/classique.webp",
       lancer: () => chercherAdversaire("classique") },
-    { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, avec un code à partager", image: "/modes/ami.webp",
+    // 01/09 : la phrase promettait « un code a partager », ce qui n est plus
+    // vrai depuis que le code a quitte cet ecran. On defie, on ne dicte plus.
+    { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, en défiant un ami de votre liste", image: "/modes/ami.webp",
       lancer: () => { setOnlineError(""); venuDesAmisRef.current = false; setPhase("online-menu"); } },
     { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", image: "/modes/bac.webp",
       lancer: () => chooseTestMode() },
