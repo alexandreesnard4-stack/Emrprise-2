@@ -4268,7 +4268,36 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // ou attiree). Seule la prise pivote : elle recoit en plus flash-attraction-prise.
   // La carte posee se reconnait a son evenement de pose (place / place-slow).
   const poseeIci = events.some((e) => e.kind === "place" || e.kind === "place-slow");
-  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "attraction" && !poseeIci ? "flash-attraction flash-attraction-prise" : e.kind === "mue" && e.axis ? (capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`) : `flash-${e.kind}`)).join(" ");
+  // L INVARIANT (02/09) : une carte, UNE rotation par resolution, quel que soit le
+  // cumul d evenements. Les evenements qui font tourner : combo, same, basic, portee
+  // (avec dir), attraction sur une carte prise, et mue (sans capture : mue-flip ;
+  // avec : tour-chimere par la capture, regle a5af6dc). S il y en a plusieurs, UN
+  // seul garde sa classe de pivot, par priorite (le plus fort de la chaine d abord) ;
+  // les autres ne gardent que leurs decorations sans rotation. Le moteur n emet
+  // jamais deux captures sur une meme carte dans une resolution : c est un filet.
+  const PRIORITE_TOUR = ["combo", "same", "basic", "portee", "attraction"];
+  const faitTourner = (e) => e.kind === "combo" || e.kind === "same" || e.kind === "basic" || (e.kind === "portee" && !!e.dir) || (e.kind === "attraction" && !poseeIci);
+  const tourRetenu = PRIORITE_TOUR.find((k) => events.some((e) => e.kind === k && faitTourner(e)));
+  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => {
+    if (faitTourner(e) && e.kind !== tourRetenu) return e.kind === "attraction" ? "flash-attraction" : "";
+    if (e.kind === "portee" && !e.dir) return "flash-portee-tir";
+    if (e.kind === "attraction" && !poseeIci) return "flash-attraction flash-attraction-prise";
+    if (e.kind === "mue" && e.axis) return capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`;
+    return `flash-${e.kind}`;
+  }).filter(Boolean).join(" ");
+  // La carte marque qu elle a tourne pour CETTE resolution (le tableau d evenements
+  // vient de flashes : meme reference tant que la resolution vit). Si ses classes
+  // ont ete retirees entre-temps (l apercu de glisser vide les evenements de toutes
+  // les cartes) puis remises, rien ne rejoue : tour-deja-joue coupe l animation, la
+  // carte reste dans son etat final. Un simple re-rendu, classes identiques, ne
+  // relance rien de toute facon -- c est le retrait puis le retour qui rejouait.
+  const tourRef = useRef({ events: null, coupe: false });
+  const aUnTour = !!tourRetenu || events.some((e) => e.kind === "mue" && e.axis);
+  const dejaTourne = aUnTour && tourRef.current.events === events && tourRef.current.coupe;
+  useEffect(() => {
+    if (aUnTour) { if (tourRef.current.events !== events) tourRef.current = { events, coupe: false }; }
+    else if (events.length === 0 && tourRef.current.events) tourRef.current.coupe = true;
+  }, [events, aUnTour]);
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
   const guardianEvent = events.find((e) => e.kind === "guardian" && e.dir);
@@ -4389,7 +4418,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   return (
     <div
       ref={carteRef}
-      className={`card ${owner} ${flashClasses} ${classesTrajet} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
+      className={`card ${owner} ${flashClasses} ${classesTrajet} ${dejaTourne ? "tour-deja-joue" : ""} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
       style={delaiTotal || pullStyle ? { ...(delaiTotal ? { animationDelay: `${delaiTotal}ms` } : {}), ...(pullStyle || {}) } : undefined}
       role="button" tabIndex={0} onClick={onClick} onKeyDown={KEY_ACTIVATE(onClick)}
       onPointerDown={onPointerDown}
@@ -10353,6 +10382,11 @@ const APP_STYLES = `
            en route, prendre la main sur une carte posee. */
         .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none); }
         .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise.flash-poison { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
+        /* L invariant (02/09) : une carte dont le pivot a deja joue pour cette
+           resolution, et dont les classes reviennent apres avoir ete retirees, ne
+           rejoue rien -- elle reste dans son etat final. Cinq fois la classe pour
+           passer devant toutes les regles de pivot (quatre classes au plus). */
+        .card.tour-deja-joue.tour-deja-joue.tour-deja-joue.tour-deja-joue.tour-deja-joue { animation: none; }
         .card.flash-attraction-pull::before {
           content: ""; position: absolute; inset: -16px; border-radius: 16px; pointer-events: none; z-index: 4;
           background:
