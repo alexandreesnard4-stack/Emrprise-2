@@ -5523,7 +5523,12 @@ const APP_STYLES = `
            canevas : elle devenait un fond de bloc comme un autre, peint APRES .fond-app,
            qu'elle recouvrait entierement. L'image etait chargee, posee, dimensionnee, et
            invisible. Verifier le style calcule ne le disait pas ; seul l'oeil l'a dit. */
+        /* La rotation de reference (01/09) : celle de la selection de la
+           Reserve -- 0,9 s, une courbe qui part lentement et finit doucement,
+           comme une carte qu on retourne a la main. Definie ICI une fois ; la
+           Reserve la lit, le pivot de capture la lit, la Chimere la lit. */
         html { background: #0a0810; }
+        :root { --tour-duree: .9s; --tour-courbe: cubic-bezier(.45, .05, .25, 1); }
         body { margin: 0; background: transparent; }
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap');
 
@@ -9940,11 +9945,15 @@ const APP_STYLES = `
            DANS le meme tour, en pourcentage. Les changer separement les
            desaccorderait du basculement de camp, qui tombe a mi-tour.
            --anim-deco garde la sienne : c est une lueur, pas un tour. */
-        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), flip-gold var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
-        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), flip-resonance var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
-        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), flip-combo var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
-        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); }
-        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); }
+        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), var(--tour-nom, flip-resonance) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), var(--tour-nom, flip-combo) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        /* Chimere ET capture (01/09) : le pivot prend le nom tour-chimere -- la
+           rotation de la Reserve, nue, sans lueur ni tassement, meme duree et
+           meme courbe par les variables. La regle a quatre classes du pivot
+           lit --tour-nom ; sans capture, mue-flip joue comme avant. */
+        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); --tour-nom: tour-chimere; }
+        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); --tour-nom: tour-chimere; }
         .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.6s ease; --anim-deco: mue-self-pulse 1.6s ease; }
         .card.flash-percee.flash-percee { animation: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); }
         .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.6s ease; --anim-deco: percee-thrust 1.6s ease; }
@@ -10258,11 +10267,11 @@ const APP_STYLES = `
            cartes d une chaine recoivent leur delai de maillon en style inline
            (animationDelay), qui ecrase le delai de chaque animation de la
            liste. Le seul endroit ou une attente survit, c est dans les
-           pourcentages. 72 % = 0,52 s de tour sur 0,72 s au total : si
-           --flip-duree change, ce pourcentage doit suivre. */
+           pourcentages. 82 % = 0,9 s de tour sur 1,1 s au total : si
+           --tour-duree change, ce pourcentage doit suivre. */
         @keyframes combo-emit-pulse-apres {
-          0%, 72% { transform: scale(1); opacity: 1; }
-          86%     { transform: scale(1.06); opacity: 0.85; }
+          0%, 82% { transform: scale(1); opacity: 1; }
+          91%     { transform: scale(1.06); opacity: 0.85; }
           100%    { transform: scale(1); opacity: 1; }
         }
         .card.flash-combo-emit.flash-combo-emit {
@@ -10273,7 +10282,7 @@ const APP_STYLES = `
            APRES pour gagner. Le tour (regle a quatre classes) lit --anim-deco
            et compose : pulsation retardee, lueur, puis le tour en dernier. */
         .card.flash-combo.flash-combo-emit {
-          --anim-deco: combo-emit-pulse-apres 0.72s ease, combo-emit-glow 1.6s ease;
+          --anim-deco: combo-emit-pulse-apres 1.1s ease, combo-emit-glow 1.6s ease;
         }
         @keyframes combo-emit-glow {
           0%, 100% { filter: drop-shadow(0 0 0 transparent); }
@@ -10303,6 +10312,17 @@ const APP_STYLES = `
           25% { filter: blur(2px); box-shadow: 0 0 22px var(--mue); }
           50% { transform: rotateX(180deg); filter: blur(2px); box-shadow: 0 0 26px var(--mue); }
           75% { filter: blur(2px); box-shadow: 0 0 22px var(--mue); }
+        }
+        /* La rotation de la Reserve, appliquee a une carte capturee par une
+           Chimere (01/09) : un tour complet sur l axe Y, rien d autre -- ni
+           lueur, ni flou, ni tassement. Le camp bascule a 90 degres, quand la
+           carte est de profil. Un tour entier et non un demi : a 180 degres la
+           carte serait laissee en miroir, rangs illisibles. */
+        @keyframes tour-chimere {
+          0%   { transform: rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          24%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          25%  { transform: rotateY(90deg); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
+          100% { transform: rotateY(360deg); }
         }
         /* Chimères qui active Mue : un simple pouls cyan, pas de transformation, seule la cible se retourne */
         @keyframes mue-self-pulse { 0%,100%{box-shadow:none} 45%{box-shadow:0 0 18px var(--mue)} }
@@ -10826,7 +10846,7 @@ const APP_STYLES = `
           /* 0,9 s : un retournement de carte doit se REGARDER. A 0,45 s l'oeil ne
              voyait qu'un clignotement, pas une carte qui tourne. La courbe part
              lentement et finit doucement, comme une carte qu'on retourne a la main. */
-          transition: transform .9s cubic-bezier(.45, .05, .25, 1);
+          transition: transform var(--tour-duree) var(--tour-courbe);
         }
         .reserve-case.prise .reserve-flip { transform: rotateY(180deg); }
         .reserve-face {
