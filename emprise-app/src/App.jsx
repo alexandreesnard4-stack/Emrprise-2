@@ -820,6 +820,23 @@ const TITRES_REPLI = {
   },
 };
 
+// Les mariages rates (01/09) : des anti-synergies connues, ecrites a la main.
+// Elles ne se detectent pas, ne comptent rien et n ouvrent aucun titre -- c est
+// un avis, pas une mecanique. Elles vivent ICI, a cote de COMBOS, et non dans
+// le rendu : la section du hub ne fait que les lire.
+// Les tirets cadratins de la redaction d origine sont devenus des virgules :
+// la maison n en veut aucun dans une chaine visible, et la batterie y veille.
+const COMBOS_RATES = [
+  { paire: "Gardiens + Archers",
+    texte: "le mur ne protège pas le 1 de l'Archer, et l'Archer n'offre aucune capture au Gardien." },
+  { paire: "Pestiférés avec Héraut + Dorés",
+    texte: "le Héraut épargne votre camp, et L'Or Corrompu s'éteint." },
+  { paire: "Dorés face aux Gardiens",
+    texte: "l'Éveil échange contre le rang défendu, bouclier compris, et le Gardien vend cher sa peau au troc." },
+  { paire: "Abysse en ouverture solitaire",
+    texte: "à 16 de total sans banc, elle nourrit la Marée Montante… de l'adversaire." },
+];
+
 // Resout un nom de titre recu d AILLEURS (document de partie, fiche d ami) :
 // il ne peut valoir qu un titre du jeu -- combo OU repli -- sinon rien. Le
 // reste est ecarte, comme un pseudo etranger.
@@ -6474,6 +6491,90 @@ const APP_STYLES = `
         }
         /* La pression seule, en transform : rien d autre ne s anime ici. */
         .test-rotation button:active { transform: scale(0.96); }
+        /* ---------- Le grimoire des combos, page Ordres (01/09) ----------
+           Purement informatif : la section LIT COMBOS et titresDuProfil, elle
+           ne compte rien et ne decide d aucun titre. Elle se remplira seule
+           quand le catalogue s enrichira -- aucune donnee de combo n est
+           ecrite dans le rendu. */
+        .combos-section { width: 100%; margin-top: 26px; }
+        .combos-titre {
+          position: relative; margin: 0; padding-bottom: 9px; text-align: center;
+          font-family: 'Cinzel', serif; font-size: 17px; letter-spacing: 3px;
+          text-transform: uppercase; color: #e9c65d;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.85);
+        }
+        /* Le filet en ::after absolu : il ne prend aucune place dans le flux. */
+        .combos-titre::after {
+          content: ""; position: absolute; left: 50%; bottom: 0;
+          transform: translateX(-50%);
+          width: 120px; height: 1px;
+          background: linear-gradient(90deg, transparent, #b98f3e, transparent);
+        }
+        .combos-sous {
+          font-style: italic; font-size: 12.5px; line-height: 1.5; color: #ded2b6;
+          text-align: center; margin: 12px auto 0; max-width: 300px;
+        }
+        .combos-etat {
+          font-size: 12.5px; color: #c9a0ff; text-align: center; margin: 8px 0 14px;
+        }
+        .combos-liste { display: flex; flex-direction: column; gap: 10px; }
+        .combo-fiche {
+          box-sizing: border-box; padding: 12px 13px; border-radius: 12px;
+          background: rgba(13,9,19,0.8); border: 1px solid #5a4a2e;
+        }
+        .combo-entete { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        .combo-icones { flex: none; font-size: 17px; letter-spacing: 2px; }
+        .combo-nom {
+          font-family: 'Cinzel', serif; font-size: 13.5px; letter-spacing: 1.2px;
+          text-transform: uppercase; color: #e9c65d;
+        }
+        .combo-recit { margin: 0; font-size: 12.5px; line-height: 1.45; color: #ded2b6; }
+        .combo-signe { margin: 7px 0 0; font-size: 12px; font-style: italic; color: #a893c4; }
+        .combo-signe b { font-weight: 400; color: #c9a0ff; }
+        .combo-avertissement {
+          display: flex; gap: 7px; align-items: flex-start;
+          margin-top: 9px; padding: 8px 9px; border-radius: 9px;
+          background: rgba(120,60,20,0.18); border: 1px solid #8a5a2e;
+          font-size: 11.5px; line-height: 1.4; color: #f0d8b8;
+        }
+        .combo-jauge { margin-top: 10px; }
+        .combo-jauge-piste {
+          height: 4px; border-radius: 2px; overflow: hidden;
+          background: rgba(255,255,255,0.07);
+        }
+        .combo-jauge-part {
+          height: 100%; border-radius: 2px;
+          background: linear-gradient(90deg, #8a6d3b, #e9c65d);
+        }
+        .combo-jauge-texte {
+          margin-top: 4px; font-size: 11px; color: #a893c4;
+          font-variant-numeric: tabular-nums;
+        }
+        /* L encart repliable. Ferme au depart ; il n a aucune animation --
+           un bloc qui apparait n a pas besoin de se deplier pour se lire. */
+        .combos-rates-bouton {
+          width: 100%; box-sizing: border-box; margin-top: 12px;
+          display: flex; align-items: center; justify-content: space-between; gap: 8px;
+          padding: 10px 12px; border-radius: 12px;
+          background: rgba(13,9,19,0.8); border: 1px solid #5a4a2e;
+          font: inherit; font-size: 12.5px; color: #cbb98f; text-align: left;
+          cursor: pointer;
+        }
+        .combos-rates-bouton:active { transform: scale(0.99); }
+        .combos-rates-chevron { flex: none; color: #8a6d3b; }
+        .combos-rates-corps {
+          margin-top: 8px; padding: 11px 13px; border-radius: 12px;
+          background: rgba(13,9,19,0.8); border: 1px solid #5a4a2e;
+        }
+        .combos-rate { margin: 0 0 9px; font-size: 12px; line-height: 1.45; color: #ded2b6; }
+        .combos-rate:last-child { margin-bottom: 0; }
+        .combos-rate b { font-weight: 400; color: #e9c65d; }
+        .combos-repli {
+          margin-top: 12px; padding: 11px 13px; border-radius: 12px;
+          border: 1px dashed #6d5a8f;
+          font-size: 12px; line-height: 1.5; color: #ded2b6;
+        }
+        .combos-repli b { font-weight: 400; color: #c9a0ff; }
         /* L ecran « Jouer avec un ami » quand la liste est vide (01/09). Une
            phrase, pas un bouton : le panneau des Amis ne vit que dans le hub.
            Plus large et plus aeree que .sub, qui sert a des lignes courtes. */
@@ -13051,7 +13152,8 @@ export default function Emprise() {
   }
   const [onlineGameId, setOnlineGameId] = useState(null);
   const [onlineRole, setOnlineRole] = useState(null); // "blue" | "red"
-  const [joinCodeInput, setJoinCodeInput] = useState("");
+  // joinCodeInput a disparu avec le champ de code (01/09) : plus personne ne
+  // saisit de code, on releve un defi ou on ne joue pas.
   const [onlineError, setOnlineError] = useState("");
   const [onlineStatus, setOnlineStatus] = useState(""); // texte d'attente affiché au joueur
   const [fileAttente, setFileAttente] = useState(false); // recherche d'un adversaire par appariement en cours
@@ -13645,6 +13747,9 @@ export default function Emprise() {
     return true;
   }
   const [ordreDetail, setOrdreDetail] = useState(null); // Ordre agrandi dans l'onglet Ordres
+  // Le grimoire des combos (01/09) : l encart des mariages rates, ferme au
+  // depart. Un seul etat, purement d affichage -- la section ne compte rien.
+  const [combosRatesOuvert, setCombosRatesOuvert] = useState(false);
   // Onglet ouvert dans le panneau des modes. Trois familles, pour ne montrer que trois ou
   // quatre bannieres a la fois, grandes, au lieu de neuf petites cases empilees.
   const [familleModes, setFamilleModes] = useState("solo");
@@ -15498,12 +15603,15 @@ export default function Emprise() {
     }
   }
 
-  // Appelee par le bouton « Rejoindre » (le code vient du champ) ou par « Relever le
-  // defi » (le code vient de l'invitation). Rend true si la place a ete prise.
-  async function joinOnlineGame(codeForce) {
+  // 01/09 : le champ de code a disparu de l ecran des amis, il ne reste donc
+  // qu un appelant, « Relever le defi », qui porte toujours le code de
+  // l invitation. Le repli sur un champ de saisie n avait plus de champ ou
+  // aller le chercher, et l etat joinCodeInput est parti avec lui.
+  // Rend true si la place a ete prise.
+  async function joinOnlineGame(codeRecu) {
     statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return false; }
-    const code = (typeof codeForce === "string" ? codeForce : joinCodeInput).trim().toUpperCase();
+    const code = (typeof codeRecu === "string" ? codeRecu : "").trim().toUpperCase();
     if (!code) return false;
     setOnlineError("");
     setDefiEnvoye(null);
@@ -18721,7 +18829,9 @@ export default function Emprise() {
                     Commandant, 29/08) : le titre ne vit plus que sur l'ecran du
                     nom. Le sous-titre reste, seul. */}
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
-                <div className="league-badge">Le multijoueur arrive prochainement</div>
+                {/* 01/09 : « Le multijoueur arrive prochainement » a ete retiree.
+                    Elle n etait plus vraie : le Classe, la Partie classique et
+                    le defi entre amis se jouent tous en ligne. */}
 
                 {/* Seules les parties SOLO se reprennent. En ligne, un adversaire attend
                     en face : une partie quittee est abandonnee, le forfait tranche pour
@@ -18850,6 +18960,93 @@ export default function Emprise() {
                     );
                   })}
                 </div>
+
+                {/* ---------- Le grimoire des combos (01/09) ----------
+                    Purement informatif. Il LIT titresDuProfil et COMBOS, il ne
+                    compte rien, ne decide d aucun titre et ne touche a rien.
+                    Aucune donnee de combo n est ecrite ici : le jour ou le
+                    catalogue s enrichira, la liste s allongera toute seule. */}
+                {(() => {
+                  const profil = titresDuProfil(stats);
+                  const nomTitre = profil.titres.length ? profil.titres[0].combo.nom
+                    : profil.repli ? profil.repli.nom : null;
+                  // Le classement ne porte QUE les combos deja reussis : un
+                  // combo absent vaut zero, il ne s invente pas.
+                  const rangDe = (cle) => profil.classement.find((t) => t.combo.key === cle) || { parties: 0, taux: 0 };
+                  return (
+                    <section className="combos-section" aria-label="Combos d'Ordres">
+                      <h3 className="combos-titre">Combos d&apos;Ordres</h3>
+                      <p className="combos-sous">Jouez-les pour forger votre titre : votre style parle pour vous.</p>
+                      <div className="combos-etat">
+                        {nomTitre
+                          ? `Votre style : ${nomTitre}`
+                          : `Votre style se dessine : ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
+                      </div>
+                      <div className="combos-liste">
+                        {COMBOS.map((combo) => {
+                          const r = rangDe(combo.key);
+                          const pourcent = Math.min(100, Math.round(r.taux * 100));
+                          return (
+                            <article key={combo.key} className="combo-fiche">
+                              <div className="combo-entete">
+                                {/* Les icones viennent d ORDERS par la cle : un
+                                    Ordre qui change d embleme change ici sans
+                                    qu on y touche. */}
+                                <span className="combo-icones" aria-hidden="true">
+                                  {combo.ordres.map((k) => (ORDERS.find((o) => o.key === k) || {}).icon || "").join(" ")}
+                                </span>
+                                <span className="combo-nom">{combo.nom}</span>
+                              </div>
+                              <p className="combo-recit">{combo.recit}</p>
+                              <p className="combo-signe">Signe : <b>{combo.signe}</b></p>
+                              {/* Le seul combo que son propre Heraut eteint. La
+                                  condition porte sur la CLE, pas sur le rang :
+                                  reordonner COMBOS ne deplacera pas l encart. */}
+                              {combo.key === "or-corrompu" && (
+                                <div className="combo-avertissement">
+                                  <span aria-hidden="true">⚠️</span>
+                                  <span>Se joue SANS le Héraut des Pestiférés : il épargne votre camp et éteint le combo.</span>
+                                </div>
+                              )}
+                              <div className="combo-jauge">
+                                <div className="combo-jauge-piste" role="img"
+                                     aria-label={`${combo.nom} : ${r.parties} partie${r.parties > 1 ? "s" : ""} sur ${profil.parties} comptée${profil.parties > 1 ? "s" : ""}`}>
+                                  <div className="combo-jauge-part" style={{ width: pourcent + "%" }} />
+                                </div>
+                                <div className="combo-jauge-texte" aria-hidden="true">
+                                  {r.parties}/{profil.parties} · {pourcent} %
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="combos-rates-bouton"
+                        aria-expanded={combosRatesOuvert}
+                        onClick={() => setCombosRatesOuvert((v) => !v)}
+                      >
+                        <span>Les mariages ratés : anti-synergies connues</span>
+                        <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
+                      </button>
+                      {combosRatesOuvert && (
+                        <div className="combos-rates-corps">
+                          {COMBOS_RATES.map((r) => (
+                            <p key={r.paire} className="combos-rate"><b>{r.paire}</b> : {r.texte}</p>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="combos-repli">
+                        Aucun combo dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
+                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> ; sinon,
+                        vous marchez en <b>{TITRES_REPLI.errant.nom}</b>.
+                      </div>
+                    </section>
+                  );
+                })()}
               </section>
             )}
           </main>
@@ -20881,23 +21078,11 @@ export default function Emprise() {
               cree la partie et porte l invitation, sans jamais montrer de code.
               L ecran d attente garde son affichage du code : il sert de repli
               quand l invitation d un defi n a pas pu partir. */}
-          <div className="sub">Rejoignez la partie d&apos;un ami avec son code, ou défiez directement un ami de votre liste.</div>
-          <div className="sub" style={{ marginTop: 18 }}>rejoindre avec un code</div>
-          <input
-            className="join-code-input"
-            placeholder="CODE"
-            maxLength={5}
-            value={joinCodeInput}
-            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-          />
-          <button className="reset-btn" disabled={!joinCodeInput.trim()} onClick={() => joinOnlineGame()}>Rejoindre</button>
+          <div className="sub">Défiez un ami de votre liste : l&apos;invitation part chez lui, sans code à recopier.</div>
           {onlineError && <div className="online-error">{onlineError}</div>}
           {banniereDefi()}
           {amis.length > 0 ? (
-            <>
-              <div className="sub" style={{ marginTop: 18 }}>ou défier un ami</div>
-              <div className="amis-liste compacte">{amisTries.map((a) => ligneAmi(a, true))}</div>
-            </>
+            <div className="amis-liste compacte">{amisTries.map((a) => ligneAmi(a, true))}</div>
           ) : (
             // 01/09 : sans ami, cet ecran restait nu depuis que le bouton
             // « Creer une partie » a disparu -- un champ de code, et rien qui
@@ -20906,9 +21091,8 @@ export default function Emprise() {
             // ne vit que dans l ecran d accueil, un bouton d ici n aurait rien
             // affiche. Mieux vaut une phrase juste qu un bouton mort.
             <div className="sub amis-vide-ligne">
-              Vous n&apos;avez pas encore d&apos;ami. Revenez à l&apos;accueil et touchez l&apos;icône
-              Amis pour ajouter quelqu&apos;un avec son numéro : vous pourrez ensuite le défier
-              d&apos;ici, sans code à recopier.
+              Votre liste est vide. Revenez à l&apos;accueil et touchez l&apos;icône Amis pour
+              ajouter quelqu&apos;un avec son numéro : il apparaîtra ici, prêt à être défié.
             </div>
           )}
         </div>
