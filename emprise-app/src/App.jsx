@@ -9533,7 +9533,14 @@ const APP_STYLES = `
             inset 0 3px 6px rgba(0,0,0,0.72),
             inset 0 -1.5px 0 var(--plateau-lueur, rgba(255,240,205,0.07)),
             inset 0 0 14px rgba(0,0,0,0.45);
-          display: flex; align-items: center; justify-content: center; }
+          display: flex; align-items: center; justify-content: center;
+          /* La profondeur du retournement (01/09). Elle se pose sur la CASE,
+             jamais sur la carte : mise sur l element qui tourne, la perspective
+             tourne avec lui et le relief s aplatit. Sans elle, le rotateY de la
+             capture ne faisait qu ecraser la carte a l horizontale -- un tour,
+             mais a plat. Meme valeur que la Reserve, qui reglait deja ce
+             probleme de son cote. */
+          perspective: 700px; }
         /* La case ou l'on peut poser : la pierre s'allume par en dessous, comme si la
            faille affleurait. L'ombre du creux reste, sinon la case redeviendrait plate. */
         .cell.empty.can-play { cursor: pointer; border: 1px solid var(--gold);
@@ -9848,9 +9855,17 @@ const APP_STYLES = `
            A RETENIR : toute nouvelle animation posee sur .card doit ecrire dans --anim-deco
            si elle est decorative, sinon elle avalera de nouveau le retournement.
            A RETENIR AUSSI : aucun accent grave ici, APP_STYLES est une chaine template. */
-        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), flip-gold 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
-        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), flip-resonance 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
-        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), flip-combo 1.6s cubic-bezier(0.34, 1.4, 0.64, 1) var(--flip-delay, 0s) backwards; }
+        /* 01/09 : le tour passe de 1,6 s a 0,52 s, et l elan a ressort
+           (cubic-bezier a 1,4, qui depassait) laisse la place a une sortie
+           douce. La carte tourne vite et se pose, au lieu de flotter.
+           La duree vit dans --flip-duree pour que les trois variantes ne
+           puissent pas diverger : la Resonance et l Onde ajoutent leur secousse
+           DANS le meme tour, en pourcentage. Les changer separement les
+           desaccorderait du basculement de camp, qui tombe a mi-tour.
+           --anim-deco garde la sienne : c est une lueur, pas un tour. */
+        .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), flip-gold var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
+        .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), flip-resonance var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
+        .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), flip-combo var(--flip-duree, 0.52s) cubic-bezier(0.33, 0, 0.2, 1) var(--flip-delay, 0s) backwards; }
         .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); }
         .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); }
         .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.6s ease; --anim-deco: mue-self-pulse 1.6s ease; }
