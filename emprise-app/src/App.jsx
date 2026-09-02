@@ -121,12 +121,16 @@ const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes =
 const RYTHME_REFLEXION_ECHO_MS = 3200;
 const RYTHME_POSE_ECHO_MS = 1610;
 const RYTHME_POSE_JOUEUR_MS = 400;
-// Portee (02/09) : la fleche part du tireur PORTEE_DEPART_MS apres le maillon (la
-// carte posee a fini d atterrir), vole PORTEE_VOL_MS, et la cible ne pivote qu a
-// l impact. Dans une chaine d Onde, un tir retient d autant les maillons suivants.
+// Portee (02/09) : PORTEE_DEPART_MS apres le maillon (la carte posee a fini
+// d atterrir), la fleche apparait au-dessus de l Archer et y reste
+// PORTEE_ARMEMENT_MS (fondu en opacite : c est cette pause qui attire l oeil),
+// puis vole PORTEE_VOL_MS ; la cible ne pivote qu a l impact. Dans une chaine
+// d Onde, un tir retient d autant les maillons suivants. Pense pour un debutant :
+// 350 ms de vol se rataient.
 const PORTEE_DEPART_MS = 700;
-const PORTEE_VOL_MS = 350;
-const PORTEE_TEMPS_MS = PORTEE_DEPART_MS + PORTEE_VOL_MS;
+const PORTEE_ARMEMENT_MS = 150;
+const PORTEE_VOL_MS = 600;
+const PORTEE_TEMPS_MS = PORTEE_DEPART_MS + PORTEE_ARMEMENT_MS + PORTEE_VOL_MS;
 // Cendres (02/09) : la carte attiree avance CASE PAR CASE -- un glissement de
 // CENDRES_PAS_MS par case, une pause de CENDRES_PAUSE_MS entre deux pas (pas
 // apres le dernier). Trois cases : 1 200 ms. Cinq pas au plus (plateau 6 x 6).
@@ -10424,10 +10428,12 @@ const APP_STYLES = `
           transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg));
           filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
         }
-        .fleche-portee.en-vol { animation: fleche-portee-vol 0.35s cubic-bezier(.4, 0, .8, .7) backwards; }
+        /* 0,75 s = 150 ms d armement (fondu, sur place, lineaire) + 600 ms de vol
+           (ease-in avec une acceleration douce, portee par l image-cle a 20 %). */
+        .fleche-portee.en-vol { animation: fleche-portee-vol 0.75s linear backwards; }
         @keyframes fleche-portee-vol {
-          0%   { transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg)); opacity: 0; }
-          22%  { opacity: 1; }
+          0%   { transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg)); opacity: 0; animation-timing-function: linear; }
+          20%  { transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg)); opacity: 1; animation-timing-function: cubic-bezier(.4, 0, .8, .7); }
           100% { transform: translate(calc(-50% + var(--vol-x, 0px)), calc(-50% + var(--vol-y, 0px))) rotate(var(--vol-rot, 0deg)); opacity: 1; }
         }
 
