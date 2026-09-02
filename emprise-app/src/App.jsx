@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, memo } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
@@ -121,6 +121,12 @@ const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes =
 const RYTHME_REFLEXION_ECHO_MS = 3200;
 const RYTHME_POSE_ECHO_MS = 1610;
 const RYTHME_POSE_JOUEUR_MS = 400;
+// Portee (02/09) : la fleche part du tireur PORTEE_DEPART_MS apres le maillon (la
+// carte posee a fini d atterrir), vole PORTEE_VOL_MS, et la cible ne pivote qu a
+// l impact. Dans une chaine d Onde, un tir retient d autant les maillons suivants.
+const PORTEE_DEPART_MS = 700;
+const PORTEE_VOL_MS = 350;
+const PORTEE_TEMPS_MS = PORTEE_DEPART_MS + PORTEE_VOL_MS;
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
 // etiquettes de camp, sonnerait faux pour un ami.
 function nomAffiche(brut) {
@@ -4099,6 +4105,109 @@ function storyDifficultyFor(gameIndex, numGames) {
   return "avance";
 }
 
+// ---------- Les effets d un coup, regroupes par case (presentation pure) ----------
+// Le moteur emet des evenements ; ici on les regroupe par case et on leur ajoute
+// ce que l ecran seul a besoin de savoir, TOUJOURS sur une copie -- l objet du
+// moteur est aussi celui qui part vers Firestore :
+//  - ordre    : rang d une Abysse parmi celles renforcees d un coup (80 ms chacune) ;
+//  - tir      : numero du coup, pour apparier un tireur de Portee et ses cibles
+//               sans jamais confondre deux coups fusionnes dans flashes ;
+//  - decalage : dans une chaine d Onde, un tir de Portee au maillon N retient de
+//               PORTEE_TEMPS_MS tout ce qui vient apres -- la fleche vole, la
+//               cible pivote, PUIS la chaine reprend son pas de 300 ms.
+let compteurTirs = 0;
+function delaiMaillon(niveau) { return typeof niveau === "number" ? 4000 + niveau * 300 : 0; }
+function regrouperEffets(events) {
+  const map = {};
+  const ordres = new Map();
+  events.filter((e) => e.kind === "devoreuse").sort((a, b) => a.index - b.index).forEach((e, k) => ordres.set(e, k));
+  const tir = ++compteurTirs;
+  const niveauxTir = [...new Set(events.filter((e) => e.kind === "portee" && e.dir && typeof e.comboLevel === "number").map((e) => e.comboLevel))];
+  const decalage = (niveau) => niveauxTir.filter((x) => x < niveau).length * PORTEE_TEMPS_MS;
+  events.forEach((e) => {
+    if (!map[e.index]) map[e.index] = [];
+    let copie = e;
+    if (ordres.has(e)) copie = { ...copie, ordre: ordres.get(e) };
+    if (e.kind === "portee") {
+      // La cible attend en plus son propre tir ; le tireur, seulement les tirs d avant.
+      copie = { ...copie, tir, decalage: decalage(typeof e.comboLevel === "number" ? e.comboLevel : 0) + (e.dir ? PORTEE_TEMPS_MS : 0) };
+    } else if (typeof e.comboLevel === "number") {
+      const d = decalage(e.comboLevel);
+      if (d) copie = { ...copie, decalage: d };
+    }
+    map[e.index].push(copie);
+  });
+  return map;
+}
+
+// ---------- Portee : la fleche du tireur a la cible (02/09) ----------
+// Le moteur emet, pour chaque cible touchee, { kind: "portee", dir } -- dir est le
+// COTE de la cible par lequel la fleche entre -- et pour le tireur { kind: "portee" }
+// sans dir. Le tireur se retrouve par la geometrie : on remonte la ligne depuis la
+// cible, du cote touche, jusqu a la case qui porte le tir du meme coup (le Heraut
+// des Archers traverse ses alliees : on les traverse aussi).
+// L image pointe vers la DROITE : 0 deg vers la droite, 90 vers le bas, 180 vers
+// la gauche, 270 vers le haut -- exprime ici par le cote touche de la cible.
+const FLECHE_PORTEE_SRC = "/icones/fleche-portee.webp";
+const ROTATION_FLECHE = { left: 0, top: 90, right: 180, bottom: 270 };
+function apparierTirsPortee(flashes) {
+  const tirs = [];
+  Object.keys(flashes).forEach((k) => {
+    const cible = Number(k);
+    (flashes[k] || []).forEach((e) => {
+      if (e.kind !== "portee" || !e.dir) return;
+      const d = DIRS.find((x) => x.their === e.dir);
+      if (!d) return;
+      let r = Math.floor(cible / COLS) - d.dr, c = (cible % COLS) - d.dc;
+      while (inBounds(r, c)) {
+        const de = idx(r, c);
+        const tireur = (flashes[de] || []).find((x) => x.kind === "portee" && !x.dir && x.tir === e.tir && x.comboLevel === e.comboLevel);
+        if (tireur) {
+          tirs.push({ cle: `${e.tir}-${de}-${cible}`, de, vers: cible, rot: ROTATION_FLECHE[e.dir], delai: delaiMaillon(e.comboLevel) + (tireur.decalage || 0) + PORTEE_DEPART_MS });
+          break;
+        }
+        r -= d.dr; c -= d.dc;
+      }
+    });
+  });
+  return tirs;
+}
+// Une fleche : creee au tir, mesuree sur les vraies cases du plateau (du centre
+// du tireur au centre de la cible), retiree du DOM a l impact (fin d animation).
+// Elle est enfant direct du plateau (.table), jamais de la carte : un element
+// superpose, au-dessus des cases.
+function FlechePortee({ tir }) {
+  const ref = useRef(null);
+  const [geo, setGeo] = useState(null);
+  const [finie, setFinie] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const table = el && el.parentElement;
+    if (!table) return;
+    const cases = table.querySelectorAll(":scope > .cell");
+    const a = cases[tir.de], b = cases[tir.vers];
+    if (!a || !b) return;
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rt = table.getBoundingClientRect();
+    setGeo({
+      x: ra.left + ra.width / 2 - rt.left - table.clientLeft,
+      y: ra.top + ra.height / 2 - rt.top - table.clientTop,
+      dx: rb.left - ra.left, dy: rb.top - ra.top,
+    });
+  }, [tir.de, tir.vers]);
+  if (finie) return null;
+  return (
+    <img
+      ref={ref} src={FLECHE_PORTEE_SRC} alt="" aria-hidden="true" draggable={false}
+      className={`fleche-portee ${geo ? "en-vol" : ""}`}
+      style={geo ? { left: `${geo.x}px`, top: `${geo.y}px`, "--vol-x": `${geo.dx}px`, "--vol-y": `${geo.dy}px`, "--vol-rot": `${tir.rot}deg`, animationDelay: `${tir.delai}ms` } : undefined}
+      onAnimationEnd={() => setFinie(true)}
+    />
+  );
+}
+function FlechesPortee({ flashes }) {
+  return apparierTirsPortee(flashes || {}).map((t) => <FlechePortee key={t.cle} tir={t} />);
+}
+
 // Composant réutilisable : affiche une carte (portrait + 4 rangs), avec ses
 // animations d'événements le cas échéant. Remplace 6 copies identiques du même
 // JSX qui traînaient dans le plateau, les 2 mains, le tutoriel et l'aperçu.
@@ -4107,7 +4216,9 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // ("maudit-boost") est retardée (voir mauditBoostDelay plus bas) pour laisser au joueur
   // le temps de bien voir la capture avant de comprendre que la carte grandit en plus —
   // elle n'est donc PAS mélangée aux classes de flash du flip, qui jouerait en même temps.
-  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "mue" && e.axis ? `flash-mue flash-mue-${e.axis}` : `flash-${e.kind}`)).join(" ");
+  // Portee : la cible (dir) pivote comme toute capture ; le tireur (sans dir) n a
+  // rien a jouer sur lui-meme, la fleche est un element du plateau (FlechesPortee).
+  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "mue" && e.axis ? `flash-mue flash-mue-${e.axis}` : `flash-${e.kind}`)).join(" ");
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
   const guardianEvent = events.find((e) => e.kind === "guardian" && e.dir);
@@ -4161,7 +4272,15 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // La croissance du Maudit attend que l'animation de capture soit bien terminée avant de
   // se déclencher (comboDelay si elle vient d'une chaîne + le temps du flip + une pause
   // volontaire), pour que le joueur comprenne "capture" puis "croissance" comme 2 temps distincts.
-  const mauditBoostDelay = mauditBoostEvent ? comboDelay + 3200 : 0;
+  // Portee (02/09) : la cible pivote a l IMPACT de la fleche -- son maillon, plus le
+  // retard des tirs d avant, plus le depart et le vol (decalage, pose par
+  // regrouperEffets). Les autres cartes d une chaine portent le retard des tirs
+  // d avant elles. Un seul delai inline pour toutes les animations de la carte.
+  const porteeDelay = porteeEvent ? delaiMaillon(porteeEvent.comboLevel) + (porteeEvent.decalage || 0) : 0;
+  const chaineDecalage = ((comboVictimEvent || comboEmitEvent || {}).decalage) || 0;
+  const delaiCapture = porteeEvent ? porteeDelay : comboDelay + chaineDecalage;
+  const delaiTotal = delaiCapture + renfortDelay;
+  const mauditBoostDelay = mauditBoostEvent ? delaiCapture + 3200 : 0;
   const deltaEvents = events.filter((e) => typeof e.delta === "number" && e.delta !== 0);
   const tiltable = extraClass.includes("draggable"); // tilt 3D seulement sur les cartes jouables de la main
 
@@ -4185,20 +4304,13 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   return (
     <div
       className={`card ${owner} ${flashClasses} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
-      style={comboDelay || renfortDelay || pullStyle ? { ...(comboDelay || renfortDelay ? { animationDelay: `${comboDelay + renfortDelay}ms` } : {}), ...(pullStyle || {}) } : undefined}
+      style={delaiTotal || pullStyle ? { ...(delaiTotal ? { animationDelay: `${delaiTotal}ms` } : {}), ...(pullStyle || {}) } : undefined}
       role="button" tabIndex={0} onClick={onClick} onKeyDown={KEY_ACTIVATE(onClick)}
       onPointerDown={onPointerDown}
       onMouseMove={tiltable ? handleTiltMove : undefined}
       onMouseLeave={tiltable ? handleTiltLeave : undefined}
     >
       {card.heroActive && <span className="hero-active-badge" title="Héraut actif">★</span>}
-      {porteeEvent && (
-        <svg className={`portee-arrow arrow-from-${porteeEvent.dir}`} viewBox="0 0 46 14" width="46" height="14">
-          <line x1="4" y1="7" x2="33" y2="7" stroke="var(--portee)" strokeWidth="2.2" strokeLinecap="round" />
-          <polygon points="32,2 45,7 32,12" fill="var(--portee)" />
-          <path d="M4,7 L11,2.5 M4,7 L11,11.5 M8,7 L15,3.5 M8,7 L15,10.5" stroke="var(--portee)" strokeWidth="1.3" fill="none" strokeLinecap="round" />
-        </svg>
-      )}
       {/* Les piques latérales ont été retirées : à 16 px de large sur une carte de
           téléphone, la dentelure se comblait et se lisait comme une barre blanche pleine.
           Seules les piques haut/bas subsistent ; la poussée de la carte attaquante
@@ -9961,7 +10073,11 @@ const APP_STYLES = `
         .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.6s ease; --anim-deco: mue-self-pulse 1.6s ease; }
         .card.flash-percee.flash-percee { animation: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); }
         .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.6s ease; --anim-deco: percee-thrust 1.6s ease; }
-        .card.flash-portee.flash-portee { animation: portee-impact 1.6s ease; position: relative; --anim-deco: portee-impact 1.6s ease; }
+        /* Portee (02/09) : la cible pivote comme toute capture, APRES la fleche -- son
+           delai inline couvre le depart et le vol. Le tireur ne porte que
+           flash-portee-tir : rien a jouer, la fleche est un element du plateau
+           (.fleche-portee). L ancien portee-impact (anneau) est retire. */
+        .card.flash-portee.flash-portee.flash-portee { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
         /* Renfort des Abysses (01/09) : la pulsation partagee, celle de l Onde --
            une montee en force, scale 1 a 1,08, 300 ms. L ancien devoreuse-void
            (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
@@ -10120,9 +10236,9 @@ const APP_STYLES = `
         .card.flash-poison.flash-poison { animation: poison-hit 1.6s ease; position: relative; --anim-deco: poison-hit 1.6s ease; }
 
         /* Pseudo-éléments : la couche visuelle supplémentaire propre à chaque capacité */
-        /* Le cercle qui se dilatait sur la carte touchee par les Archers a ete retire :
-           il debordait largement de la carte et se lisait comme un halo parasite. La
-           capacite reste racontee par portee-impact sur la carte elle-meme. */
+        /* Archers : plus rien sur la carte touchee elle-meme (l anneau qui se dilatait,
+           puis portee-impact, ont vecu). La capacite est racontee par la fleche qui
+           vole du tireur a la cible (.fleche-portee), puis par le pivot de la cible. */
         .maudit-swell-fx::after {
           content: ""; position: absolute; inset: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
           pointer-events: none; border: 2px solid var(--red-bright);
@@ -10190,19 +10306,23 @@ const APP_STYLES = `
           opacity: 0; animation: poison-cloud 1.6s ease; z-index: 4;
         }
 
-        /* Flèche directionnelle des Archers : entre par le bord touché, file jusqu'au centre */
-        .portee-arrow {
-          position: absolute; z-index: 5; pointer-events: none;
-          filter: drop-shadow(0 0 6px rgba(120,195,255,0.95)) drop-shadow(0 0 12px rgba(90,175,255,0.75)) drop-shadow(0 0 2px rgba(20,20,30,0.9));
+        /* La fleche de Portee (02/09) : l image /icones/fleche-portee.webp (520 x 235,
+           pointe vers la droite), enfant direct du plateau, 48 px de long. Elle part du
+           centre du tireur (left/top) et vole de --vol-x/--vol-y jusqu au centre de la
+           cible, tournee selon la direction (--vol-rot). Transform et opacity seulement.
+           Apparition douce au depart, disparition NETTE a l impact : fill backwards,
+           l element revient a opacity 0 des la fin, puis quitte le DOM. */
+        .fleche-portee {
+          position: absolute; z-index: 30; pointer-events: none; width: 48px; height: auto; opacity: 0;
+          transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg));
+          filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
         }
-        .arrow-from-top { top: -30px; left: 50%; transform: translateX(-50%) rotate(90deg); animation: arrow-fall-top 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
-        .arrow-from-bottom { bottom: -30px; left: 50%; transform: translateX(-50%) rotate(-90deg); animation: arrow-fall-bottom 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
-        .arrow-from-left { left: -30px; top: 50%; transform: translateY(-50%) rotate(0deg); animation: arrow-fall-left 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
-        .arrow-from-right { right: -30px; top: 50%; transform: translateY(-50%) rotate(180deg); animation: arrow-fall-right 1.45s cubic-bezier(0.55, 0, 0.95, 0.42) forwards; }
-        @keyframes arrow-fall-top { 0%{top:-30px; opacity:0} 12%{opacity:1} 94%{opacity:1} 100%{top:42%; opacity:0} }
-        @keyframes arrow-fall-bottom { 0%{bottom:-30px; opacity:0} 12%{opacity:1} 94%{opacity:1} 100%{bottom:42%; opacity:0} }
-        @keyframes arrow-fall-left { 0%{left:-30px; opacity:0} 12%{opacity:1} 94%{opacity:1} 100%{left:42%; opacity:0} }
-        @keyframes arrow-fall-right { 0%{right:-30px; opacity:0} 12%{opacity:1} 94%{opacity:1} 100%{right:42%; opacity:0} }
+        .fleche-portee.en-vol { animation: fleche-portee-vol 0.35s cubic-bezier(.4, 0, .8, .7) backwards; }
+        @keyframes fleche-portee-vol {
+          0%   { transform: translate(-50%, -50%) rotate(var(--vol-rot, 0deg)); opacity: 0; }
+          22%  { opacity: 1; }
+          100% { transform: translate(calc(-50% + var(--vol-x, 0px)), calc(-50% + var(--vol-y, 0px))) rotate(var(--vol-rot, 0deg)); opacity: 1; }
+        }
 
         /* Petite étoile discrète en coin, sur une carte dont le Héraut est actif */
         .hero-active-badge {
@@ -10297,7 +10417,8 @@ const APP_STYLES = `
         /* Victime ET emettrice : meme specificite que la regle du dessus, posee
            APRES pour gagner. Le tour (regle a quatre classes) lit --anim-deco
            et compose : pulsation retardee, lueur, puis le tour en dernier. */
-        .card.flash-combo.flash-combo-emit {
+        .card.flash-combo.flash-combo-emit,
+        .card.flash-portee.flash-combo-emit {
           --anim-deco: combo-emit-pulse-apres 1.1s ease, combo-emit-glow 1.6s ease;
         }
         @keyframes combo-emit-glow {
@@ -10382,8 +10503,6 @@ const APP_STYLES = `
           100% { transform: scaleY(0); opacity: 0; }
         }
 
-        /* Archers, impact en anneau, façon flèche qui frappe */
-        @keyframes portee-impact { 0%{transform:scale(0.4); opacity:0.4; filter:brightness(1)} 50%{transform:scale(1.18); opacity:1; filter:brightness(2.1)} 70%{filter:brightness(1.3)} 100%{transform:scale(1); filter:brightness(1)} }
 
         /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
         .card.flash-devoreuse .rank { animation: devour-rank 1.6s ease; }
@@ -16713,8 +16832,8 @@ export default function Emprise() {
     let nb = tut.board.slice();
     nb[cellIdx] = { ...step.handCard, owner: "blue" };
     const { board: resolved, events } = resolvePlacement(nb, cellIdx, "blue");
-    const map = {};
-    events.forEach((e) => { map[e.index] = e.kind; });
+    // Les memes effets que la partie (evenements complets, fleche de Portee comprise).
+    const map = regrouperEffets(events);
     setTut((t) => ({ ...t, board: resolved, flashes: map, resolved: true }));
   }
 
@@ -17488,17 +17607,9 @@ export default function Emprise() {
   const areneActive = areneTest || (partieClassee ? getLeague(stats.trophies || 0).name : null);
 
   function flashEvents(events) {
-    const map = {};
-    // Les Abysses renforcees d un coup se numerotent par ordre de case (01/09) :
-    // la carte en fait un decalage de 80 ms par rang, pour que chaque renfort
-    // se lise. C est de la PRESENTATION : on numerote une copie, jamais l objet
-    // du moteur, qui est aussi celui qui part vers Firestore.
-    const ordres = new Map();
-    events.filter((e) => e.kind === "devoreuse").sort((a, b) => a.index - b.index).forEach((e, k) => ordres.set(e, k));
-    events.forEach((e) => {
-      if (!map[e.index]) map[e.index] = [];
-      map[e.index].push(ordres.has(e) ? { ...e, ordre: ordres.get(e) } : e);
-    });
+    // Regroupement par case et numerotations de presentation (ordre des Abysses,
+    // tirs de Portee, retards de chaine) : voir regrouperEffets.
+    const map = regrouperEffets(events);
     // FUSION, pas remplacement. Les effets differes du tour precedent (flips d'Onde
     // programmes a 4000 ms et plus) doivent survivre a la pose suivante : avant, le coup
     // de l'Echo a 3200 ms remplacait toute la carte des effets et retirait les classes
@@ -17512,10 +17623,14 @@ export default function Emprise() {
     // Résonance (3s) + pause (1s) + cascade Onde étalée (300ms/niveau) + le temps du dernier flip (2,2s).
     // Le minimum (3600) couvre aussi la pose lente du bot (3.5s) pour ne pas couper son
     // animation juste avant la fin.
-    const clearDelay = maxComboLevel > 0 ? 4000 + maxComboLevel * 300 + 2400 : 3600;
+    // Portee en chaine (02/09) : chaque maillon qui tire ajoute le depart et le vol
+    // de sa fleche (PORTEE_TEMPS_MS) a tout ce qui suit -- l horizon s allonge d autant.
+    const nbTirsEnChaine = new Set(events.filter((e) => e.kind === "portee" && e.dir && typeof e.comboLevel === "number").map((e) => e.comboLevel)).size;
+    const enChaine = maxComboLevel > 0 || nbTirsEnChaine > 0;
+    const clearDelay = enChaine ? 4000 + maxComboLevel * 300 + 2400 + nbTirsEnChaine * PORTEE_TEMPS_MS : 3600;
     // Seule une chaine d'Onde prolonge l'horizon des animations differees ; un coup
     // ordinaire ne ralentit pas le rythme de l'Echo.
-    if (maxComboLevel > 0) animsFinishAtRef.current = Date.now() + clearDelay;
+    if (enChaine) animsFinishAtRef.current = Date.now() + clearDelay;
     clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlashes({}), clearDelay);
     // Secousse du plateau uniquement quand au moins une capture a lieu — pas sur
@@ -20526,9 +20641,10 @@ export default function Emprise() {
                       className={`cell ${!cell ? "empty" : ""} ${!cell && !tut.resolved && i === TUTORIAL_STEPS[tut.stepIdx].requiredCell ? "tut-highlight" : ""}`}
                       role="button" tabIndex={0} onClick={() => tutorialCellClick(i)} onKeyDown={KEY_ACTIVATE(() => tutorialCellClick(i))}
                     >
-                      {cell && <Card card={cell} owner={cell.owner} events={tut.flashes[i] ? [{ kind: tut.flashes[i] }] : []} />}
+                      {cell && <Card card={cell} owner={cell.owner} events={tut.flashes[i] || []} />}
                     </div>
                   ))}
+                  <FlechesPortee flashes={tut.flashes} />
                 </div>
 
                 {!tut.resolved && (
@@ -22255,6 +22371,7 @@ export default function Emprise() {
                 </div>
               );
             })}
+            <FlechesPortee flashes={flashes} />
           </div>
 
           {isHumanTurn && turn === campBas && !testMode && <TimerBar timeLeft={timeLeft} />}

@@ -87,3 +87,4 @@ Chaque famille d'écrans a son fond : le choix du niveau de l'Écho, le choix de
 Le choix du niveau de l'Écho présente ses quatre niveaux en cartes illustrées, dressées sur toute la hauteur de l'écran.
 Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
+La Portée des Archers se voit : une flèche vole du tireur à la cible, puis la cible passe sous les couleurs du tireur.
