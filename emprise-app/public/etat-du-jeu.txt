@@ -88,3 +88,4 @@ Le choix du niveau de l'Écho présente ses quatre niveaux en cartes illustrées
 Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
 La Portée des Archers se voit : une flèche vole du tireur à la cible, puis la cible passe sous les couleurs du tireur.
+L'attraction des Cendres se lit case par case : la carte attirée avance d'une case à la fois, marque un temps sur chacune, et le reste du coup attend qu'elle soit arrivée.

@@ -127,6 +127,14 @@ const RYTHME_POSE_JOUEUR_MS = 400;
 const PORTEE_DEPART_MS = 700;
 const PORTEE_VOL_MS = 350;
 const PORTEE_TEMPS_MS = PORTEE_DEPART_MS + PORTEE_VOL_MS;
+// Cendres (02/09) : la carte attiree avance CASE PAR CASE -- un glissement de
+// CENDRES_PAS_MS par case, une pause de CENDRES_PAUSE_MS entre deux pas (pas
+// apres le dernier). Trois cases : 1 200 ms. Cinq pas au plus (plateau 6 x 6).
+const CENDRES_PAS_MS = 300;
+const CENDRES_PAUSE_MS = 100;
+const CENDRES_PAS_MAX = 5;
+function nbPasCendres(steps) { return Math.min(CENDRES_PAS_MAX, Math.max(1, steps || 1)); }
+function dureeTrajetCendres(steps) { return nbPasCendres(steps) * (CENDRES_PAS_MS + CENDRES_PAUSE_MS) - CENDRES_PAUSE_MS; }
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
 // etiquettes de camp, sonnerait faux pour un ami.
 function nomAffiche(brut) {
@@ -4124,17 +4132,28 @@ function regrouperEffets(events) {
   const tir = ++compteurTirs;
   const niveauxTir = [...new Set(events.filter((e) => e.kind === "portee" && e.dir && typeof e.comboLevel === "number").map((e) => e.comboLevel))];
   const decalage = (niveau) => niveauxTir.filter((x) => x < niveau).length * PORTEE_TEMPS_MS;
+  // Cendres (02/09) : pendant que la carte attiree avance, rien d autre ne se joue.
+  // Tout evenement qui n est ni sur une carte tiree (elle porte ses propres delais,
+  // en variables CSS) ni sur la carte posee (sa pose part avec le coup) attend la
+  // fin du trajet le plus long. Les ecritures d etat, elles, ne bougent pas.
+  const tires = new Set(events.filter((e) => e.kind === "attraction-pull").map((e) => e.index));
+  const trajet = Math.max(0, ...events.filter((e) => e.kind === "attraction-pull").map((e) => dureeTrajetCendres(e.steps)));
+  const pose = events.find((e) => e.kind === "place" || e.kind === "place-slow");
+  const indexPose = pose ? pose.index : -1;
   events.forEach((e) => {
     if (!map[e.index]) map[e.index] = [];
     let copie = e;
     if (ordres.has(e)) copie = { ...copie, ordre: ordres.get(e) };
+    let d = 0;
     if (e.kind === "portee") {
       // La cible attend en plus son propre tir ; le tireur, seulement les tirs d avant.
-      copie = { ...copie, tir, decalage: decalage(typeof e.comboLevel === "number" ? e.comboLevel : 0) + (e.dir ? PORTEE_TEMPS_MS : 0) };
+      d = decalage(typeof e.comboLevel === "number" ? e.comboLevel : 0) + (e.dir ? PORTEE_TEMPS_MS : 0);
     } else if (typeof e.comboLevel === "number") {
-      const d = decalage(e.comboLevel);
-      if (d) copie = { ...copie, decalage: d };
+      d = decalage(e.comboLevel);
     }
+    if (trajet && !tires.has(e.index) && e.index !== indexPose) d += trajet;
+    if (e.kind === "portee") copie = { ...copie, tir, decalage: d };
+    else if (d) copie = { ...copie, decalage: d };
     map[e.index].push(copie);
   });
   return map;
@@ -4234,10 +4253,14 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // On lui donne donc un décalage de départ, dans le sens inverse de son déplacement et
   // proportionnel au nombre de cases franchies (plafonné à 3 pour rester dans l'écran).
   const attractionPullEvent = events.find((e) => e.kind === "attraction-pull" && e.dir);
+  // Cendres (02/09) : --pull-dx/--pull-dy valent UNE case ; les keyframes pull-pas-N
+  // les multiplient pas a pas. La carte part donc de sa vraie case d origine, N
+  // cases plus loin, et s arrete sur chaque case intermediaire. Le 108 % est un
+  // premier jet (la carte plus l interstice) : mesurerPasCendres le remplace par
+  // l ecart reel entre deux cases, en pixels, avant la premiere image.
   const pullStyle = (() => {
     if (!attractionPullEvent) return null;
-    const cases = Math.min(3, Math.max(1, attractionPullEvent.steps || 1));
-    const dist = `${cases * 108}%`;
+    const dist = "108%";
     switch (attractionPullEvent.dir) {
       case "top": return { "--pull-dx": "0%", "--pull-dy": `-${dist}` };
       case "bottom": return { "--pull-dx": "0%", "--pull-dy": dist };
@@ -4256,6 +4279,12 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // temps sur la carte posee.
   const eveilDirs = events.filter((e) => (e.kind === "eveil" || e.kind === "eveil-self") && e.dir).map((e) => e.dir);
   const eveilCotes = [...new Set(eveilDirs)];
+  // Le trajet : sa classe de pas (pull-pas-N) porte la duree en variables CSS ; si
+  // la carte est capturee a l arrivee (attraction), pull-capturee lui garde son
+  // ancienne robe jusqu au dernier pas.
+  const nbPas = attractionPullEvent ? nbPasCendres(attractionPullEvent.steps) : 0;
+  const trajetMs = attractionPullEvent ? dureeTrajetCendres(attractionPullEvent.steps) : 0;
+  const classesTrajet = attractionPullEvent ? `pull-pas-${nbPas}${events.some((e) => e.kind === "attraction") ? " pull-capturee" : ""}` : "";
   const devouring = events.some((e) => e.kind === "devoreuse");
   const mauditBoostEvent = events.find((e) => e.kind === "maudit-boost");
   // Résonance : côté(s) où un rang égal a matché — sur la carte capturée ("same") ET sur
@@ -4284,12 +4313,37 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // regrouperEffets). Les autres cartes d une chaine portent le retard des tirs
   // d avant elles. Un seul delai inline pour toutes les animations de la carte.
   const porteeDelay = porteeEvent ? delaiMaillon(porteeEvent.comboLevel) + (porteeEvent.decalage || 0) : 0;
-  const chaineDecalage = ((comboVictimEvent || comboEmitEvent || {}).decalage) || 0;
-  const delaiCapture = porteeEvent ? porteeDelay : comboDelay + chaineDecalage;
+  // Le retard du coup (chaine de Portee, trajet de Cendres) : le plus grand que
+  // portent les evenements de la carte -- la carte tiree n en porte jamais.
+  const decalageCoup = Math.max(0, ...events.map((e) => e.decalage || 0));
+  const delaiCapture = porteeEvent ? porteeDelay : comboDelay + decalageCoup;
   const delaiTotal = delaiCapture + renfortDelay;
   const mauditBoostDelay = mauditBoostEvent ? delaiCapture + 3200 : 0;
   const deltaEvents = events.filter((e) => typeof e.delta === "number" && e.delta !== 0);
   const tiltable = extraClass.includes("draggable"); // tilt 3D seulement sur les cartes jouables de la main
+
+  // Le pas d une attraction, mesure sur le plateau : l ecart entre la case d arrivee
+  // et sa voisine du cote d ou vient la carte (dir). Ecrit en pixels dans les
+  // variables lues par les keyframes, avant la premiere image (useLayoutEffect).
+  // Sans voisine ou hors plateau, le 108 % du style inline reste en place.
+  const carteRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = carteRef.current;
+    if (!attractionPullEvent || !el) return;
+    const caseEl = el.parentElement;
+    const table = caseEl && caseEl.parentElement;
+    if (!table) return;
+    const cases = [...table.children].filter((c) => c.classList && c.classList.contains("cell"));
+    const i = cases.indexOf(caseEl);
+    if (i < 0) return;
+    const colonnes = Number(getComputedStyle(table).getPropertyValue("--board-cols")) || COLS;
+    const pas = { top: -colonnes, bottom: colonnes, left: -1, right: 1 }[attractionPullEvent.dir];
+    const voisine = pas !== undefined ? cases[i + pas] : null;
+    if (!voisine) return;
+    const a = caseEl.getBoundingClientRect(), b = voisine.getBoundingClientRect();
+    el.style.setProperty("--pull-dx", `${Math.round(b.left - a.left)}px`);
+    el.style.setProperty("--pull-dy", `${Math.round(b.top - a.top)}px`);
+  }, [attractionPullEvent]);
 
   // Effet Tilt : la carte s'incline en 3D en suivant la position du curseur.
   // On écrit directement dans des variables CSS (pas de setState) pour rester
@@ -4310,7 +4364,8 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
 
   return (
     <div
-      className={`card ${owner} ${flashClasses} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
+      ref={carteRef}
+      className={`card ${owner} ${flashClasses} ${classesTrajet} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
       style={delaiTotal || pullStyle ? { ...(delaiTotal ? { animationDelay: `${delaiTotal}ms` } : {}), ...(pullStyle || {}) } : undefined}
       role="button" tabIndex={0} onClick={onClick} onKeyDown={KEY_ACTIVATE(onClick)}
       onPointerDown={onPointerDown}
@@ -4356,7 +4411,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
         <span
           key={di}
           className={`delta-badge ${e.delta > 0 ? "delta-pos" : "delta-neg"}`}
-          style={{ marginTop: di * 16, animationDelay: e.kind === "maudit-boost" ? `${mauditBoostDelay}ms` : undefined }}
+          style={{ marginTop: di * 16, animationDelay: e.kind === "maudit-boost" ? `${mauditBoostDelay}ms` : (trajetMs ? `${trajetMs}ms` : undefined) }}
         >
           {e.delta > 0 ? `+${e.delta}` : e.delta}
         </span>
@@ -10220,7 +10275,25 @@ const APP_STYLES = `
                  box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 6px rgba(203,164,86,0.35), 0 2px 4px rgba(0,0,0,0.5); }
         }
         .card.flash-attraction.flash-attraction { animation: ember-flicker 1.6s ease; position: relative; overflow: visible; --anim-deco: ember-flicker 1.6s ease; }
-        .card.flash-attraction-pull.flash-attraction-pull { animation: pull-in 1.6s cubic-bezier(0.22, 1.05, 0.36, 1); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-deco: pull-in 1.6s cubic-bezier(0.22, 1.05, 0.36, 1); --flip-delay: 1.6s; }
+        /* Cendres (02/09) : la carte attiree avance case par case. La classe de pas
+           (pull-pas-N, posee par Card d apres steps) fournit l animation et sa duree
+           en variables ; un pivot sur la meme carte (Resonance a l arrivee) attend la
+           fin du trajet par --flip-delay. L ancien pull-in (glissement d un bloc en
+           1,6 s, flou, rebond) est retire. */
+        .card.flash-attraction-pull.flash-attraction-pull { animation: var(--pull-anim, none); opacity: 0.9; position: relative; overflow: visible; z-index: 6; --anim-deco: var(--pull-anim, none); --flip-delay: var(--trajet, 0s); }
+        .card.pull-pas-1 { --pull-anim: pull-pas-1 0.3s linear; --trajet: 0.3s; }
+        .card.pull-pas-2 { --pull-anim: pull-pas-2 0.7s linear; --trajet: 0.7s; }
+        .card.pull-pas-3 { --pull-anim: pull-pas-3 1.1s linear; --trajet: 1.1s; }
+        .card.pull-pas-4 { --pull-anim: pull-pas-4 1.5s linear; --trajet: 1.5s; }
+        .card.pull-pas-5 { --pull-anim: pull-pas-5 1.9s linear; --trajet: 1.9s; }
+        /* Capturee a l arrivee : la carte voyage sous son ancienne robe et ne change
+           de camp qu au dernier pas (les keyframes lisent --pull-robe-*). */
+        .card.pull-capturee { --pull-robe-bg: var(--flip-ancien-bg); --pull-robe-bord: var(--flip-ancien-bord); }
+        /* Le poison traverse (un seul evenement, cumule, a l arrivee -- il n existe
+           aucun effet par case) se joue quand la carte ARRIVE : le voile et le nuage
+           attendent la fin du trajet. Le badge de delta attend aussi (delai inline). */
+        .card.flash-attraction-pull.flash-poison { --anim-deco: var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
+        .card.flash-attraction-pull.flash-poison::before { animation-delay: var(--trajet, 0s); animation-fill-mode: backwards; }
         .card.flash-attraction-pull::before {
           content: ""; position: absolute; inset: -16px; border-radius: 16px; pointer-events: none; z-index: 4;
           background:
@@ -10544,17 +10617,57 @@ const APP_STYLES = `
           60% { transform: scale(1.06) rotate(-0.3deg); filter: brightness(1.26) saturate(1.22); box-shadow: 0 0 20px var(--attract), 0 0 40px rgba(217,143,60,0.32); }
           80% { transform: scale(1.01); filter: brightness(1.06); }
         }
-        /* La carte part de sa case d'origine (--pull-dx / --pull-dy, posés en JS d'après la
-           direction et le nombre de cases franchies), résiste un instant, puis est happée.
-           Le trajet occupe les 55 premiers pourcents : on VOIT la carte traverser le plateau
-           avant le rebond d'arrivée. */
-        @keyframes pull-in {
-          0%   { transform: translate(var(--pull-dx, 0%), var(--pull-dy, 0%)) scale(0.9); opacity: 0.35; filter: blur(2px) saturate(1.35); }
-          12%  { transform: translate(calc(var(--pull-dx, 0%) * 1.06), calc(var(--pull-dy, 0%) * 1.06)) scale(0.88); opacity: 0.75; filter: blur(1.5px) saturate(1.35); }
-          55%  { transform: translate(0%, 0%) scale(1.14); opacity: 1; filter: blur(0) saturate(1.25); box-shadow: 0 0 24px var(--attract), 0 0 44px rgba(217,143,60,0.4); }
-          70%  { transform: scale(0.96); box-shadow: 0 0 14px var(--attract); }
-          84%  { transform: scale(1.05); box-shadow: 0 0 18px var(--attract), 0 0 32px rgba(217,143,60,0.28); }
-          100% { transform: scale(1); }
+        /* Cendres (02/09) : un jeu de keyframes par nombre de pas. Chaque pas est un
+           glissement de 300 ms (ease-in-out) d une case vers la suivante, suivi d une
+           pause de 100 ms ; la carte finit exactement sur sa case (translate 0).
+           Transform seulement pour le mouvement. La robe (fond et bordure) tient
+           l ancien camp jusqu au dernier instant si la carte est capturee a
+           l arrivee, et bascule a 100 % -- comme le camp bascule a 90 degres dans
+           les pivots. Sans capture, --pull-robe-* retombe sur la robe actuelle. */
+        @keyframes pull-pas-1 {
+          0% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          99.9% { transform: translate(0%, 0%); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); }
+          100% { transform: translate(0%, 0%); background: var(--flip-nouveau-bg); border-color: var(--flip-nouveau-bord); }
+        }
+        @keyframes pull-pas-2 {
+          0% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          42.86% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          57.14% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          99.9% { transform: translate(0%, 0%); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); }
+          100% { transform: translate(0%, 0%); background: var(--flip-nouveau-bg); border-color: var(--flip-nouveau-bord); }
+        }
+        @keyframes pull-pas-3 {
+          0% { transform: translate(calc(var(--pull-dx, 0%) * 3), calc(var(--pull-dy, 0%) * 3)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          27.27% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          36.36% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          63.64% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          72.73% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          99.9% { transform: translate(0%, 0%); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); }
+          100% { transform: translate(0%, 0%); background: var(--flip-nouveau-bg); border-color: var(--flip-nouveau-bord); }
+        }
+        @keyframes pull-pas-4 {
+          0% { transform: translate(calc(var(--pull-dx, 0%) * 4), calc(var(--pull-dy, 0%) * 4)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          2% { transform: translate(calc(var(--pull-dx, 0%) * 3), calc(var(--pull-dy, 0%) * 3)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          26.67% { transform: translate(calc(var(--pull-dx, 0%) * 3), calc(var(--pull-dy, 0%) * 3)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          46.67% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          53.33% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          73.33% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          8% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          99.9% { transform: translate(0%, 0%); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); }
+          100% { transform: translate(0%, 0%); background: var(--flip-nouveau-bg); border-color: var(--flip-nouveau-bord); }
+        }
+        @keyframes pull-pas-5 {
+          0% { transform: translate(calc(var(--pull-dx, 0%) * 5), calc(var(--pull-dy, 0%) * 5)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          15.79% { transform: translate(calc(var(--pull-dx, 0%) * 4), calc(var(--pull-dy, 0%) * 4)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          21.05% { transform: translate(calc(var(--pull-dx, 0%) * 4), calc(var(--pull-dy, 0%) * 4)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          36.84% { transform: translate(calc(var(--pull-dx, 0%) * 3), calc(var(--pull-dy, 0%) * 3)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          42.11% { transform: translate(calc(var(--pull-dx, 0%) * 3), calc(var(--pull-dy, 0%) * 3)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          57.89% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          63.16% { transform: translate(calc(var(--pull-dx, 0%) * 2), calc(var(--pull-dy, 0%) * 2)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          78.95% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: linear; }
+          84.21% { transform: translate(calc(var(--pull-dx, 0%) * 1), calc(var(--pull-dy, 0%) * 1)); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); animation-timing-function: ease-in-out; }
+          99.9% { transform: translate(0%, 0%); background: var(--pull-robe-bg, var(--flip-nouveau-bg)); border-color: var(--pull-robe-bord, var(--flip-nouveau-bord)); }
+          100% { transform: translate(0%, 0%); background: var(--flip-nouveau-bg); border-color: var(--flip-nouveau-bord); }
         }
 
         /* Gardiens, flash de pose (bouclier qui se lève) + onde de choc en défense */
@@ -17636,7 +17749,9 @@ export default function Emprise() {
     // de sa fleche (PORTEE_TEMPS_MS) a tout ce qui suit -- l horizon s allonge d autant.
     const nbTirsEnChaine = new Set(events.filter((e) => e.kind === "portee" && e.dir && typeof e.comboLevel === "number").map((e) => e.comboLevel)).size;
     const enChaine = maxComboLevel > 0 || nbTirsEnChaine > 0;
-    const clearDelay = enChaine ? 4000 + maxComboLevel * 300 + 2400 + nbTirsEnChaine * PORTEE_TEMPS_MS : 3600;
+    // Cendres (02/09) : le trajet le plus long retarde tout le reste du coup d autant.
+    const trajetCendres = Math.max(0, ...events.filter((e) => e.kind === "attraction-pull").map((e) => dureeTrajetCendres(e.steps)));
+    const clearDelay = (enChaine ? 4000 + maxComboLevel * 300 + 2400 + nbTirsEnChaine * PORTEE_TEMPS_MS : 3600) + trajetCendres;
     // Seule une chaine d'Onde prolonge l'horizon des animations differees ; un coup
     // ordinaire ne ralentit pas le rythme de l'Echo.
     if (enChaine) animsFinishAtRef.current = Date.now() + clearDelay;
