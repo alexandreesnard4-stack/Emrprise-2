@@ -3246,45 +3246,50 @@ function graineDeChaine(s) {
 // Les chemins d'images vivent ICI, en webp comprime (les originaux PNG de
 // 3 a 24 Mo dorment dans sources-images/bannieres-originaux). Les 24 visuels
 // sont livres et verifies a l'oeil, un par un.
+// focalY (01/09) : le point focal VERTICAL de l image, en pour cent, pour les
+// bandes plus larges que hautes ou l on ne montre qu une tranche -- la bande
+// du hub aujourd hui. 25 regarde vers le haut, 65 vers le bas. Absent vaut
+// 50, le centre : une banniere future sans reglage s affiche comme avant.
+// Revu image par image par le Commandant ; ce n est pas une valeur calculee.
 const BANNIERES = [
-  { cle: "depart-nuit", nom: "Le Drap de Nuit", image: "/bannieres/depart-nuit.webp", source: "depart" },
-  { cle: "depart-pierre", nom: "La Pierre Levée", image: "/bannieres/depart-pierre.webp", source: "depart" },
-  { cle: "depart-or", nom: "Le Fil d'Or", image: "/bannieres/depart-or.webp", source: "depart" },
-  { cle: "pieces-brume", nom: "Brume des Failles", image: "/bannieres/pieces-brume.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-chandelles", nom: "Chandelles du Sanctuaire", image: "/bannieres/pieces-chandelles.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-encre", nom: "L'Encre et l'Or", image: "/bannieres/pieces-encre.webp", source: "pieces", prix: 2500 },
-  { cle: "pieces-rempart", nom: "Le Rempart", image: "/bannieres/pieces-rempart.webp", source: "pieces", prix: 2500 },
-  { cle: "pieces-nuee", nom: "La Nuée", image: "/bannieres/pieces-nuee.webp", source: "pieces", prix: 3000 },
-  { cle: "histoire-cendres", nom: "L'Étendard des Cendres", image: "/bannieres/histoire-cendres.webp", source: "histoire", chapitre: "cendres" },
-  { cle: "histoire-maudits", nom: "L'Étendard des Maudits", image: "/bannieres/histoire-maudits.webp", source: "histoire", chapitre: "maudits" },
-  { cle: "histoire-abysses", nom: "L'Étendard des Abysses", image: "/bannieres/histoire-abysses.webp", source: "histoire", chapitre: "devoreuse" },
-  { cle: "histoire-pestiferes", nom: "L'Étendard des Pestiférés", image: "/bannieres/histoire-pestiferes.webp", source: "histoire", chapitre: "poison" },
-  { cle: "histoire-gardiens", nom: "L'Étendard des Gardiens", image: "/bannieres/histoire-gardiens.webp", source: "histoire", chapitre: "guardian" },
-  { cle: "histoire-archers", nom: "L'Étendard des Archers", image: "/bannieres/histoire-archers.webp", source: "histoire", chapitre: "portee" },
-  { cle: "histoire-piques", nom: "L'Étendard des Piques", image: "/bannieres/histoire-piques.webp", source: "histoire", chapitre: "percee" },
-  { cle: "histoire-scribes", nom: "L'Étendard des Scribes", image: "/bannieres/histoire-scribes.webp", source: "histoire", chapitre: "scribes" },
-  { cle: "echo-novice", nom: "L'Étendard du Novice", image: "/bannieres/echo-novice.webp", source: "echo", difficulte: "debutant" },
-  { cle: "echo-combattant", nom: "L'Étendard du Combattant", image: "/bannieres/echo-combattant.webp", source: "echo", difficulte: "intermediaire" },
-  { cle: "echo-veteran", nom: "L'Étendard du Vétéran", image: "/bannieres/echo-veteran.webp", source: "echo", difficulte: "avance" },
-  { cle: "echo-seigneur", nom: "L'Étendard du Seigneur de Guerre", image: "/bannieres/echo-seigneur.webp", source: "echo", difficulte: "expert" },
-  { cle: "prestige-trone", nom: "Le Trône d'Améthyste", image: "/bannieres/prestige-trone.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "pieces-cathedrale", nom: "La Cathédrale Engloutie", image: "/bannieres/pieces-cathedrale.webp", source: "pieces", prix: 2500 },
-  { cle: "pieces-trone-vide", nom: "Le Trône Vide", image: "/bannieres/pieces-trone-vide.webp", source: "pieces", prix: 2500 },
-  { cle: "prestige-dragon", nom: "Le Dragon d'Or", image: "/bannieres/prestige-dragon.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-comete", nom: "La Comète", image: "/bannieres/prestige-comete.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-portail", nom: "Le Portail Céleste", image: "/bannieres/prestige-portail.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "prestige-couronne", nom: "La Couronne Brisée", image: "/bannieres/prestige-couronne.webp", source: "prestige", prixGemmes: 600 },
-  { cle: "pieces-bibliotheque", nom: "La Bibliothèque Endormie", image: "/bannieres/pieces-bibliotheque.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-pont", nom: "Le Pont des Brumes", image: "/bannieres/pieces-pont.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-forge", nom: "La Forge Éteinte", image: "/bannieres/pieces-forge.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-lande", nom: "Les Bannières Déchirées", image: "/bannieres/pieces-lande.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-lanternes", nom: "La Ruelle aux Lanternes", image: "/bannieres/pieces-lanternes.webp", source: "pieces", prix: 2000 },
-  { cle: "pieces-citadelle", nom: "La Citadelle de l'Aube", image: "/bannieres/pieces-citadelle.webp", source: "pieces", prix: 2500 },
-  { cle: "pieces-armada", nom: "L'Armada Noire", image: "/bannieres/pieces-armada.webp", source: "pieces", prix: 3000 },
-  { cle: "pieces-colosse", nom: "Le Colosse Endormi", image: "/bannieres/pieces-colosse.webp", source: "pieces", prix: 3000 },
+  { cle: "depart-nuit", nom: "Le Drap de Nuit", image: "/bannieres/depart-nuit.webp", source: "depart", focalY: 25 },
+  { cle: "depart-pierre", nom: "La Pierre Levée", image: "/bannieres/depart-pierre.webp", source: "depart", focalY: 45 },
+  { cle: "depart-or", nom: "Le Fil d'Or", image: "/bannieres/depart-or.webp", source: "depart", focalY: 25 },
+  { cle: "pieces-brume", nom: "Brume des Failles", image: "/bannieres/pieces-brume.webp", source: "pieces", prix: 2000, focalY: 25 },
+  { cle: "pieces-chandelles", nom: "Chandelles du Sanctuaire", image: "/bannieres/pieces-chandelles.webp", source: "pieces", prix: 2000, focalY: 60 },
+  { cle: "pieces-encre", nom: "L'Encre et l'Or", image: "/bannieres/pieces-encre.webp", source: "pieces", prix: 2500, focalY: 40 },
+  { cle: "pieces-rempart", nom: "Le Rempart", image: "/bannieres/pieces-rempart.webp", source: "pieces", prix: 2500, focalY: 40 },
+  { cle: "pieces-nuee", nom: "La Nuée", image: "/bannieres/pieces-nuee.webp", source: "pieces", prix: 3000, focalY: 25 },
+  { cle: "histoire-cendres", nom: "L'Étendard des Cendres", image: "/bannieres/histoire-cendres.webp", source: "histoire", chapitre: "cendres", focalY: 55 },
+  { cle: "histoire-maudits", nom: "L'Étendard des Maudits", image: "/bannieres/histoire-maudits.webp", source: "histoire", chapitre: "maudits", focalY: 50 },
+  { cle: "histoire-abysses", nom: "L'Étendard des Abysses", image: "/bannieres/histoire-abysses.webp", source: "histoire", chapitre: "devoreuse", focalY: 50 },
+  { cle: "histoire-pestiferes", nom: "L'Étendard des Pestiférés", image: "/bannieres/histoire-pestiferes.webp", source: "histoire", chapitre: "poison", focalY: 65 },
+  { cle: "histoire-gardiens", nom: "L'Étendard des Gardiens", image: "/bannieres/histoire-gardiens.webp", source: "histoire", chapitre: "guardian", focalY: 40 },
+  { cle: "histoire-archers", nom: "L'Étendard des Archers", image: "/bannieres/histoire-archers.webp", source: "histoire", chapitre: "portee", focalY: 50 },
+  { cle: "histoire-piques", nom: "L'Étendard des Piques", image: "/bannieres/histoire-piques.webp", source: "histoire", chapitre: "percee", focalY: 60 },
+  { cle: "histoire-scribes", nom: "L'Étendard des Scribes", image: "/bannieres/histoire-scribes.webp", source: "histoire", chapitre: "scribes", focalY: 60 },
+  { cle: "echo-novice", nom: "L'Étendard du Novice", image: "/bannieres/echo-novice.webp", source: "echo", difficulte: "debutant", focalY: 55 },
+  { cle: "echo-combattant", nom: "L'Étendard du Combattant", image: "/bannieres/echo-combattant.webp", source: "echo", difficulte: "intermediaire", focalY: 30 },
+  { cle: "echo-veteran", nom: "L'Étendard du Vétéran", image: "/bannieres/echo-veteran.webp", source: "echo", difficulte: "avance", focalY: 50 },
+  { cle: "echo-seigneur", nom: "L'Étendard du Seigneur de Guerre", image: "/bannieres/echo-seigneur.webp", source: "echo", difficulte: "expert", focalY: 25 },
+  { cle: "prestige-trone", nom: "Le Trône d'Améthyste", image: "/bannieres/prestige-trone.webp", source: "prestige", prixGemmes: 600, focalY: 50 },
+  { cle: "prestige-eclipse", nom: "L'Éclipse d'Or", image: "/bannieres/prestige-eclipse.webp", source: "prestige", prixGemmes: 600, focalY: 25 },
+  { cle: "prestige-sacre", nom: "Le Sacre", image: "/bannieres/prestige-sacre.webp", source: "prestige", prixGemmes: 600, focalY: 30 },
+  { cle: "prestige-dechirure", nom: "La Déchirure", image: "/bannieres/prestige-dechirure.webp", source: "prestige", prixGemmes: 600, focalY: 35 },
+  { cle: "pieces-cathedrale", nom: "La Cathédrale Engloutie", image: "/bannieres/pieces-cathedrale.webp", source: "pieces", prix: 2500, focalY: 40 },
+  { cle: "pieces-trone-vide", nom: "Le Trône Vide", image: "/bannieres/pieces-trone-vide.webp", source: "pieces", prix: 2500, focalY: 60 },
+  { cle: "prestige-dragon", nom: "Le Dragon d'Or", image: "/bannieres/prestige-dragon.webp", source: "prestige", prixGemmes: 600, focalY: 40 },
+  { cle: "prestige-comete", nom: "La Comète", image: "/bannieres/prestige-comete.webp", source: "prestige", prixGemmes: 600, focalY: 25 },
+  { cle: "prestige-portail", nom: "Le Portail Céleste", image: "/bannieres/prestige-portail.webp", source: "prestige", prixGemmes: 600, focalY: 45 },
+  { cle: "prestige-couronne", nom: "La Couronne Brisée", image: "/bannieres/prestige-couronne.webp", source: "prestige", prixGemmes: 600, focalY: 50 },
+  { cle: "pieces-bibliotheque", nom: "La Bibliothèque Endormie", image: "/bannieres/pieces-bibliotheque.webp", source: "pieces", prix: 2000, focalY: 50 },
+  { cle: "pieces-pont", nom: "Le Pont des Brumes", image: "/bannieres/pieces-pont.webp", source: "pieces", prix: 2000, focalY: 55 },
+  { cle: "pieces-forge", nom: "La Forge Éteinte", image: "/bannieres/pieces-forge.webp", source: "pieces", prix: 2000, focalY: 60 },
+  { cle: "pieces-lande", nom: "Les Bannières Déchirées", image: "/bannieres/pieces-lande.webp", source: "pieces", prix: 2000, focalY: 40 },
+  { cle: "pieces-lanternes", nom: "La Ruelle aux Lanternes", image: "/bannieres/pieces-lanternes.webp", source: "pieces", prix: 2000, focalY: 30 },
+  { cle: "pieces-citadelle", nom: "La Citadelle de l'Aube", image: "/bannieres/pieces-citadelle.webp", source: "pieces", prix: 2500, focalY: 35 },
+  { cle: "pieces-armada", nom: "L'Armada Noire", image: "/bannieres/pieces-armada.webp", source: "pieces", prix: 3000, focalY: 50 },
+  { cle: "pieces-colosse", nom: "Le Colosse Endormi", image: "/bannieres/pieces-colosse.webp", source: "pieces", prix: 3000, focalY: 30 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
@@ -9837,14 +9842,23 @@ const APP_STYLES = `
         .card .portrait-frame img { width: 100%; height: 100%; object-fit: cover; }
         .card .icon { font-size: 22px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
 
-        /* --- Game feel : pose de carte (zoom arrière + rebond élastique) --- */
-        .card.flash-place.flash-place { animation: card-land 1.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        /* --- Game feel : pose de carte --- */
+        /* 01/09 : l IMPACT de pose est retire. Il tenait en trois choses : le
+           zoom arriere depuis 1,45, l ombre portee lourde de 26 px, et le
+           rebond elastique (0,94 puis 1,04, easing a 1,56 qui depasse). La
+           carte se pose desormais simplement : un fondu et un leger tassement
+           de 1,06 a 1, en ease-out, sans rien qui claque.
+           Les durees ne bougent pas : celle de l Echo (3,5 s) porte
+           RYTHME_POSE_ECHO_MS, ses captures partent quand la carte est posee.
+           Rien ne devient mort : les classes et les noms d images-cles restent
+           les memes, seules leurs valeurs changent. */
+        .card.flash-place.flash-place { animation: card-land 1.6s ease-out; }
         /* Pose du bot : en plus du rebond d'atterrissage, la carte vient visiblement d'en
            haut (où se trouve sa main) au lieu d'apparaître directement sur la case, évite
            l'effet "téléportation" qu'on n'a pas avec le joueur, qui glisse sa carte à l'écran.
            Le !important est nécessaire : .card.red a déjà sa propre animation en boucle (halo
            qui pulse) qui gagnerait sinon le conflit et empêcherait celle-ci de jouer. */
-        .card.flash-place-slow.flash-place-slow { animation: card-land-bot 3.5s cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
+        .card.flash-place-slow.flash-place-slow { animation: card-land-bot 3.5s ease-out !important; }
         /* La carte de l'Echo tombait de 400 px en 1,6 s : pendant tout ce temps on voyait
            l'alveole VIDE avec une carte suspendue au-dessus. Ce n'etait pas genant tant
            que les cases etaient de simples pointilles ; depuis qu'elles sont creusees, le
@@ -9852,20 +9866,20 @@ const APP_STYLES = `
            La chute part maintenant de 150 px et se termine a 18 % (0,63 s au lieu de 1,6),
            et la carte reste transparente au depart : elle n'apparait qu'a mi-chemin, deja
            proche de sa case. La duree totale ne bouge pas, c'est elle qui signale ou
-           l'Echo vient de jouer. */
+           l'Echo vient de jouer.
+           01/09 : la DESCENTE reste -- elle dit d ou vient la carte, ce n est pas
+           un impact. Ce qui part, c est l atterrissage qui claquait : le rebond
+           0,94 / 1,04 et l ombre de 26 px. La carte descend et se pose. */
         @keyframes card-land-bot {
-          0%   { transform: translateY(-150px) scale(1.22); opacity: 0; box-shadow: 0 26px 40px rgba(0,0,0,0.55); }
+          0%   { transform: translateY(-150px) scale(1.06); opacity: 0; }
           8%   { opacity: 0.85; }
-          18%  { transform: translateY(0) scale(0.94); opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
-          30%  { transform: translateY(0) scale(1.04); }
-          40%  { transform: translateY(0) scale(1); }
-          100% { transform: translateY(0) scale(1); }
+          18%  { transform: translateY(0) scale(1); opacity: 1; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
         }
         @keyframes card-land {
-          0%   { transform: scale(1.45); opacity: 0; box-shadow: 0 26px 40px rgba(0,0,0,0.55); }
-          55%  { transform: scale(0.94); opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
-          75%  { transform: scale(1.04); }
-          100% { transform: scale(1); }
+          0%   { transform: scale(1.06); opacity: 0; }
+          55%  { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
         }
 
         /* --- Game feel : survol des cartes en main (élévation + scale + tilt 3D suivant le curseur) --- */
@@ -18486,8 +18500,17 @@ export default function Emprise() {
                     role="img"
                     aria-label={`Bannière équipée : ${equipee ? equipee.nom : "aucune"}`}
                   >
+                    {/* Le point focal vertical (01/09) : chaque banniere dit quelle
+                        tranche d elle-meme la bande doit montrer -- le dragon sa
+                        tete, pas son ventre. Absent, 50 : le centre, comme avant.
+                        SEULE la bande du hub le lit ; l avant-partie, la fiche
+                        d ami et la boutique gardent leur cadrage. */}
                     {equipee && (
-                      <span className="hub-banniere-image" style={{ backgroundImage: `url("${equipee.image}")` }} aria-hidden="true" />
+                      <span
+                        className="hub-banniere-image"
+                        style={{ backgroundImage: `url("${equipee.image}")`, backgroundPosition: `center ${equipee.focalY ?? 50}%` }}
+                        aria-hidden="true"
+                      />
                     )}
                     <span className="hub-banniere-voile" aria-hidden="true" />
                     <span className="hub-banniere-pseudo-zone">
