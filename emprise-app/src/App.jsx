@@ -4172,6 +4172,7 @@ function regrouperEffets(events) {
     }
     if (trajet && !tires.has(e.index) && e.index !== indexPose) d += trajet;
     if (e.kind === "portee") copie = { ...copie, tir, decalage: d };
+    else if (e.kind === "devoreuse") copie = { ...copie, tir, ...(d ? { decalage: d } : {}) };
     else if (d) copie = { ...copie, decalage: d };
     map[e.index].push(copie);
   });
@@ -4244,6 +4245,61 @@ function FlechePortee({ tir }) {
 }
 function FlechesPortee({ flashes }) {
   return apparierTirsPortee(flashes || {}).map((t) => <FlechePortee key={t.cle} tir={t} />);
+}
+
+// Les delais d une carte pour un coup, en un seul endroit (02/09) : la carte les
+// applique en style inline (un seul delai pour toutes ses animations), et le calque
+// des tentacules, rendu dans la CASE derriere elle, lit le meme delaiTotal.
+function delaisDeCarte(events) {
+  const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
+  const comboVictimEvent = events.find((e) => e.kind === "combo" && e.dir);
+  const comboEmitEvent = events.find((e) => e.kind === "combo-emit" && e.dir);
+  const mauditBoostEvent = events.find((e) => e.kind === "maudit-boost");
+  const devoreuseEvent = events.find((e) => e.kind === "devoreuse");
+  // Le renfort d une Abysse (01/09) : 80 ms par rang parmi celles renforcees
+  // d un coup, pour que la montee en force se lise l une apres l autre.
+  const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 80 : 0;
+  // L'Onde ne démarre qu'une fois la Résonance bien terminée (3s) + 1s de pause — jamais
+  // en même temps — puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus.
+  const COMBO_BASE_DELAY = 4000;
+  const comboDelay = comboVictimEvent ? COMBO_BASE_DELAY + (comboVictimEvent.comboLevel || 0) * 300 : (comboEmitEvent ? COMBO_BASE_DELAY + (comboEmitEvent.comboLevel || 0) * 300 : 0);
+  // Portee (02/09) : la cible pivote a l IMPACT de la fleche -- son maillon, plus le
+  // retard des tirs d avant, plus le depart et le vol (decalage, pose par
+  // regrouperEffets). Les autres cartes d une chaine portent le retard des tirs
+  // d avant elles. Un seul delai inline pour toutes les animations de la carte.
+  const porteeDelay = porteeEvent ? delaiMaillon(porteeEvent.comboLevel) + (porteeEvent.decalage || 0) : 0;
+  // Le retard du coup (chaine de Portee, trajet de Cendres) : le plus grand que
+  // portent les evenements de la carte -- la carte tiree n en porte jamais.
+  const decalageCoup = Math.max(0, ...events.map((e) => e.decalage || 0));
+  const delaiCapture = porteeEvent ? porteeDelay : comboDelay + decalageCoup;
+  const delaiTotal = delaiCapture + renfortDelay;
+  // La croissance du Maudit attend que l'animation de capture soit bien terminée avant de
+  // se déclencher (comboDelay si elle vient d'une chaîne + le temps du flip + une pause
+  // volontaire), pour que le joueur comprenne "capture" puis "croissance" comme 2 temps distincts.
+  const mauditBoostDelay = mauditBoostEvent ? delaiCapture + 3200 : 0;
+  return { comboDelay, renfortDelay, delaiCapture, delaiTotal, mauditBoostDelay };
+}
+
+// Le renfort des Abysses (02/09) : derriere chaque Abysse renforcee, les tentacules
+// (/icones/tentacule-abysse.webp) surgissent du dos de la carte, depassent le bord
+// superieur, tiennent le temps de la pulsation et redescendent. Un CALQUE rendu dans
+// la case, avant la carte (donc derriere elle, au-dessus du plateau) : la carte garde
+// sa pulsation, une seule animation a la fois sur elle. Au meme delai que la carte
+// (delaisDeCarte, decalage de 80 ms par Abysse compris) ; cree au declenchement,
+// retire du DOM a la fin de son animation.
+const TENTACULE_ABYSSE_SRC = "/icones/tentacule-abysse.webp";
+function TentaculesAbysse({ events }) {
+  const [finie, setFinie] = useState(false);
+  const renforcee = events.some((e) => e.kind === "devoreuse");
+  if (!renforcee || finie) return null;
+  return (
+    <span
+      className="tentacule-fx"
+      style={{ "--renfort-delai": `${delaisDeCarte(events).delaiTotal}ms`, backgroundImage: `url("${TENTACULE_ABYSSE_SRC}")` }}
+      aria-hidden="true"
+      onAnimationEnd={() => setFinie(true)}
+    />
+  );
 }
 
 // Composant réutilisable : affiche une carte (portrait + 4 rangs), avec ses
@@ -4353,25 +4409,10 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // Le renfort d une Abysse (01/09) : 80 ms par rang parmi celles renforcees
   // d un coup, pour que la montee en force se lise l une apres l autre.
   const devoreuseEvent = events.find((e) => e.kind === "devoreuse");
-  const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 80 : 0;
-  // L'Onde ne démarre qu'une fois la Résonance bien terminée (3s) + 1s de pause — jamais
-  // en même temps — puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus.
-  const COMBO_BASE_DELAY = 4000;
-  const comboDelay = comboVictimEvent ? COMBO_BASE_DELAY + (comboVictimEvent.comboLevel || 0) * 300 : (comboEmitEvent ? COMBO_BASE_DELAY + (comboEmitEvent.comboLevel || 0) * 300 : 0);
-  // La croissance du Maudit attend que l'animation de capture soit bien terminée avant de
-  // se déclencher (comboDelay si elle vient d'une chaîne + le temps du flip + une pause
-  // volontaire), pour que le joueur comprenne "capture" puis "croissance" comme 2 temps distincts.
-  // Portee (02/09) : la cible pivote a l IMPACT de la fleche -- son maillon, plus le
-  // retard des tirs d avant, plus le depart et le vol (decalage, pose par
-  // regrouperEffets). Les autres cartes d une chaine portent le retard des tirs
-  // d avant elles. Un seul delai inline pour toutes les animations de la carte.
-  const porteeDelay = porteeEvent ? delaiMaillon(porteeEvent.comboLevel) + (porteeEvent.decalage || 0) : 0;
-  // Le retard du coup (chaine de Portee, trajet de Cendres) : le plus grand que
-  // portent les evenements de la carte -- la carte tiree n en porte jamais.
-  const decalageCoup = Math.max(0, ...events.map((e) => e.decalage || 0));
-  const delaiCapture = porteeEvent ? porteeDelay : comboDelay + decalageCoup;
-  const delaiTotal = delaiCapture + renfortDelay;
-  const mauditBoostDelay = mauditBoostEvent ? delaiCapture + 3200 : 0;
+  const renfortDelay = delaisDeCarte(events).renfortDelay;
+  // Les delais de la carte : voir delaisDeCarte, partagee avec le calque des
+  // tentacules (rendu dans la case, derriere la carte) qui doit suivre le meme delai.
+  const { comboDelay, delaiCapture, delaiTotal, mauditBoostDelay } = delaisDeCarte(events);
   const deltaEvents = events.filter((e) => typeof e.delta === "number" && e.delta !== 0);
   const tiltable = extraClass.includes("draggable"); // tilt 3D seulement sur les cartes jouables de la main
 
@@ -10245,6 +10286,25 @@ const APP_STYLES = `
            garde son traitement : devour-rank ne bouge pas. --flip-delay : un
            pivot sur la meme carte attend la fin de la pulsation. */
         .card.flash-devoreuse.flash-devoreuse { animation: combo-emit-pulse 0.3s ease; position: relative; --anim-deco: combo-emit-pulse 0.3s ease; --flip-delay: 0.3s; }
+        /* Les tentacules du renfort (02/09) : calque dans la case, avant la carte dans le
+           DOM, z-index 0 -- la carte, positionnee apres, se peint par-dessus. 90 % de la
+           largeur, image 520 x 380 ancree en bas, sa boite calee sur le haut de la carte :
+           elle part 20 px plus bas, cachee derriere la carte, monte de 20 px en fondu
+           (150 ms), depasse le bord superieur, tient pendant la pulsation (300 ms) et
+           redescend en fondu (200 ms). Transform et opacity seulement. Meme delai que la
+           carte (--renfort-delai), decalage de 80 ms par Abysse compris. */
+        .tentacule-fx {
+          position: absolute; left: 5%; width: 90%; height: 62%; top: -18px; z-index: 0; pointer-events: none;
+          background-position: center bottom; background-size: contain; background-repeat: no-repeat;
+          opacity: 0; transform: translateY(20px);
+          animation: tentacule-surgit 0.65s ease; animation-delay: var(--renfort-delai, 0ms); animation-fill-mode: both;
+        }
+        @keyframes tentacule-surgit {
+          0%   { opacity: 0; transform: translateY(20px); }
+          23%  { opacity: 1; transform: translateY(0); }
+          69%  { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(20px); }
+        }
         /* Croissance des Maudits : effet retardé (voir mauditBoostDelay côté JS), porté par un
            calque indépendant (.maudit-swell-fx) plutôt que par la carte elle-même, pour ne
            jamais entrer en conflit avec l'animation de capture (qui, elle, joue tout de suite). */
@@ -22609,6 +22669,7 @@ export default function Emprise() {
                   {!cell && (poisonedCells[i] || willBePoisoned) && (
                     <span className="poison-fx"><i /><i /><i /></span>
                   )}
+                  {displayCard && <TentaculesAbysse key={`t${(displayEvents.find((e) => e.kind === "devoreuse") || {}).tir || 0}`} events={displayEvents} />}
                   {displayCard && (
                     <Card
                       card={displayCard}
