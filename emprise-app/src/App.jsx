@@ -4218,7 +4218,14 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // elle n'est donc PAS mélangée aux classes de flash du flip, qui jouerait en même temps.
   // Portee : la cible (dir) pivote comme toute capture ; le tireur (sans dir) n a
   // rien a jouer sur lui-meme, la fleche est un element du plateau (FlechesPortee).
-  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "mue" && e.axis ? `flash-mue flash-mue-${e.axis}` : `flash-${e.kind}`)).join(" ");
+  // Chimere (02/09) : une carte, une rotation par resolution. Muee ET capturee dans
+  // la meme resolution, la carte ne recoit JAMAIS mue-flip : seule la capture joue,
+  // avec le tour de la Reserve -- flash-mue-capturee ne pose que --tour-nom. Les
+  // classes arrivent ensemble (un seul flashEvents par coup) ; c etait la cascade
+  // qui contournait la variable : la regle mue, plus bas dans la feuille, a meme
+  // specificite que les pivots et reecrivait toute la propriete animation.
+  const capturee = events.some((e) => e.kind === "basic" || e.kind === "same" || e.kind === "combo" || (e.kind === "portee" && e.dir));
+  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "mue" && e.axis ? (capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`) : `flash-${e.kind}`)).join(" ");
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
   const guardianEvent = events.find((e) => e.kind === "guardian" && e.dir);
@@ -10064,12 +10071,14 @@ const APP_STYLES = `
         .card.flash-basic.flash-basic.flash-basic { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
         .card.flash-same.flash-same.flash-same { animation: var(--anim-deco, none), var(--tour-nom, flip-resonance) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
         .card.flash-combo.flash-combo.flash-combo { animation: var(--anim-deco, none), var(--tour-nom, flip-combo) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
-        /* Chimere ET capture (01/09) : le pivot prend le nom tour-chimere -- la
-           rotation de la Reserve, nue, sans lueur ni tassement, meme duree et
-           meme courbe par les variables. La regle a quatre classes du pivot
-           lit --tour-nom ; sans capture, mue-flip joue comme avant. */
-        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); --tour-nom: tour-chimere; }
-        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); --tour-nom: tour-chimere; }
+        /* Chimere ET capture (02/09) : la carte ne porte plus flash-mue-h/v mais
+           flash-mue-capturee (voir flashClasses), qui ne definit QUE --tour-nom :
+           aucune animation propre, rien dans --anim-deco. Le pivot de capture lit la
+           variable et joue tour-chimere, la rotation de la Reserve. Sans capture,
+           mue-flip joue comme avant. */
+        .card.flash-mue-capturee { --tour-nom: tour-chimere; }
+        .card.flash-mue-h.flash-mue-h.flash-mue-h { animation: var(--anim-deco, none), mue-flip-h 1.6s ease var(--flip-delay, 0s); }
+        .card.flash-mue-v.flash-mue-v.flash-mue-v { animation: var(--anim-deco, none), mue-flip-v 1.6s ease var(--flip-delay, 0s); }
         .card.flash-mue-self.flash-mue-self { animation: mue-self-pulse 1.6s ease; --anim-deco: mue-self-pulse 1.6s ease; }
         .card.flash-percee.flash-percee { animation: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); }
         .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.6s ease; --anim-deco: percee-thrust 1.6s ease; }
