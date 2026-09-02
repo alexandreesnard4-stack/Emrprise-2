@@ -5634,9 +5634,21 @@ function aleaDeterministe(graine) {
   };
 }
 
-function botChooseMove(board, hand, opponentHand, player, opponent, difficulty, poisonedCells) {
+// Augure (02/09) : caseEvitee est la case que l Augure vient de suggerer au joueur.
+// Si le coup choisi la vise exactement, l Echo rejoue SON evaluation sans cette case
+// -- sa meilleure alternative, meme difficulte, meme graine -- sauf s il n existe
+// aucune autre case jouable (cas force). Sans caseEvitee, rien ne change.
+function botChooseMove(board, hand, opponentHand, player, opponent, difficulty, poisonedCells, caseEvitee) {
   const moves = getValidMoves(board, hand);
   if (moves.length === 0) return null;
+  const choix = botChoisirParmi(moves, board, hand, opponentHand, player, opponent, difficulty, poisonedCells);
+  if (caseEvitee == null || !choix || choix.cellIdx !== caseEvitee) return choix;
+  const autres = moves.filter((m) => m.cellIdx !== caseEvitee);
+  if (autres.length === 0) return choix;
+  return botChoisirParmi(autres, board, hand, opponentHand, player, opponent, difficulty, poisonedCells);
+}
+
+function botChoisirParmi(moves, board, hand, opponentHand, player, opponent, difficulty, poisonedCells) {
 
   // ⚠️ Le hasard du bot est volontairement REPRODUCTIBLE : il dépend de la position,
   // pas de Math.random(). Sans cela, le Repentir permettait d'annuler en boucle jusqu'à
@@ -13146,6 +13158,10 @@ export default function Emprise() {
   const [allowUndo, setAllowUndo] = useState(false); // "Repentir" : autorise à annuler un mauvais coup (mode Bot uniquement, choisi avant la partie)
   const [allowHint, setAllowHint] = useState(false); // "Augure" : un bouton en jeu révèle le meilleur coup (mode Bot uniquement)
   const [hint, setHint] = useState(null); // { cardIdx, cellIdx } suggéré par l'augure, tant que non joué
+  // Augure (02/09) : la case suggeree pendant le tour du joueur, retenue a part -- le
+  // hint s efface des que le joueur pose. L Echo la lit et l oublie a son tour qui
+  // suit ; en mode bot seulement (en duel local, l augure eclaire chacun a son tour).
+  const augureDuTourRef = useRef(null);
 
   // ---------- Multijoueur en ligne (Firebase) ----------
   // myUid : identité anonyme stable (voir firebase.js), sert à savoir qui est qui dans
@@ -15447,7 +15463,7 @@ export default function Emprise() {
     setSelected(null);
     resetFanState();
     setHistory([]);
-    setAllowUndo(false); setAllowHint(false); setHint(null);
+    setAllowUndo(false); setAllowHint(false); setHint(null); augureDuTourRef.current = null;
     setTestMode(false); setConfirmQuit(false);
     setStoryChapterKey(null); setStorySecondPick(null); setStoryChapterJustCompleted(null); setTourneyBanPick(null);
     setTourney({ active: false, round: 0, ban: null });
@@ -15853,7 +15869,7 @@ export default function Emprise() {
     setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
-    setAllowUndo(false); setAllowHint(false); setHint(null);
+    setAllowUndo(false); setAllowHint(false); setHint(null); augureDuTourRef.current = null;
     setVainqueurForce(null); setFinMotif(null);
     statsRecordedRef.current = false;
     setPhase("select-blue");
@@ -17118,7 +17134,7 @@ export default function Emprise() {
     setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
-    setAllowUndo(false); setAllowHint(false); setHint(null);
+    setAllowUndo(false); setAllowHint(false); setHint(null); augureDuTourRef.current = null;
     setPhase("select-blue");
   }
 
@@ -17173,7 +17189,7 @@ export default function Emprise() {
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
     // Repentir et Augure activés par défaut en mode Histoire (utile pour apprendre l'Ordre).
-    setAllowUndo(true); setAllowHint(true); setHint(null);
+    setAllowUndo(true); setAllowHint(true); setHint(null); augureDuTourRef.current = null;
     setPhase("play");
   }
 
@@ -18189,6 +18205,7 @@ export default function Emprise() {
     const move = botChooseMove(board, mainJoueur, mainAdverse, joueur, adverse, "expert", poisonedCells);
     if (move) {
       setHint({ cardIdx: move.cardIdx, cellIdx: move.cellIdx });
+      if (mode === "bot") augureDuTourRef.current = move.cellIdx;
       // La carte suggérée peut être repliée dans un éventail fermé : on force son
       // ouverture pour que le halo de l'augure (hint-source) reste visible tout de
       // suite, sans quoi le joueur ne verrait jamais l'indice tant qu'il n'a pas
@@ -18556,7 +18573,11 @@ export default function Emprise() {
     // respiration. Sans chaine en cours, son rythme reste inchange (3,2 s).
     const attente = Math.max(RYTHME_REFLEXION_ECHO_MS, animsFinishAtRef.current - Date.now() + 400);
     const timer = setTimeout(() => {
-      const move = botChooseMove(board, redHand, blueHand, "red", "blue", botDifficulty, poisonedCells);
+      // Augure : la case suggeree au joueur ce tour-ci, si elle est encore libre, est
+      // evitee -- une fois, puis oubliee.
+      const caseAugure = augureDuTourRef.current;
+      augureDuTourRef.current = null;
+      const move = botChooseMove(board, redHand, blueHand, "red", "blue", botDifficulty, poisonedCells, caseAugure != null && !board[caseAugure] ? caseAugure : null);
       if (move) placeCardAt("red", move.cardIdx, move.cellIdx);
     }, attente);
     return () => clearTimeout(timer);
