@@ -6522,8 +6522,16 @@ const APP_STYLES = `
           box-sizing: border-box; padding: 12px 13px; border-radius: 12px;
           background: rgba(13,9,19,0.8); border: 1px solid #5a4a2e;
         }
-        .combo-entete { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-        .combo-icones { flex: none; font-size: 17px; letter-spacing: 2px; }
+        /* En colonne depuis que les noms d Ordres ont remplace les emblemes
+           (01/09) : le nom du combo, puis la ligne des Ordres en dessous. */
+        .combo-entete {
+          display: flex; flex-direction: column; align-items: flex-start;
+          gap: 2px; margin-bottom: 7px;
+        }
+        .combo-ordres {
+          font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.8px;
+          text-transform: uppercase; color: #cbb98f;
+        }
         .combo-nom {
           font-family: 'Cinzel', serif; font-size: 13.5px; letter-spacing: 1.2px;
           text-transform: uppercase; color: #e9c65d;
@@ -6601,11 +6609,18 @@ const APP_STYLES = `
           position: absolute; top: 18%; bottom: 18%; left: 12%; right: 12%;
           display: flex; align-items: stretch; gap: 9px;
         }
-        /* center top : c est ce cadrage qui pose le visage au bon endroit pour
-           les onze portraits, quelle que soit leur hauteur. */
+        /* contain, et non cover (01/09). Les onze portraits sont en 380x260,
+           donc en PAYSAGE (rapport 1,46) ; la fenetre du cadre, elle, est en
+           102x119, donc en PORTRAIT (0,86). En cover, l image montait a 174 px
+           de large pour couvrir la hauteur et 41 % de sa largeur sortait du
+           cadre : le sujet etait tranche des deux cotes.
+           En contain il tient entier, centre, a 102x70. Le vide au-dessus et
+           au-dessous est de la pierre gravee, pas un trou -- le cadre est
+           l image de fond, il continue derriere.
+           Les FICHIERS n ont rien : les huit ont exactement la meme taille. */
         .heraut-portrait {
           width: 38%; flex: none; border-radius: 4px;
-          background-size: cover; background-position: center top; background-repeat: no-repeat;
+          background-size: contain; background-position: center; background-repeat: no-repeat;
         }
         .heraut-texte {
           flex: 1; min-width: 0;
@@ -18978,13 +18993,18 @@ export default function Emprise() {
                           return (
                             <article key={combo.key} className="combo-fiche">
                               <div className="combo-entete">
-                                {/* Les icones viennent d ORDERS par la cle : un
-                                    Ordre qui change d embleme change ici sans
-                                    qu on y touche. */}
-                                <span className="combo-icones" aria-hidden="true">
-                                  {combo.ordres.map((k) => (ORDERS.find((o) => o.key === k) || {}).icon || "").join(" ")}
-                                </span>
                                 <span className="combo-nom">{combo.nom}</span>
+                                {/* 01/09 : les noms remplacent les emblemes. Ils
+                                    viennent d ORDERS par la cle, jamais ecrits
+                                    ici : un Ordre renomme se renomme tout seul,
+                                    et le combo des Geoliers s affichera sans
+                                    qu on y revienne. */}
+                                <span className="combo-ordres">
+                                  {combo.ordres
+                                    .map((k) => (ORDERS.find((o) => o.key === k) || {}).name)
+                                    .filter(Boolean)
+                                    .join(" + ")}
+                                </span>
                               </div>
                               <p className="combo-recit">{combo.recit}</p>
                               <p className="combo-signe">Signe : <b>{combo.signe}</b></p>
