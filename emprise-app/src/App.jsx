@@ -6522,11 +6522,13 @@ const APP_STYLES = `
           box-sizing: border-box; padding: 12px 13px; border-radius: 12px;
           background: rgba(13,9,19,0.8); border: 1px solid #5a4a2e;
         }
-        /* En colonne depuis que les noms d Ordres ont remplace les emblemes
-           (01/09) : le nom du combo, puis la ligne des Ordres en dessous. */
+        /* Le nom du traite, puis les Ordres A SA DROITE sur la meme ligne
+           (01/09). Ils s enroulent sous lui quand la ligne ne tient pas : sur
+           375 de large, mieux vaut deux lignes qu un debordement. align-items
+           baseline pose les deux tailles de texte sur le meme pied. */
         .combo-entete {
-          display: flex; flex-direction: column; align-items: flex-start;
-          gap: 2px; margin-bottom: 7px;
+          display: flex; flex-wrap: wrap; align-items: baseline;
+          gap: 4px 8px; margin-bottom: 7px;
         }
         .combo-ordres {
           font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.8px;
@@ -18977,9 +18979,14 @@ export default function Emprise() {
                   // Le classement ne porte QUE les combos deja reussis : un
                   // combo absent vaut zero, il ne s invente pas.
                   const rangDe = (cle) => profil.classement.find((t) => t.combo.key === cle) || { parties: 0, taux: 0 };
+                  // 01/09 : la section s appelle « Les Traites » a l ecran.
+                  // SEULS les textes changent -- COMBOS, COMBOS_RATES, les
+                  // champs de stats (combos, combosParties) et tout ce qui
+                  // voyage vers Firestore gardent leur nom. Renommer une donnee
+                  // stockee aurait perdu les parties deja comptees.
                   return (
-                    <section className="combos-section" aria-label="Combos d'Ordres">
-                      <h3 className="combos-titre">Combos d&apos;Ordres</h3>
+                    <section className="combos-section" aria-label="Les Traités">
+                      <h3 className="combos-titre">Les Traités</h3>
                       <p className="combos-sous">Jouez-les pour forger votre titre : votre style parle pour vous.</p>
                       <div className="combos-etat">
                         {nomTitre
@@ -19014,7 +19021,7 @@ export default function Emprise() {
                               {combo.key === "or-corrompu" && (
                                 <div className="combo-avertissement">
                                   <span aria-hidden="true">⚠️</span>
-                                  <span>Se joue SANS le Héraut des Pestiférés : il épargne votre camp et éteint le combo.</span>
+                                  <span>Se joue SANS le Héraut des Pestiférés : il épargne votre camp et éteint le traité.</span>
                                 </div>
                               )}
                               <div className="combo-jauge">
@@ -19037,7 +19044,7 @@ export default function Emprise() {
                         aria-expanded={combosRatesOuvert}
                         onClick={() => setCombosRatesOuvert((v) => !v)}
                       >
-                        <span>Les mariages ratés : anti-synergies connues</span>
+                        <span>Les mariages ratés : ce qu&apos;aucun traité ne recommande</span>
                         <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
                       </button>
                       {combosRatesOuvert && (
@@ -19049,7 +19056,7 @@ export default function Emprise() {
                       )}
 
                       <div className="combos-repli">
-                        Aucun combo dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
+                        Aucun traité dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
                         fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> ; sinon,
                         vous marchez en <b>{TITRES_REPLI.errant.nom}</b>.
                       </div>
