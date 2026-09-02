@@ -4150,6 +4150,10 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // simultanément sur une même case au fil d'une chaîne.
   const comboVictimEvent = events.find((e) => e.kind === "combo" && e.dir);
   const comboEmitEvent = events.find((e) => e.kind === "combo-emit" && e.dir);
+  // Le renfort d une Abysse (01/09) : 80 ms par rang parmi celles renforcees
+  // d un coup, pour que la montee en force se lise l une apres l autre.
+  const devoreuseEvent = events.find((e) => e.kind === "devoreuse");
+  const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 80 : 0;
   // L'Onde ne démarre qu'une fois la Résonance bien terminée (3s) + 1s de pause — jamais
   // en même temps — puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus.
   const COMBO_BASE_DELAY = 4000;
@@ -4181,7 +4185,7 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   return (
     <div
       className={`card ${owner} ${flashClasses} ${extraClass} ${selected ? "selected" : ""} ${poisoned ? "card-acide" : ""} ${concealed ? "card-concealed" : ""} ${comboVictimEvent ? `combo-hit-from-${comboVictimEvent.dir}` : ""}`}
-      style={comboDelay || pullStyle ? { ...(comboDelay ? { animationDelay: `${comboDelay}ms` } : {}), ...(pullStyle || {}) } : undefined}
+      style={comboDelay || renfortDelay || pullStyle ? { ...(comboDelay || renfortDelay ? { animationDelay: `${comboDelay + renfortDelay}ms` } : {}), ...(pullStyle || {}) } : undefined}
       role="button" tabIndex={0} onClick={onClick} onKeyDown={KEY_ACTIVATE(onClick)}
       onPointerDown={onPointerDown}
       onMouseMove={tiltable ? handleTiltMove : undefined}
@@ -9958,13 +9962,25 @@ const APP_STYLES = `
         .card.flash-percee.flash-percee { animation: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); position: relative; --anim-deco: percee-slash 1.6s cubic-bezier(0.2, 0.8, 0.3, 1); }
         .card.flash-percee-self.flash-percee-self { animation: percee-thrust 1.6s ease; --anim-deco: percee-thrust 1.6s ease; }
         .card.flash-portee.flash-portee { animation: portee-impact 1.6s ease; position: relative; --anim-deco: portee-impact 1.6s ease; }
-        .card.flash-devoreuse.flash-devoreuse { animation: devoreuse-void 1.6s ease; position: relative; --anim-deco: devoreuse-void 1.6s ease; --flip-delay: 1.6s; }
+        /* Renfort des Abysses (01/09) : la pulsation partagee, celle de l Onde --
+           une montee en force, scale 1 a 1,08, 300 ms. L ancien devoreuse-void
+           (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
+           garde son traitement : devour-rank ne bouge pas. --flip-delay : un
+           pivot sur la meme carte attend la fin de la pulsation. */
+        .card.flash-devoreuse.flash-devoreuse { animation: combo-emit-pulse 0.3s ease; position: relative; --anim-deco: combo-emit-pulse 0.3s ease; --flip-delay: 0.3s; }
         /* Croissance des Maudits : effet retardé (voir mauditBoostDelay côté JS), porté par un
            calque indépendant (.maudit-swell-fx) plutôt que par la carte elle-même, pour ne
            jamais entrer en conflit avec l'animation de capture (qui, elle, joue tout de suite). */
         .maudit-swell-fx {
           position: absolute; inset: -4px; pointer-events: none; z-index: 7; border-radius: 12px;
-          animation: maudit-swell 1.6s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
+          /* 01/09 : la pulsation de renfort, sur le calque et non sur la carte --
+             le calque a son propre delai (--maudit-delay), la carte n en a qu un
+             pour toutes ses animations ; c est ce qui garantit que le +1 n arrive
+             JAMAIS pendant le pivot de capture. Un calque nu ne se voit pas :
+             le sien porte une teinte, et la variante pulse-renfort-calque part
+             de l invisible pour y revenir. L ancien maudit-swell est retire. */
+          background: rgba(225, 91, 82, 0.22); border: 1px solid rgba(225, 91, 82, 0.45); opacity: 0;
+          animation: pulse-renfort-calque 0.3s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
         }
         /* ---------- Eveil (Dores) : le troc de rangs ----------
            L'ancienne version dilatait un simple cercle depuis le centre : joli, mais elle
@@ -10256,7 +10272,7 @@ const APP_STYLES = `
            elle ne la remplace pas. */
         @keyframes combo-emit-pulse {
           0%   { transform: scale(1); opacity: 1; }
-          50%  { transform: scale(1.06); opacity: 0.85; }
+          50%  { transform: scale(1.08); opacity: 0.85; }
           100% { transform: scale(1); opacity: 1; }
         }
         /* La meme, pour une carte a la fois VICTIME et emettrice : elle vient
@@ -10271,7 +10287,7 @@ const APP_STYLES = `
            --tour-duree change, ce pourcentage doit suivre. */
         @keyframes combo-emit-pulse-apres {
           0%, 82% { transform: scale(1); opacity: 1; }
-          91%     { transform: scale(1.06); opacity: 0.85; }
+          91%     { transform: scale(1.08); opacity: 0.85; }
           100%    { transform: scale(1); opacity: 1; }
         }
         .card.flash-combo-emit.flash-combo-emit {
@@ -10370,7 +10386,6 @@ const APP_STYLES = `
         @keyframes portee-impact { 0%{transform:scale(0.4); opacity:0.4; filter:brightness(1)} 50%{transform:scale(1.18); opacity:1; filter:brightness(2.1)} 70%{filter:brightness(1.3)} 100%{transform:scale(1); filter:brightness(1)} }
 
         /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
-        @keyframes devoreuse-void { 0%,100%{transform:scale(1); filter:drop-shadow(0 0 0 var(--devour))} 40%{transform:scale(0.8); box-shadow:0 0 34px var(--devour); filter:drop-shadow(0 0 14px var(--devour))} 70%{transform:scale(1.28); filter:drop-shadow(0 0 10px var(--devour))} 88%{transform:scale(0.96)} }
         .card.flash-devoreuse .rank { animation: devour-rank 1.6s ease; }
         /* Abysses : tentacules d'ombre qui jaillissent de la carte puis se rétractent */
         .abysse-tentacles {
@@ -10388,7 +10403,9 @@ const APP_STYLES = `
           100% { opacity: 0; transform: scale(1.25) rotate(-2deg); }
         }
         @keyframes devour-rank { 0%{scale:1} 35%{scale:1.28; color:#fff; text-shadow:0 0 9px var(--devour), 0 0 16px var(--devour)} 60%{scale:0.94} 100%{scale:1} }
-        @keyframes maudit-swell { 0%,100%{transform:scale(1)} 40%{transform:scale(0.85); box-shadow:0 0 34px var(--red-bright)} 70%{transform:scale(1.22)} 88%{transform:scale(0.97)} }
+        /* La meme montee en force que combo-emit-pulse, pour un CALQUE : il
+           part de l invisible et y revient, sinon sa teinte resterait a l ecran. */
+        @keyframes pulse-renfort-calque { 0% { transform: scale(1); opacity: 0; } 50% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
         @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
 
         /* Cendres, braises qui crépitent, flash à chaque pose */
@@ -17472,9 +17489,15 @@ export default function Emprise() {
 
   function flashEvents(events) {
     const map = {};
+    // Les Abysses renforcees d un coup se numerotent par ordre de case (01/09) :
+    // la carte en fait un decalage de 80 ms par rang, pour que chaque renfort
+    // se lise. C est de la PRESENTATION : on numerote une copie, jamais l objet
+    // du moteur, qui est aussi celui qui part vers Firestore.
+    const ordres = new Map();
+    events.filter((e) => e.kind === "devoreuse").sort((a, b) => a.index - b.index).forEach((e, k) => ordres.set(e, k));
     events.forEach((e) => {
       if (!map[e.index]) map[e.index] = [];
-      map[e.index].push(e);
+      map[e.index].push(ordres.has(e) ? { ...e, ordre: ordres.get(e) } : e);
     });
     // FUSION, pas remplacement. Les effets differes du tour precedent (flips d'Onde
     // programmes a 4000 ms et plus) doivent survivre a la pose suivante : avant, le coup
