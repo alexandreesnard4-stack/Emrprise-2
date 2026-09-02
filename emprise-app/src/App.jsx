@@ -941,6 +941,23 @@ function titrePrincipal(stats) {
 // peuvent porter le meme nom : c'est un affichage, l'identite reelle reste l'identifiant
 // anonyme de Firebase, invisible et unique.
 const PSEUDO_MAX = 14;
+// Le palier de taille du pseudo sur la bande du hub (01/09), par LONGUEUR.
+// Les seuils sont ICI, une seule fois ; le CSS porte les tailles. Calibres a
+// 375 px de large sur la vraie police : le texte y dispose d environ 78 px.
+//   0-7 signes  : taille pleine (14 px / 0,08 em), comme avant ;
+//   8-9         : moyen (12 px / 0,06 em) ;
+//   10-11       : long (11 px / 0,03 em) ;
+//   12-14       : tres long, le plancher lisible (10,5 px / 0,03 em).
+// Au plancher, un pseudo de 14 signes fait encore 100 px et plus : il ne
+// tient pas dans 78, et l ellipse reste le filet. Descendre sous 10 px ou
+// ecraser les lettres en scaleX n est pas une option.
+function palierPseudo(p) {
+  const n = (p || "").length;
+  if (n >= 12) return "tres-long";
+  if (n >= 10) return "long";
+  if (n >= 8) return "moyen";
+  return "";
+}
 const PSEUDO_MIN = 3;
 const CLE_PSEUDO = "emprise-pseudo";
 let pseudoMemoire = null; // repli si aucun stockage durable n'est disponible
@@ -6005,7 +6022,20 @@ const APP_STYLES = `
           font-size: 14px; color: var(--bone);
           text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
-        .hub-banniere-pseudo.long { font-size: 11px; }
+        /* Quatre paliers selon la LONGUEUR du pseudo (01/09), au lieu d un seul
+           « long » a 11 px. Calibres sur la vraie police, a 375 px de large,
+           ou le texte dispose d environ 78 px une fois otes les marges de la
+           zone, le sceau, son ecart et le rembourrage du bouton.
+           Mesures (Cinzel gras, ALEXANDRESJZJA, 14 signes) : 145,6 px a
+           14/0,08 ; 121,4 a 12/0,06 ; 106,7 a 11/0,03 ; 101,8 a 10,5/0,03.
+           Le plancher de 10,5 px tient donc jusqu a 10 ou 11 signes selon les
+           lettres ; au-dela, l ellipse reste le filet -- un pseudo de 14
+           signes NE PEUT PAS tenir dans 78 px sans descendre sous 10 px, ce
+           que la lisibilite interdit. Jamais de scaleX : il deforme les lettres.
+           Les seuils vivent dans palierPseudo, cote JSX, une seule fois. */
+        .hub-banniere-pseudo.moyen { font-size: 12px; letter-spacing: 0.06em; }
+        .hub-banniere-pseudo.long { font-size: 11px; letter-spacing: 0.03em; }
+        .hub-banniere-pseudo.tres-long { font-size: 10.5px; letter-spacing: 0.03em; }
         /* La carte, ENTIEREMENT A L'INTERIEUR de la banniere (demande du
            Commandant, 01/09, qui annule le chevauchement d'avant) : calee a
            8 px du bord droit et centree sur la hauteur -- 52 de banniere pour
@@ -18529,7 +18559,7 @@ export default function Emprise() {
                         />
                       )}
                       <button
-                        className={`hub-banniere-pseudo ${pseudo && pseudo.length > 10 ? "long" : ""}`}
+                        className={`hub-banniere-pseudo ${palierPseudo(pseudo)}`}
                         onClick={() => setActiveModal("profil")}
                         aria-haspopup="dialog"
                         title="Voir mon profil"
