@@ -4248,7 +4248,12 @@ const Card = memo(function Card({ card, owner, events = [], onClick, onPointerDo
   // qui contournait la variable : la regle mue, plus bas dans la feuille, a meme
   // specificite que les pivots et reecrivait toute la propriete animation.
   const capturee = events.some((e) => e.kind === "basic" || e.kind === "same" || e.kind === "combo" || (e.kind === "portee" && e.dir));
-  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "mue" && e.axis ? (capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`) : `flash-${e.kind}`)).join(" ");
+  // Cendres (02/09) : le moteur emet le meme evenement « attraction » sur la carte
+  // POSEE (son flash de pose, ember-flicker) et sur chaque carte PRISE (adjacente
+  // ou attiree). Seule la prise pivote : elle recoit en plus flash-attraction-prise.
+  // La carte posee se reconnait a son evenement de pose (place / place-slow).
+  const poseeIci = events.some((e) => e.kind === "place" || e.kind === "place-slow");
+  const flashClasses = events.filter((e) => e.kind !== "maudit-boost").map((e) => (e.kind === "portee" && !e.dir ? "flash-portee-tir" : e.kind === "attraction" && !poseeIci ? "flash-attraction flash-attraction-prise" : e.kind === "mue" && e.axis ? (capturee ? "flash-mue-capturee" : `flash-mue flash-mue-${e.axis}`) : `flash-${e.kind}`)).join(" ");
   const porteeEvent = events.find((e) => e.kind === "portee" && e.dir);
   const perceeEvent = events.find((e) => e.kind === "percee" && e.dir);
   const guardianEvent = events.find((e) => e.kind === "guardian" && e.dir);
@@ -10171,6 +10176,10 @@ const APP_STYLES = `
            flash-portee-tir : rien a jouer, la fleche est un element du plateau
            (.fleche-portee). L ancien portee-impact (anneau) est retire. */
         .card.flash-portee.flash-portee.flash-portee { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
+        /* Cendres (02/09) : une carte PRISE par les Cendres pivote comme toute capture
+           (elle n avait jamais eu de pivot : ember-flicker seulement). Adjacente, tout
+           de suite ; attiree, voir plus bas : apres son dernier pas. */
+        .card.flash-attraction-prise.flash-attraction-prise.flash-attraction-prise { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards; }
         /* Renfort des Abysses (01/09) : la pulsation partagee, celle de l Onde --
            une montee en force, scale 1 a 1,08, 300 ms. L ancien devoreuse-void
            (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
@@ -10323,6 +10332,16 @@ const APP_STYLES = `
            attendent la fin du trajet. Le badge de delta attend aussi (delai inline). */
         .card.flash-attraction-pull.flash-poison { --anim-deco: var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
         .card.flash-attraction-pull.flash-poison::before { animation-delay: var(--trajet, 0s); animation-fill-mode: backwards; }
+        /* Attiree ET prise : le trajet d abord, le pivot ensuite -- jamais les deux.
+           Le pivot attend la fin du trajet (delai --trajet, fill backwards) mais, en
+           attente, une animation a fill backwards impose deja sa premiere image : si
+           elle etait DERNIERE de la liste, son rotateY(0) et sa robe ecraseraient le
+           translate et la robe du pas (a propriete egale, la derniere de la liste
+           gagne). D ou l ordre inverse : le pivot d abord, le pas en dernier -- le pas
+           gagne tant qu il joue, puis s efface (pas de fill) et laisse le pivot, deja
+           en route, prendre la main sur une carte posee. */
+        .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none); }
+        .card.flash-attraction-pull.flash-attraction-pull.flash-attraction-prise.flash-poison { animation: var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--trajet, 0s) backwards, var(--pull-anim, none), poison-hit 1.6s ease var(--trajet, 0s) both; }
         .card.flash-attraction-pull::before {
           content: ""; position: absolute; inset: -16px; border-radius: 16px; pointer-events: none; z-index: 4;
           background:
@@ -16998,7 +17017,7 @@ export default function Emprise() {
     nb[cellIdx] = { ...step.handCard, owner: "blue" };
     const { board: resolved, events } = resolvePlacement(nb, cellIdx, "blue");
     // Les memes effets que la partie (evenements complets, fleche de Portee comprise).
-    const map = regrouperEffets(events);
+    const map = regrouperEffets([{ index: cellIdx, kind: "place" }, ...events]);
     setTut((t) => ({ ...t, board: resolved, flashes: map, resolved: true }));
   }
 
