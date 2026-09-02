@@ -15411,11 +15411,12 @@ export default function Emprise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, tournoiOnlineId, tournoiData && tournoiData.status]);
 
-  // « Jouer avec un ami » et « Defier un ami » creent la meme partie ; seule la suite
-  // differe (afficher le code, ou le deposer chez l'ami). D'ou une fonction qui REND le
-  // code, et deux appelants.
-  function createOnlineGame() { setDefiEnvoye(null); return creerPartieEnLigne(); }
-
+  // 01/09 : createOnlineGame a disparu avec le bouton « Creer une partie ». Ce
+  // n etait qu une enveloppe -- setDefiEnvoye(null) puis creerPartieEnLigne --
+  // et son unique appelant etait ce bouton. Une fonction morte finit toujours
+  // par etre rappelee par erreur.
+  // Il ne reste donc qu un chemin de creation : « Defier un ami », qui depose
+  // l invitation chez lui au lieu de montrer un code.
   async function creerPartieEnLigne(optionsDefi) {
     statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return null; }
@@ -20869,9 +20870,13 @@ export default function Emprise() {
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
           <h2>Affrontement en ligne</h2>
-          <div className="sub">Défiez un ami à distance : créez une partie et partagez le code, ou rejoignez avec le sien.</div>
-          <button className="reset-btn" onClick={createOnlineGame}>Créer une partie</button>
-          <div className="sub" style={{ marginTop: 18 }}>ou rejoindre avec un code</div>
+          {/* 01/09 : plus de creation de code a la main. On rejoint le code d un
+              ami, ou on defie un ami de sa liste -- et c est alors defierAmi qui
+              cree la partie et porte l invitation, sans jamais montrer de code.
+              L ecran d attente garde son affichage du code : il sert de repli
+              quand l invitation d un defi n a pas pu partir. */}
+          <div className="sub">Rejoignez la partie d&apos;un ami avec son code, ou défiez directement un ami de votre liste.</div>
+          <div className="sub" style={{ marginTop: 18 }}>rejoindre avec un code</div>
           <input
             className="join-code-input"
             placeholder="CODE"

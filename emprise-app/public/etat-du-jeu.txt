@@ -25,7 +25,7 @@ Partie classée en ligne : appariement automatique, trophées, ligues de Bronze 
 Partie classique en ligne : appariement automatique dans sa propre file, avec les Hérauts, sans trophée ni ligue. Elle verse la moitié des pièces d'une classée.
 L'Écho joue avec son propre dos de cartes, différent de celui offert au départ.
 Quand la recherche d'un adversaire classé s'étire, l'écran propose de défier un Écho en attendant ; la recherche continue tant qu'on n'a pas accepté.
-Jouer avec un ami par code de partie.
+Jouer avec un ami : on rejoint sa partie avec son code, ou on le défie depuis sa liste d'amis.
 Défis entre amis : Duel classique ou Confluence, avec ou sans Hérauts, bannière d'invitation au hub.
 Tournoi solo : huit Commandants contre l'Écho, difficulté croissante, un Ordre banni à chaque tour.
 Tournoi en ligne : huit joueurs par code partagé, arbre quarts, demies et finale.
