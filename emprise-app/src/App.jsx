@@ -11041,6 +11041,16 @@ const APP_STYLES = `
           padding-inline: 2px; box-sizing: border-box;
         }
         .turn-label-nom { flex: none; }
+        /* Le nom d EN FACE en plus grand (01/09) : c est le seul nom qu on ne
+           connait pas, et le seul qu on cherche des yeux en partie. Le notre
+           reste a sa taille -- on sait qui l on est.
+           L ecart des lettres redescend de 0,18 a 0,10 : a 16 px, l espacement
+           d origine etirait un pseudo de quatorze signes au-dela de la ligne.
+           Le bouton du profil herite de tout : font et letter-spacing y sont
+           en inherit. */
+        .turn-label.adverse .turn-label-nom {
+          font-size: 16px; letter-spacing: 0.10em;
+        }
         /* Les trophees se posent a nu, sans pastille : le fond noir cerne les detourait du
            nom qu'ils accompagnent, alors qu'ils en font partie. L'ombre portee remplace le
            cadre pour les detacher du plateau. */
@@ -14411,10 +14421,12 @@ export default function Emprise() {
     return rouge ? "Écarlate" : "Azur";
   }
 
-  function labelCamp(camp) {
+  // adverse : le camp d EN FACE. campBas est toujours le mien, campHaut celui
+  // d en face -- l appelant le sait, la fonction non, d ou le drapeau.
+  function labelCamp(camp, adverse = false) {
     const rouge = camp === "red";
     return (
-      <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
+      <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${adverse ? "adverse" : ""} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
         {/* En ligne, le nom d'en face OUVRE SON PROFIL : c'est le seul moment ou l'on
             croise ce joueur, et le seul endroit ou son nom se lit. Le notre reste un
             simple texte -- on a deja son propre profil au hub. */}
@@ -21824,7 +21836,7 @@ export default function Emprise() {
           {mode === "online" && onlineError && <div className="online-error">{onlineError}</div>}
 
           <div className="zone-main">
-            {labelCamp(campHaut)}
+            {labelCamp(campHaut, true)}
             {mainCamp(campHaut)}
           </div>
 
