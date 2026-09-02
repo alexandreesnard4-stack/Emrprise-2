@@ -18021,8 +18021,18 @@ export default function Emprise() {
     const { board: resultBoard, events: previewEvents, poisonedCells: resultPoison } = simulateMove(board, card, dragHoverCell, drag.owner, poisonedCells);
     // Gardiens : leur +1 défensif n'existe que le temps du combat et n'est jamais écrit
     // sur la carte. Pour l'aperçu, on le matérialise visuellement sur le côté attaqué de
-    // chaque Gardien ennemi qui a résisté (encore adverse après résolution), pour qu'on
-    // voie bien le bouclier. Ce plateau d'aperçu est jetable : le vrai plateau n'est pas touché.
+    // chaque Gardien qui ETAIT ennemi au moment du combat -- qu'il ait resiste ou non.
+    // Ce plateau d'aperçu est jetable : le vrai plateau n'est pas touché.
+    //
+    // 01/09 : on jugeait l ennemi APRES resolution. Un Gardien capture PAR SA
+    // Resonance -- son 6 blinde vaut 7, mon 7 le rejoint, deux egalites, il
+    // tombe -- etait deja de ma couleur sur le plateau resultant, donc jamais
+    // peint : l ecran montrait mon 7 avec l anneau face a un 6 nu. Le moteur
+    // avait raison (verifie en Node : un 7 face a un 6 ordinaire ne resonne
+    // jamais, face a un Gardien 6 il resonne), c est l affichage qui cachait
+    // le bouclier qui justifiait l egalite. Le rang peint vient de defRank,
+    // l accesseur meme du moteur : une seule source, et l Eveil qui a deja
+    // pris le bouclier est respecte comme dans le combat.
     const previewBoard = resultBoard.slice();
     const pr = Math.floor(dragHoverCell / COLS), pc = dragHoverCell % COLS;
     // Côtés du Gardien qu'on est en train de poser qui frappent réellement un ennemi.
@@ -18033,10 +18043,13 @@ export default function Emprise() {
       const nr = pr + d.dr, nc = pc + d.dc;
       if (!inBounds(nr, nc)) return;
       const ni = idx(nr, nc);
-      // Capacité de base : un Gardien ADVERSE gagne +1 sur le côté qu'on attaque.
+      // Capacité de base : un Gardien ADVERSE AU MOMENT DU COMBAT gagne +1 sur
+      // le côté qu'on attaque. L appartenance se lit sur board (avant), la
+      // valeur sur defRank (celle que le moteur a comparee).
+      const avant = board[ni];
       const g = previewBoard[ni];
-      if (g && g.ability === "guardian" && g.owner !== drag.owner) {
-        previewBoard[ni] = { ...g, guardianBoostedSides: [d.their], [d.their]: g[d.their] + 1 };
+      if (avant && g && avant.ability === "guardian" && avant.owner !== drag.owner) {
+        previewBoard[ni] = { ...g, guardianBoostedSides: [d.their], [d.their]: defRank(avant, d.their) };
       }
       // Capacité supérieure : le Gardien qu'on pose gagne +1 sur chaque côté qui frappe.
       if (card.ability === "guardian" && card.heroActive && board[ni] && board[ni].owner !== drag.owner) {
