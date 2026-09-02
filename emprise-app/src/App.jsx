@@ -6623,22 +6623,28 @@ const APP_STYLES = `
            donc LA MEME pour les huit -- 12 % de retrait a gauche et a droite,
            18 % en haut et en bas. Le portrait de l Ordre tient la gauche, le
            texte la droite. */
+        /* 15 % et non 18 % en haut et en bas (01/09) : trois points de plus de
+           chaque cote rendent le portrait plus grand d un dixieme, et
+           l ouverture gravee les donne -- verifie a l oeil sur les huit
+           cadres, aucun sujet ne mord la pierre. */
         .heraut-dedans {
-          position: absolute; top: 18%; bottom: 18%; left: 12%; right: 12%;
+          position: absolute; top: 15%; bottom: 15%; left: 12%; right: 12%;
           display: flex; align-items: stretch; gap: 9px;
         }
-        /* contain, et non cover (01/09). Les onze portraits sont en 380x260,
-           donc en PAYSAGE (rapport 1,46) ; la fenetre du cadre, elle, est en
-           102x119, donc en PORTRAIT (0,86). En cover, l image montait a 174 px
-           de large pour couvrir la hauteur et 41 % de sa largeur sortait du
-           cadre : le sujet etait tranche des deux cotes.
-           En contain il tient entier, centre, a 102x70. Le vide au-dessus et
-           au-dessous est de la pierre gravee, pas un trou -- le cadre est
-           l image de fond, il continue derriere.
-           Les FICHIERS n ont rien : les huit ont exactement la meme taille. */
+        /* La boite prend le RAPPORT EXACT du portrait (01/09). Les onze fichiers
+           sont en 260x380 ; en donnant a la boite 260/380 et toute la hauteur
+           de la fenetre, cover ne rogne plus rien -- les deux rapports sont
+           identiques -- et l image occupe tout ce que l ouverture permet.
+           C est la plus grande taille possible SANS couper : pour aller
+           au-dela il faudrait rogner le sujet, ou un cadre plus haut.
+           width auto et non 38 % : une largeur en pourcentage ne pouvait que
+           se battre avec le rapport. Ici la hauteur commande, la largeur suit.
+           Les FICHIERS n ont rien : les huit ont la meme taille, et aucun n est
+           mal recadre. */
         .heraut-portrait {
-          width: 38%; flex: none; border-radius: 4px;
-          background-size: contain; background-position: center; background-repeat: no-repeat;
+          height: 100%; width: auto; aspect-ratio: 260 / 380;
+          flex: none; border-radius: 4px;
+          background-size: cover; background-position: center; background-repeat: no-repeat;
         }
         .heraut-texte {
           flex: 1; min-width: 0;
@@ -8807,16 +8813,25 @@ const APP_STYLES = `
            partie. Ce qui ramene un Commandant, c'est de savoir ou il en etait : le mode
            et le score. Le liseret dore de gauche signale l'urgence sans crier, et TOUTE
            la carte se clique, pas seulement son bouton. */
+        /* 01/09 : la carte est passee JUSTE AU-DESSUS du rang du Classe, et
+           elle s efface un peu. Elle rappelle une partie laissee en plan --
+           c est une invitation, pas l action du jour ; l ovale d or reste ce
+           que l oeil trouve en premier.
+           Le fond devient translucide ET la carte perd un peu d opacite : le
+           hub passe au travers, et rien n est fige en pixels. */
         .reprise-carte {
           display: flex; align-items: center; gap: 12px;
-          width: 100%; max-width: 320px; margin-top: 8px;
-          background: linear-gradient(180deg, #241c34 0%, #181222 100%);
-          border: 1px solid rgba(203, 164, 86, 0.42);
-          border-left: 3px solid #e8c877;
+          width: 100%; max-width: 320px; margin: 0 0 10px;
+          background: linear-gradient(180deg, rgba(36,28,52,0.68) 0%, rgba(24,18,34,0.68) 100%);
+          border: 1px solid rgba(203, 164, 86, 0.34);
+          border-left: 3px solid rgba(232, 200, 119, 0.75);
           border-radius: 11px; padding: 10px 12px;
           cursor: pointer; text-align: left;
-          transition: transform .12s ease-out;
+          opacity: 0.88;
+          transition: transform .12s ease-out, opacity .2s;
         }
+        /* Au toucher elle redevient pleine : on la reprend, elle se reveille. */
+        .reprise-carte:hover, .reprise-carte:focus-visible { opacity: 1; }
         .reprise-carte:active { transform: scale(0.98); }
         /* min-width: 0 : sans lui, un enfant de flex refuse de se retrecir et un libelle
            long pousserait le bouton hors de la carte. */
@@ -18864,6 +18879,29 @@ export default function Emprise() {
                     Elle n etait plus vraie : le Classe, la Partie classique et
                     le defi entre amis se jouent tous en ligne. */}
 
+                {/* L'arène de la ligue : la pièce centrale du hub, et ce qui pousse les
+                    deux boutons vers le bas de l'écran, à portée du pouce. Seul le Bronze
+                    a son illustration pour l'instant ; les ligues suivantes reprendront la
+                    même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
+                    Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
+                <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
+                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
+                  <img
+                    className="hub-arene-img"
+                    src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                </button>
+
+                {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
+                    ici : sans cet avis, le joueur se retrouvait au hub sans savoir
+                    pourquoi. Un clic le chasse. */}
+                {onlineError && (
+                  <div className={`online-error hub-avis ${avisBon ? "avis-bon" : ""}`} role="status" onClick={() => { setOnlineError(""); setAvisBon(false); }}>
+                    {onlineError}
+                  </div>
+                )}
                 {/* Seules les parties SOLO se reprennent. En ligne, un adversaire attend
                     en face : une partie quittee est abandonnee, le forfait tranche pour
                     celui qui reste. Proposer d'y revenir laissait croire le contraire. */}
@@ -18912,29 +18950,6 @@ export default function Emprise() {
                   );
                 })()}
 
-                {/* L'arène de la ligue : la pièce centrale du hub, et ce qui pousse les
-                    deux boutons vers le bas de l'écran, à portée du pouce. Seul le Bronze
-                    a son illustration pour l'instant ; les ligues suivantes reprendront la
-                    même tant que les leurs n'existent pas, plutôt que d'afficher un trou.
-                    Si le fichier venait à manquer, l'image s'efface et le nom reste. */}
-                <button className="hub-arene" onClick={() => setActiveModal("arenes")} aria-haspopup="dialog" title="Voir toutes les arènes">
-                  <span className="hub-arene-nom">Arène {getLeague(stats.trophies || 0).name}</span>
-                  <img
-                    className="hub-arene-img"
-                    src={getLeague(stats.trophies || 0).hub || "/arenes/bronze-hub.webp"}
-                    alt=""
-                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  />
-                </button>
-
-                {/* Les retours en ligne ratés (adversaire parti, réseau coupé) ramènent
-                    ici : sans cet avis, le joueur se retrouvait au hub sans savoir
-                    pourquoi. Un clic le chasse. */}
-                {onlineError && (
-                  <div className={`online-error hub-avis ${avisBon ? "avis-bon" : ""}`} role="status" onClick={() => { setOnlineError(""); setAvisBon(false); }}>
-                    {onlineError}
-                  </div>
-                )}
                 {/* Un ovale de pierre cercle d'or pour l'action phare, une pastille grise
                     pour la porte des autres modes. La hierarchie tient a la couleur :
                     l'or appelle, le gris attend. Les deux appellent exactement ce qu'ils
