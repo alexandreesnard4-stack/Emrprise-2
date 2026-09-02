@@ -6312,14 +6312,26 @@ const APP_STYLES = `
           display: flex; flex-direction: column; align-items: center; gap: 9px;
           animation: hub-page-entre 0.28s ease-out both;
         }
-        /* SEULE la Boutique defile. C'est la seule page du hub plus haute que l'ecran, et
-           elle le restera : un catalogue grandit. Jouer et Ordres gardent la regle de la
-           maison -- le hub tient sans defilement.
+        /* La Boutique ET les Ordres defilent (01/09). Les Ordres ont rejoint la
+           Boutique le jour ou Les Traites se sont poses sous la grille : la
+           page passe alors la hauteur de l ecran, et sans cette regle la
+           section etait INATTEIGNABLE AU DOIGT -- exactement le piege que le
+           commentaire ci-dessous decrivait deja pour les etals. La verifier au
+           scrollIntoView ne l avait pas vu : ce geste-la passe en overflow
+           hidden, le doigt non.
+           Jouer garde la regle de la maison : elle tient sans defilement.
            Sans cette ligne, la moitie des etals etait inatteignable AU DOIGT : .hub-pages
            est en overflow hidden, ce qui laisse passer un scrollIntoView mais refuse le
            geste. Un contenu qu'on ne peut atteindre qu'en JavaScript n'existe pas.
            justify-content ramene a flex-start : centre, un contenu plus haut que sa boite
            deborde des DEUX cotes, et le haut devient injoignable par defilement. */
+        /* justify-content flex-start pour les deux, et pour la meme raison :
+           centre, un contenu plus haut que sa boite deborde des DEUX cotes et
+           le haut devient injoignable par defilement. */
+        .hub-page.page-ordres {
+          overflow-y: auto; -webkit-overflow-scrolling: touch;
+          justify-content: flex-start;
+        }
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
@@ -13779,18 +13791,20 @@ export default function Emprise() {
       lancer: () => setPhase("tourney-menu") },
     { famille: "solo", titre: "Confluence", phrase: "8 Ordres draftés, même main pour les deux", image: "/modes/confluence.webp",
       lancer: () => chooseConfluenceBot() },
+    // La Partie classique (01/09) : appariee comme le Classe, mais sans
+    // trophees ni ligue, et avec les Herauts. Sa file est un AUTRE document de
+    // salon : les deux ne se melangent jamais.
+    // Son visuel est l arene violette et or ; la banniere le pose dans
+    // .mode-banniere-fond comme celui de tous les autres modes, avec le meme
+    // cadrage et le meme voile.
+    // EN TETE de l onglet (01/09) : c est le seul mode APPARIE de la famille,
+    // et l ordre du tableau est celui de l ecran -- il n y a pas de tri.
+    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/fonds/classique.webp",
+      lancer: () => chercherAdversaire("classique") },
     { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", image: "/modes/local.webp",
       lancer: () => chooseMode("local") },
     { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", image: "/modes/confluence2.webp",
       lancer: () => chooseConfluenceLocal() },
-    // La Partie classique (01/09) : appariee comme le Classe, mais sans
-    // trophees ni ligue, et avec les Herauts. Sa file est un AUTRE document de
-    // salon : les deux ne se melangent jamais.
-    // 01/09 : elle a son visuel, l arene violette et or. Le chemin est le seul
-    // changement -- la banniere le pose dans .mode-banniere-fond comme celui de
-    // tous les autres modes, avec le meme cadrage et le meme voile.
-    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/fonds/classique.webp",
-      lancer: () => chercherAdversaire("classique") },
     // 01/09 : la phrase promettait « un code a partager », ce qui n est plus
     // vrai depuis que le code a quitte cet ecran. On defie, on ne dicte plus.
     { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, en défiant un ami de votre liste", image: "/modes/ami.webp",
