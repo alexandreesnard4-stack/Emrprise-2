@@ -434,28 +434,258 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Tournois en ligne : le document liste les inscrits, puis les matchs de chaque
-    // tour. Trois règles, plus strictes que /games :
-    //  - créer un tournoi, c'est s'y inscrire seul (joueurs == [soi]) ;
-    //  - un INSCRIT peut tout mettre à jour (lancement, résultats, retrait) ;
-    //  - un NON-inscrit ne peut faire qu'une chose : s'ajouter lui-même à la liste
-    //    d'un tournoi encore en salle d'attente, sans toucher au reste.
-    // Sans ces contrôles, n'importe quel compte connecté pourrait réécrire l'arbre,
-    // poser un faux champion ou truquer le résultat d'un tournoi où il ne joue pas.
+    // ============================== TOURNOIS ==============================
+    //
+    // 03/09 : le document de tournoi etait un livre ouvert pour tout inscrit, et
+    // n importe qui pouvait s inscrire a un tournoi en attente. De la, quatre coups :
+    // se declarer champion et faire perdre leur mise aux sept autres, poser un
+    // vainqueur sur un match ou l on ne joue pas, se mettre en tete de liste pour
+    // usurper l organisateur, et reecrire la cagnotte.
+    //
+    // Desormais SIX intentions, chacune avec ses cles fermees :
+    //   rejoindre   la liste devient exactement l ancienne PLUS moi, en dernier ;
+    //   se retirer  exactement l ancienne MOINS moi ;
+    //   completer   l organisateur seul, une seule fois, et le prix est pose au meme
+    //               instant, a la valeur EXACTE que le nombre d humains commande ;
+    //   lancer      huit inscrits, l arbre des quarts cree une fois, la grille etant
+    //               exactement celle des sieges ;
+    //   l arbre     un vainqueur pose par un JOUEUR de ce match, ou un signe de vie ;
+    //   le sacre    champion egal au vainqueur de la finale, et rien d autre.
+    //
+    // Deux mots sur ce que ces regles ne font PAS.
+    // 1. La mise et le prix vivent dans le stockage local du joueur (S8 de l audit) :
+    //    ces regles empechent de FALSIFIER le document du tournoi, pas de tricher sur
+    //    son propre solde de gemmes. Aucune illusion a se faire la-dessus.
+    // 2. Le lancement n est PAS reserve a l organisateur, contrairement a ce qu on
+    //    pourrait attendre : le client le declenche depuis n importe quel appareil qui
+    //    constate huit inscrits, precisement pour ne dependre d aucun hote qui aurait
+    //    ferme l application. Le reserver au premier siege aurait gele tout tournoi dont
+    //    l organisateur est parti, avec huit mises deja payees. Il est donc reserve aux
+    //    INSCRITS, et la grille qu il pose est verifiee siege par siege.
+    //
+    // Le document est desormais entierement epingle : chaque valeur qui s ecrit est soit
+    // une constante, soit derivee de ce qui etait deja la. D ou l absence de bornes de
+    // taille : aucune chaine libre n y entre plus. Il n y a ni champ de mise, ni pseudo,
+    // ni code dans ce document -- le code est l identifiant, les pseudos se lisent dans
+    // /users, et la mise n existe que localement.
+
+    function tournoiEnAttente() { return resource.data.status == 'waiting'; }
+    function tournoiCles(cles) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(cles); }
+    function tournoiJeJoue(m) { return m.a == request.auth.uid || m.b == request.auth.uid; }
+    // Un siege d Echo : le prefixe que rien d autre ne porte, et au plus six d entre eux
+    // (huit sieges moins les deux humains qu il faut au minimum pour completer).
+    function tournoiEstEcho(u) { return u is string && u.matches('^echo:[1-6]$'); }
+    // Un horodatage pose A L INSTANT. Ces deux champs viennent de Date.now(), l horloge
+    // du navigateur, et non du serveur : les borner a deux minutes de l heure du serveur
+    // est ce qui empeche d antidater l ouverture d un match pour declarer un humain
+    // forfait sur-le-champ. Deux minutes, et non une : une horloge de bureau derive, et
+    // un lancement refuse pour cela aurait gele le tournoi. Il reste donc trois des cinq
+    // minutes de silence a l humain visé, dans le pire cas. Le vrai remede serait un
+    // serverTimestamp, mais le client soustrait ces valeurs a Date.now() pour afficher
+    // son compte a rebours : ce sera une mission a part.
+    function tournoiInstant(v) {
+      return v is int
+        && v >= request.time.toMillis() - 120000
+        && v <= request.time.toMillis() + 120000;
+    }
+    // Cinq minutes sans le moindre signe de vie, exactement le critere du client :
+    // le battement s il existe, sinon l ouverture du match.
+    function tournoiSilenceEcho(m) {
+      return ('vivantA' in m)
+        ? request.time.toMillis() >= m.vivantA + 300000
+        : ('ouvertA' in m) && request.time.toMillis() >= m.ouvertA + 300000;
+    }
+
+    // ---------- La creation ----------
+    // Creer un tournoi, c est s y inscrire seul, salle en attente, arbre vide.
+    function creationTournoiBienFormee() {
+      return request.resource.data.keys().hasOnly(['createdAt', 'status', 'joueurs', 'matches', 'champion'])
+        && request.resource.data.keys().hasAll(['createdAt', 'status', 'joueurs', 'matches', 'champion'])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.joueurs == [request.auth.uid]
+        && request.resource.data.matches.keys().size() == 0
+        && request.resource.data.champion == null;
+    }
+
+    // ---------- Rejoindre et se retirer ----------
+    // concat et removeAll rendent la liste au caractere pres : plus personne ne se
+    // reordonne pour passer premier, ni ne retire un autre joueur en passant. C est ce
+    // qui ferme l usurpation de l organisateur, qui n est pas un champ mais le premier
+    // siege -- il ne change donc que si son titulaire se retire, ce qui est legitime.
+    function tournoiRejoindre() {
+      return tournoiCles(['joueurs']) && tournoiEnAttente()
+        && !(request.auth.uid in resource.data.joueurs)
+        && resource.data.joueurs.size() < 8
+        && request.resource.data.joueurs == resource.data.joueurs.concat([request.auth.uid]);
+    }
+    // Pas de « je suis inscrit » a verifier : l egalite avec removeAll ne permet, par
+    // construction, que le retrait de MON uid. Si je n y suis pas, elle exige la liste
+    // inchangee -- une ecriture sans effet, qu il valait mieux accepter que refuser.
+    function tournoiSeRetirer() {
+      return tournoiCles(['joueurs']) && tournoiEnAttente()
+        && request.resource.data.joueurs == resource.data.joueurs.removeAll([request.auth.uid]);
+    }
+
+    // ---------- Completer la salle avec des Echos ----------
+    // L organisateur seul, une seule fois (le prix atteste que c est fait), et les six
+    // formes possibles sont enumerees : pour N humains, huit moins N Echos nommes dans
+    // l ordre, et le prix EXACT qui en decoule. Rien a arrondir dans la regle, donc rien
+    // a discuter : douze gemmes et demie par humain, plafonnees a cent, et l XP au
+    // prorata. C est l anti pompe a gemmes, ecrit une fois pour toutes.
+    function tournoiCompleter() {
+      return tournoiCles(['joueurs', 'prixGemmes', 'prixXp', 'humains']) && tournoiEnAttente()
+        && resource.data.joueurs[0] == request.auth.uid
+        && !('prixGemmes' in resource.data)
+        && request.resource.data.humains == resource.data.joueurs.size()
+        && (
+               (request.resource.data.humains == 2
+                  && request.resource.data.prixGemmes == 25
+                  && request.resource.data.prixXp == 75
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1', 'echo:2', 'echo:3', 'echo:4', 'echo:5', 'echo:6']))
+             || (request.resource.data.humains == 3
+                  && request.resource.data.prixGemmes == 38
+                  && request.resource.data.prixXp == 113
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1', 'echo:2', 'echo:3', 'echo:4', 'echo:5']))
+             || (request.resource.data.humains == 4
+                  && request.resource.data.prixGemmes == 50
+                  && request.resource.data.prixXp == 150
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1', 'echo:2', 'echo:3', 'echo:4']))
+             || (request.resource.data.humains == 5
+                  && request.resource.data.prixGemmes == 63
+                  && request.resource.data.prixXp == 188
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1', 'echo:2', 'echo:3']))
+             || (request.resource.data.humains == 6
+                  && request.resource.data.prixGemmes == 75
+                  && request.resource.data.prixXp == 225
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1', 'echo:2']))
+             || (request.resource.data.humains == 7
+                  && request.resource.data.prixGemmes == 88
+                  && request.resource.data.prixXp == 263
+                  && request.resource.data.joueurs == resource.data.joueurs.concat(['echo:1']))
+           );
+    }
+
+    // ---------- Lancer les quarts ----------
+    // La grille n est pas au choix de celui qui lance : les huit sieges donnent les
+    // quatre matchs, dans l ordre. Un inscrit qui truquerait l arbre pour s offrir un
+    // Echo au premier tour n a plus de prise.
+    function tournoiQuartBienForme(m, a, b) {
+      return m.keys().hasOnly(['a', 'b', 'gameId', 'vainqueur', 'ouvertA'])
+        && m.a == a && m.b == b && m.vainqueur == null
+        && (m.gameId == null || (m.gameId is string && m.gameId.size() <= 60))
+        && (!('ouvertA' in m) || tournoiInstant(m.ouvertA));
+    }
+    function tournoiLancer() {
+      return tournoiCles(['status', 'matches']) && tournoiEnAttente()
+        && request.auth.uid in resource.data.joueurs
+        && resource.data.joueurs.size() == 8
+        && resource.data.matches.keys().size() == 0
+        && request.resource.data.status == 'running'
+        && request.resource.data.matches.keys().hasOnly(['qf0', 'qf1', 'qf2', 'qf3'])
+        && request.resource.data.matches.keys().size() == 4
+        && tournoiQuartBienForme(request.resource.data.matches.qf0, resource.data.joueurs[0], resource.data.joueurs[1])
+        && tournoiQuartBienForme(request.resource.data.matches.qf1, resource.data.joueurs[2], resource.data.joueurs[3])
+        && tournoiQuartBienForme(request.resource.data.matches.qf2, resource.data.joueurs[4], resource.data.joueurs[5])
+        && tournoiQuartBienForme(request.resource.data.matches.qf3, resource.data.joueurs[6], resource.data.joueurs[7]);
+    }
+
+    // ---------- L arbre ----------
+    // Un match ne bouge que de deux facons : il recoit son vainqueur, pose par l un de
+    // ses DEUX joueurs et choisi parmi eux ; ou il recoit un signe de vie, par l un de
+    // ses deux joueurs, sur un match d Echo qui n a pas de document de partie. Tout
+    // autre match doit rester identique au caractere pres.
+    function tournoiMatchIntactOuDecide(avant, apres) {
+      return apres == avant
+        || (apres.keys().hasOnly(['a', 'b', 'gameId', 'vainqueur', 'ouvertA', 'vivantA'])
+            && apres.a == avant.a && apres.b == avant.b
+            && apres.gameId == avant.gameId
+            && avant.vainqueur == null
+            // L ouverture d un match ne se reecrit jamais : elle date le silence.
+            && (!('ouvertA' in apres) || (('ouvertA' in avant) && apres.ouvertA == avant.ouvertA))
+            && (
+                 // Le vainqueur, pose par l un des DEUX joueurs du match et choisi
+                 // parmi eux : c est le cas de tous les matchs entre humains.
+                 (tournoiJeJoue(avant)
+                   && (apres.vainqueur == avant.a || apres.vainqueur == avant.b))
+                 // Mon signe de vie sur mon propre match d Echo, horodate a l instant :
+                 // c est lui qui me protege du forfait pendant que je reflechis.
+                 || (tournoiJeJoue(avant) && apres.vainqueur == null
+                     && tournoiInstant(apres.vivantA))
+                 // Un match d Echo, sans document de partie, resolu par N IMPORTE QUEL
+                 // inscrit -- et c est voulu : deux Echos se simulent a l identique sur
+                 // tous les appareils, et face a un humain parti, ce sont les AUTRES qui
+                 // constatent le forfait, sinon l arbre gelait pour les huit. Le
+                 // vainqueur est alors forcement l ECHO : un tiers ne peut jamais faire
+                 // gagner un humain un match qu il n a pas joue.
+                 || (avant.gameId == null
+                     && apres.vainqueur is string
+                     && (apres.vainqueur == avant.a || apres.vainqueur == avant.b)
+                     && tournoiEstEcho(apres.vainqueur)
+                     && ((tournoiEstEcho(avant.a) && tournoiEstEcho(avant.b))
+                         || tournoiSilenceEcho(avant)))
+               ));
+    }
+    // Un match du tour suivant s ouvre sur les vainqueurs des deux matchs qui le
+    // nourrissent, jamais sur deux joueurs choisis a la main.
+    function tournoiNouveauMatch(m, a, b) {
+      return m.keys().hasOnly(['a', 'b', 'gameId', 'vainqueur', 'ouvertA'])
+        && m.a == a && m.b == b && m.vainqueur == null
+        && a != null && b != null
+        && (m.gameId == null || (m.gameId is string && m.gameId.size() <= 60))
+        && (!('ouvertA' in m) || tournoiInstant(m.ouvertA));
+    }
+    function tournoiArbre() {
+      return resource.data.status == 'running'
+        && request.auth.uid in resource.data.joueurs
+        && resource.data.matches.keys().hasAll(['qf0', 'qf1', 'qf2', 'qf3'])
+        && request.resource.data.matches.keys().hasOnly(['qf0', 'qf1', 'qf2', 'qf3', 'sf0', 'sf1', 'f0'])
+        && request.resource.data.matches.keys().hasAll(resource.data.matches.keys())
+        && tournoiMatchIntactOuDecide(resource.data.matches.qf0, request.resource.data.matches.qf0)
+        && tournoiMatchIntactOuDecide(resource.data.matches.qf1, request.resource.data.matches.qf1)
+        && tournoiMatchIntactOuDecide(resource.data.matches.qf2, request.resource.data.matches.qf2)
+        && tournoiMatchIntactOuDecide(resource.data.matches.qf3, request.resource.data.matches.qf3)
+        && (!('sf0' in request.resource.data.matches)
+            || ('sf0' in resource.data.matches
+                ? tournoiMatchIntactOuDecide(resource.data.matches.sf0, request.resource.data.matches.sf0)
+                : tournoiNouveauMatch(request.resource.data.matches.sf0,
+                      request.resource.data.matches.qf0.vainqueur, request.resource.data.matches.qf1.vainqueur)))
+        && (!('sf1' in request.resource.data.matches)
+            || ('sf1' in resource.data.matches
+                ? tournoiMatchIntactOuDecide(resource.data.matches.sf1, request.resource.data.matches.sf1)
+                : tournoiNouveauMatch(request.resource.data.matches.sf1,
+                      request.resource.data.matches.qf2.vainqueur, request.resource.data.matches.qf3.vainqueur)))
+        && (!('f0' in request.resource.data.matches)
+            || ('f0' in resource.data.matches
+                ? tournoiMatchIntactOuDecide(resource.data.matches.f0, request.resource.data.matches.f0)
+                : tournoiNouveauMatch(request.resource.data.matches.f0,
+                      request.resource.data.matches.sf0.vainqueur, request.resource.data.matches.sf1.vainqueur)));
+    }
+    // Le sacre : champion vaut le vainqueur de la finale, et le tournoi se clot.
+    function tournoiSacre() {
+      return request.resource.data.status == 'done'
+        && 'f0' in request.resource.data.matches
+        && request.resource.data.matches.f0.vainqueur != null
+        && request.resource.data.champion == request.resource.data.matches.f0.vainqueur;
+    }
+
     match /tournaments/{tournoiId} {
       allow get: if request.auth != null;
       allow list: if false;
-      allow create: if request.auth != null
-        && request.resource.data.joueurs == [request.auth.uid];
-      allow update: if request.auth != null
-        && (request.auth.uid in resource.data.joueurs
-            || (resource.data.status == "waiting"
-                && request.resource.data.joueurs.size() == resource.data.joueurs.size() + 1
-                && request.resource.data.joueurs.hasAll(resource.data.joueurs)
-                && request.auth.uid in request.resource.data.joueurs
-                && !(request.auth.uid in resource.data.joueurs)
-                && request.resource.data.status == resource.data.status
-                && request.resource.data.matches == resource.data.matches));
+
+      allow create: if request.auth != null && creationTournoiBienFormee();
+
+      allow update: if request.auth != null && (
+        tournoiRejoindre()
+        || tournoiSeRetirer()
+        || tournoiCompleter()
+        || tournoiLancer()
+        // Un resultat, ou un signe de vie : les matchs seuls.
+        || (tournoiCles(['matches']) && tournoiArbre())
+        // Le dernier resultat de la finale, qui porte le sacre dans la meme ecriture.
+        || (tournoiCles(['matches', 'champion', 'status']) && tournoiArbre() && tournoiSacre())
+      );
+
       allow delete: if false;
     }
 
