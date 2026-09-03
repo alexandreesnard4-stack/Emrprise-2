@@ -2,28 +2,435 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Parties multijoueur : n'importe quel utilisateur connecté (même anonyme)
-    // peut créer une partie, la lire, ou la modifier s'il y participe déjà
-    // (Bleu ou Rouge). Convient pour un lancement entre amis / une bêta ;
-    // à durcir plus tard (limiter la fréquence d'écriture, valider la forme
-    // des données côté serveur via Cloud Functions) avant un lancement public
-    // à grande échelle.
+    // ============================== PARTIES ==============================
+    //
+    // 03/09 : le document de partie n'est plus un livre ouvert pour ses deux joueurs.
+    // Avant, un participant pouvait ecrire N'IMPORTE QUEL champ, et n'importe quel
+    // connecte creer n'importe quel contenu. Cinq attaques en decoulaient : forger
+    // l'abandon de l'adversaire, remplir le plateau de ses propres cartes, enchainer
+    // des coups hors de son tour, effacer redUid pour rendre la victime muette, et
+    // bourrer le document jusqu'au mebioctet.
+    //
+    // Desormais chaque ecriture doit se reconnaitre dans UNE intention, et chaque
+    // intention a ses cles, ses bornes et ses preconditions :
+    //
+    //   creation      le createur est l'un des deux camps -- ou un inscrit du tournoi
+    //                 dont cette partie est un match -- plateau vide, partie non finie ;
+    //   siege Vermeil un tiers n'ecrit que redUid (le sien) et redPseudo ;
+    //   preparation   un camp n'ecrit que SES cles, et seulement avant ses Ordres ;
+    //   coup          c'est mon tour, la partie a commence, lastMove porte mon camp et
+    //                 l'heure du SERVEUR, et le tour repasse en face ;
+    //   fin           abandonPar ne designe que MON camp, sauf forfait constate apres
+    //                 le vrai delai d'inactivite ;
+    //   chat          une liste de 60 messages au plus ;
+    //   revanche      mon vote, puis le code une fois les deux votes poses.
+    //
+    // Ce qui n'apparait dans aucune intention ne bouge plus jamais apres la creation :
+    // blueUid, createdAt, status, appariement, classique, tournoiId, matchKey,
+    // firstPlayer, les pseudos, les titres et les options de defi. redUid n'a qu'une
+    // seule transition permise, null vers celui qui prend le siege.
+    //
+    // Les fonctions sont declarees ICI, avant le match : aucune regle de ce fichier ne
+    // reference une fonction ecrite plus bas. D'ou les noms prefixes partie*, qui
+    // evitent toute collision avec les helpers des profils, plus loin.
+
+    function docTournoiPourPartie(t) { return /databases/$(database)/documents/tournaments/$(t); }
+    function partieNomBorne(n)  { return n is string && n.size() <= 28; }
+    // Une cle de catalogue : un Ordre, un combo, un dos. Courte par nature. Borner le
+    // NOMBRE d elements d une liste ne borne pas leur CONTENU : deux chaines d un demi
+    // megaoctet tenaient dans une liste de deux. Faute de boucle dans les regles, on
+    // deplie -- ces listes sont assez courtes pour que ce soit exact.
+    function cleCourte(v) { return v is string && v.size() <= 30; }
+    function deuxClesCourtes(l) { return l is list && l.size() == 2 && cleCourte(l[0]) && cleCourte(l[1]); }
+    function combosBornes(l) {
+      return l is list && l.size() <= 3
+        && (l.size() < 1 || cleCourte(l[0]))
+        && (l.size() < 2 || cleCourte(l[1]))
+        && (l.size() < 3 || cleCourte(l[2]));
+    }
+    function partieCleBornee(c) { return c is string && c.size() <= 40; }
+    function partieEntier(v, mini, maxi) { return v is int && v >= mini && v <= maxi; }
+
+    // Le plateau d'une partie qui commence : vingt cases, toutes vides. Vingt et non
+    // CELLS : le plateau standard 4x5 est le seul qui existe en ligne, setBoardSize le
+    // remet a chaque entree. hasOnly sur une LISTE dit « aucun element hors de cet
+    // ensemble » : avec size(), il interdit de naitre sur un plateau deja joue -- c'est
+    // ce qui coupe la partie forgee ou la victime entre pour y perdre quinze trophees.
+    function plateauNeuf() {
+      return request.resource.data.board is list
+        && request.resource.data.board.size() == 20
+        && request.resource.data.board.hasOnly([null])
+        && request.resource.data.poisonedCells is list
+        && request.resource.data.poisonedCells.size() == 20
+        && request.resource.data.poisonedCells.hasOnly(['']);
+    }
+
+    // Les trente et une cles qu'un document de partie peut porter A SA NAISSANCE, union
+    // de QUATRE formes : defi entre amis (les options defi*), appariement (les drapeaux
+    // appariement et classique, les trophees, titres et parures), tournoi (tournoiId et
+    // matchKey) et revanche (les memes champs d'affichage que l'appariement, echanges).
+    // Aucune forme ne les porte toutes ; treize sont communes aux quatre et exigees.
+    // Ce qui vient plus tard -- mains jouees, Reserves, profils d'avant-partie, lastMove,
+    // mortSubiteRonde, chat, revanche, abandonPar, finMotif -- n'a rien a faire ici.
+    function creationPartieBienFormee() {
+      return request.resource.data.keys().hasOnly([
+               'status', 'createdAt', 'blueUid', 'redUid',
+               'blueOrderKeys', 'redOrderKeys', 'blueHand', 'redHand',
+               'board', 'poisonedCells', 'turn', 'firstPlayer', 'gameOver',
+               'bluePseudo', 'redPseudo',
+               'defiMode', 'defiHerauts', 'defiOrdres', 'defiMainCommune',
+               'tournoiId', 'matchKey', 'appariement', 'classique',
+               'blueTrophees', 'redTrophees', 'blueTitre', 'redTitre',
+               'blueBanniere', 'redBanniere', 'blueMedaillon', 'redMedaillon'
+             ])
+        && request.resource.data.keys().hasAll([
+               'status', 'createdAt', 'blueUid', 'redUid',
+               'blueOrderKeys', 'redOrderKeys', 'blueHand', 'redHand',
+               'board', 'poisonedCells', 'turn', 'firstPlayer', 'gameOver'
+             ])
+        && request.resource.data.status == 'waiting-orders'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.blueUid is string
+        && (request.resource.data.redUid == null || request.resource.data.redUid is string)
+        // Une partie naît les mains vides, les Ordres non choisis, le plateau nu.
+        && request.resource.data.blueOrderKeys == null
+        && request.resource.data.redOrderKeys == null
+        && request.resource.data.blueHand == null
+        && request.resource.data.redHand == null
+        && plateauNeuf()
+        && request.resource.data.gameOver == false
+        // Le premier joueur est tire une seule fois, et le tour part de lui : les quatre
+        // creations posent turn et firstPlayer a la meme valeur. C'est aussi ce qui
+        // interdit de naitre avec le tour deja dans son camp et l'autre en retard.
+        && (request.resource.data.turn == 'blue' || request.resource.data.turn == 'red')
+        && request.resource.data.turn == request.resource.data.firstPlayer
+        && (!('bluePseudo' in request.resource.data) || partieNomBorne(request.resource.data.bluePseudo))
+        && (!('redPseudo' in request.resource.data) || partieNomBorne(request.resource.data.redPseudo))
+        && (!('blueTitre' in request.resource.data)
+            || (request.resource.data.blueTitre is string && request.resource.data.blueTitre.size() <= 60))
+        && (!('redTitre' in request.resource.data)
+            || (request.resource.data.redTitre is string && request.resource.data.redTitre.size() <= 60))
+        // La revanche recopie les trophees de la manche precedente avec ?? null : une
+        // regle en « is int » seul aurait refuse toute revanche.
+        && (!('blueTrophees' in request.resource.data) || request.resource.data.blueTrophees == null
+            || partieEntier(request.resource.data.blueTrophees, 0, 100000))
+        && (!('redTrophees' in request.resource.data) || request.resource.data.redTrophees == null
+            || partieEntier(request.resource.data.redTrophees, 0, 100000))
+        && (!('blueBanniere' in request.resource.data) || partieCleBornee(request.resource.data.blueBanniere))
+        && (!('redBanniere' in request.resource.data) || partieCleBornee(request.resource.data.redBanniere))
+        && (!('blueMedaillon' in request.resource.data) || partieCleBornee(request.resource.data.blueMedaillon))
+        && (!('redMedaillon' in request.resource.data) || partieCleBornee(request.resource.data.redMedaillon))
+        && (!('appariement' in request.resource.data) || request.resource.data.appariement is bool)
+        && (!('classique' in request.resource.data) || request.resource.data.classique is bool)
+        && (!('defiMode' in request.resource.data)
+            || (request.resource.data.defiMode is string && request.resource.data.defiMode.size() <= 20))
+        && (!('defiHerauts' in request.resource.data) || request.resource.data.defiHerauts is bool)
+        && (!('defiOrdres' in request.resource.data) || request.resource.data.defiOrdres == null
+            || deuxClesCourtes(request.resource.data.defiOrdres))
+        && (!('defiMainCommune' in request.resource.data) || request.resource.data.defiMainCommune == null
+            || (request.resource.data.defiMainCommune is list && request.resource.data.defiMainCommune.size() == 8))
+        && (!('tournoiId' in request.resource.data)
+            || (request.resource.data.tournoiId is string && request.resource.data.tournoiId.size() <= 40))
+        && (!('matchKey' in request.resource.data)
+            || (request.resource.data.matchKey is string && request.resource.data.matchKey.size() <= 8));
+    }
+
+    // Qui peut creer une partie. Trois createurs sur quatre sont l'un des deux camps :
+    // le defi (Azur), l'appariement (Vermeil, Azur etant lu dans le salon) et la
+    // revanche (l'Azur de la manche precedente, qui devient Vermeil). Le quatrieme est
+    // un TIERS : les quarts d'un tournoi sont lances par n'importe quel client qui
+    // constate huit inscrits, et les demies puis la finale sont ouvertes par celui qui
+    // depose le dernier resultat du tour -- souvent un elimine. Exiger « le createur est
+    // Azur ou Vermeil » aurait donc tue tout le tournoi en ligne ; on demande alors
+    // qu'il soit inscrit au tournoi dont cette partie est un match.
+    function createurLegitimeDePartie() {
+      return request.resource.data.blueUid == request.auth.uid
+        || request.resource.data.redUid == request.auth.uid
+        || ('tournoiId' in request.resource.data
+            && request.auth.uid in get(docTournoiPourPartie(request.resource.data.tournoiId)).data.joueurs);
+    }
+
+    // ---------- La preparation d'un camp ----------
+    // Un camp ecrit SES cles, et seulement tant qu'il n'a pas envoye ses Ordres : sa
+    // parure a l'entree (banniere et medaillon, ecriture separee parce que les champs du
+    // salon sont bornes), puis en une seule fois ses Ordres, sa main, sa Reserve, le
+    // profil que l'autre affichera dans le face-a-face, et sa declaration de rencontres
+    // du jour. Ces cles se ferment ensuite : blueOrderKeys cesse d'etre null, et plus
+    // personne ne rejoue une main, ne repose une Reserve, ni ne redeclare le compteur
+    // anti-complices pour declasser une partie qu'il sent perdue.
+    function clesPreparationAzur() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'blueOrderKeys', 'blueHand', 'blueReserve', 'blueParties', 'blueVictoires',
+               'blueCombos', 'blueOrdreFavori', 'blueCombosParties', 'blueTournois',
+               'blueTrophees', 'blueNiveau', 'blueDos', 'blueMedaillon', 'blueBanniere',
+               'blueRencontres'
+             ]);
+    }
+    function clesPreparationVermeil() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'redOrderKeys', 'redHand', 'redReserve', 'redParties', 'redVictoires',
+               'redCombos', 'redOrdreFavori', 'redCombosParties', 'redTournois',
+               'redTrophees', 'redNiveau', 'redDos', 'redMedaillon', 'redBanniere',
+               'redRencontres'
+             ]);
+    }
+    function preparationAzurBienFormee() {
+      return (!('blueOrderKeys' in request.resource.data) || request.resource.data.blueOrderKeys == null
+              || deuxClesCourtes(request.resource.data.blueOrderKeys))
+        && (!('blueHand' in request.resource.data) || request.resource.data.blueHand == null
+            || (request.resource.data.blueHand is list && request.resource.data.blueHand.size() <= 8))
+        && (!('blueReserve' in request.resource.data)
+            || (request.resource.data.blueReserve is list && request.resource.data.blueReserve.size() <= 2))
+        && (!('blueParties' in request.resource.data) || partieEntier(request.resource.data.blueParties, 0, 1000000))
+        && (!('blueVictoires' in request.resource.data) || partieEntier(request.resource.data.blueVictoires, 0, 1000000))
+        && (!('blueCombosParties' in request.resource.data) || partieEntier(request.resource.data.blueCombosParties, 0, 1000000))
+        && (!('blueCombos' in request.resource.data) || combosBornes(request.resource.data.blueCombos))
+        && (!('blueOrdreFavori' in request.resource.data)
+            || (request.resource.data.blueOrdreFavori is string && request.resource.data.blueOrdreFavori.size() <= 30))
+        && (!('blueTournois' in request.resource.data) || partieEntier(request.resource.data.blueTournois, 0, 10000))
+        && (!('blueTrophees' in request.resource.data) || request.resource.data.blueTrophees == null
+            || partieEntier(request.resource.data.blueTrophees, 0, 100000))
+        && (!('blueNiveau' in request.resource.data) || partieEntier(request.resource.data.blueNiveau, 1, 50))
+        && (!('blueDos' in request.resource.data) || partieCleBornee(request.resource.data.blueDos))
+        && (!('blueMedaillon' in request.resource.data) || partieCleBornee(request.resource.data.blueMedaillon))
+        && (!('blueBanniere' in request.resource.data) || partieCleBornee(request.resource.data.blueBanniere))
+        && (!('blueRencontres' in request.resource.data) || partieEntier(request.resource.data.blueRencontres, 0, 1000));
+    }
+    function preparationVermeilBienFormee() {
+      return (!('redOrderKeys' in request.resource.data) || request.resource.data.redOrderKeys == null
+              || deuxClesCourtes(request.resource.data.redOrderKeys))
+        && (!('redHand' in request.resource.data) || request.resource.data.redHand == null
+            || (request.resource.data.redHand is list && request.resource.data.redHand.size() <= 8))
+        && (!('redReserve' in request.resource.data)
+            || (request.resource.data.redReserve is list && request.resource.data.redReserve.size() <= 2))
+        && (!('redParties' in request.resource.data) || partieEntier(request.resource.data.redParties, 0, 1000000))
+        && (!('redVictoires' in request.resource.data) || partieEntier(request.resource.data.redVictoires, 0, 1000000))
+        && (!('redCombosParties' in request.resource.data) || partieEntier(request.resource.data.redCombosParties, 0, 1000000))
+        && (!('redCombos' in request.resource.data) || combosBornes(request.resource.data.redCombos))
+        && (!('redOrdreFavori' in request.resource.data)
+            || (request.resource.data.redOrdreFavori is string && request.resource.data.redOrdreFavori.size() <= 30))
+        && (!('redTournois' in request.resource.data) || partieEntier(request.resource.data.redTournois, 0, 10000))
+        && (!('redTrophees' in request.resource.data) || request.resource.data.redTrophees == null
+            || partieEntier(request.resource.data.redTrophees, 0, 100000))
+        && (!('redNiveau' in request.resource.data) || partieEntier(request.resource.data.redNiveau, 1, 50))
+        && (!('redDos' in request.resource.data) || partieCleBornee(request.resource.data.redDos))
+        && (!('redMedaillon' in request.resource.data) || partieCleBornee(request.resource.data.redMedaillon))
+        && (!('redBanniere' in request.resource.data) || partieCleBornee(request.resource.data.redBanniere))
+        && (!('redRencontres' in request.resource.data) || partieEntier(request.resource.data.redRencontres, 0, 1000));
+    }
+
+    // ---------- Un coup ----------
+    // Huit cles au plus, et rien d'autre : ni un uid, ni un titre, ni un champ inconnu.
+    // Le coup porte desormais l'heure du SERVEUR (lastMoveAt), et c'est elle qui rend le
+    // forfait verifiable : sans horodatage impose, « l'adversaire n'a pas joue depuis
+    // 225 secondes » n'etait qu'une horloge de navigateur. Le client doit donc l'ecrire,
+    // et etre deploye AVANT la publication de ces regles.
+    function clesDunCoup() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'board', 'blueHand', 'redHand', 'poisonedCells',
+               'turn', 'gameOver', 'mortSubiteRonde', 'lastMove', 'lastMoveAt'
+             ]);
+    }
+    // La partie a vraiment commence : les deux camps ont envoye leurs Ordres. Sans
+    // cela, un « coup » pouvait tomber sur une partie qui n'avait pas debute.
+    function partieCommencee() {
+      return resource.data.blueOrderKeys != null && resource.data.redOrderKeys != null;
+    }
+    // Les bornes du coup. events a 200 et non 64 : un gros coup en produit jusqu'a une
+    // soixantaine sur vingt cases (revelations de Scribes, chaines de captures, Onde,
+    // combos emetteurs, Devoreuse, Maudits), et une borne trop basse aurait refuse un
+    // coup legitime -- ce qui casse la partie pour les deux joueurs. 200 laisse trois
+    // fois la marge tout en fermant le bourrage par la liste d'evenements.
+    function coupBienForme() {
+      return request.resource.data.board is list && request.resource.data.board.size() == 20
+        && request.resource.data.poisonedCells is list && request.resource.data.poisonedCells.size() == 20
+        && request.resource.data.blueHand is list && request.resource.data.blueHand.size() <= 8
+        && request.resource.data.redHand is list && request.resource.data.redHand.size() <= 8
+        && (request.resource.data.turn == 'blue' || request.resource.data.turn == 'red')
+        && request.resource.data.gameOver is bool
+        && partieEntier(request.resource.data.mortSubiteRonde, 0, 2)
+        // L heure du serveur est un champ de PREMIER NIVEAU, lastMoveAt, et non une cle
+        // de lastMove : « request.resource.data.X == request.time » est la forme que tout
+        // ce fichier utilise deja (creeLe, envoyeeLe, depuis, date), la seule dont le
+        // comportement soit certain. Un sentinelle serverTimestamp niche dans une carte
+        // etait un pari, et le perdre aurait refuse TOUS les coups.
+        && request.resource.data.lastMoveAt == request.time
+        && request.resource.data.lastMove is map
+        // Les cles de lastMove sont fermees elles aussi : « is map » seul laissait y
+        // glisser un champ de bourrage d un megaoctet sur un coup par ailleurs legitime.
+        && request.resource.data.lastMove.keys().hasOnly(['id', 'by', 'position', 'events', 'freshPoison'])
+        && request.resource.data.lastMove.id is string && request.resource.data.lastMove.id.size() <= 40
+        && partieEntier(request.resource.data.lastMove.position, 0, 19)
+        && request.resource.data.lastMove.events is list && request.resource.data.lastMove.events.size() <= 200
+        && request.resource.data.lastMove.freshPoison is list && request.resource.data.lastMove.freshPoison.size() <= 20;
+    }
+    // mortSubiteRonde n'existe pas a la creation : il arrive avec le premier coup.
+    function rondeMortSubiteAvant() {
+      return ('mortSubiteRonde' in resource.data) ? resource.data.mortSubiteRonde : 0;
+    }
+    // Le tour repasse en face. Il ne me revient que dans deux cas, les deux seuls que le
+    // moteur produit : la partie se termine, ou une ronde de Mort Subite s'ouvre (et
+    // alors mortSubiteRonde monte). Sans cette clause, enchainer les coups pendant le
+    // tour d'en face suffisait a vider sa main tout seul.
+    function tourRendu(monCamp) {
+      return request.resource.data.turn != monCamp
+        || request.resource.data.gameOver == true
+        || request.resource.data.mortSubiteRonde > rondeMortSubiteAvant();
+    }
+
+    // ---------- La fin ----------
+    // Deux cles, une seule fois, sur une partie pas encore scellee. Poser abandonPar,
+    // c'est designer le camp FAUTIF. Le mien : je pars, ou mon propre client constate
+    // que je n'ai pas joue. Celui d'en face : SEULEMENT s'il est vraiment reste
+    // silencieux. Sans ce dernier cas, un adversaire disparu figeait la partie a jamais ;
+    // sans le delai, une seule requete volait quinze trophees a un joueur en train de
+    // reflechir. Le delai est celui du jeu, TURN_SECONDS * 2 + 15, soit 225 secondes :
+    // deux tours pleins et la marge reseau. Les minuteurs du client partent tous d'un
+    // instant POSTERIEUR a lastMove.at (ou a createdAt avant le premier coup), donc un
+    // forfait legitime arrive toujours apres cette borne.
+    function delaiInactivite() { return duration.value(225, 's'); }
+    function silenceAssezLong() {
+      return ('lastMoveAt' in resource.data)
+        ? request.time >= resource.data.lastMoveAt + delaiInactivite()
+        : request.time >= resource.data.createdAt + delaiInactivite();
+    }
+    function finBienFormee() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['abandonPar', 'finMotif'])
+        && (request.resource.data.abandonPar == 'blue' || request.resource.data.abandonPar == 'red')
+        && (request.resource.data.finMotif == 'abandon' || request.resource.data.finMotif == 'forfait')
+        && resource.data.gameOver == false
+        && (!('abandonPar' in resource.data) || resource.data.abandonPar == null);
+    }
+    // On n'attend un camp que si c'est son tour, ou s'il n'a toujours pas envoye ses
+    // Ordres : les deux seuls silences que le jeu constate, le garde-fou de jeu et le
+    // forfait d'avant-match.
+    function onAttendAzur() {
+      return resource.data.turn == 'blue'
+        || !('blueOrderKeys' in resource.data) || resource.data.blueOrderKeys == null;
+    }
+    function onAttendVermeil() {
+      return resource.data.turn == 'red'
+        || !('redOrderKeys' in resource.data) || resource.data.redOrderKeys == null;
+    }
+
+    // ---------- Le chat ----------
+    // Une seule cle, une liste de soixante messages au plus : c'est la fenetre glissante
+    // du client, devenue une regle. Ce que les regles ne savent PAS faire : mesurer la
+    // longueur de chaque message, faute de boucle. Les 200 caracteres restent donc une
+    // borne du client. Ce qui compte ici est ferme : la liste ne grandit plus sans fin,
+    // et aucune autre cle ne peut servir de champ de bourrage.
+    function chatBienForme() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['chat'])
+        && request.resource.data.chat is list
+        && request.resource.data.chat.size() <= 60;
+    }
+
+    // ---------- La revanche ----------
+    // Un vote a la fois, puis le code, et seulement quand les DEUX votes sont poses.
+    // Avant, prochainCode s'ecrivait seul, vers une partie fabriquee de toutes pieces :
+    // le client d'en face y basculait sans avoir rien vote.
+    // La cle racine ET les cles internes : fermer seulement la racine laissait ecrire
+    // revanche.bourrage dans l ecriture meme du vote, un megaoctet en une requete.
+    function clesDeLaRevanche() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revanche'])
+        && request.resource.data.revanche is map
+        && request.resource.data.revanche.keys().hasOnly(['blue', 'red', 'prochainCode']);
+    }
+    function voteAzurAvant() {
+      return 'revanche' in resource.data && 'blue' in resource.data.revanche
+        && resource.data.revanche.blue == true;
+    }
+    function voteVermeilAvant() {
+      return 'revanche' in resource.data && 'red' in resource.data.revanche
+        && resource.data.revanche.red == true;
+    }
+    function sansCodeApres() { return !('prochainCode' in request.resource.data.revanche); }
+    // Mon vote : ma cle passe a true, celle d'en face reste exactement ce qu'elle etait.
+    function voteAzurSeul() {
+      return request.resource.data.revanche.blue == true && sansCodeApres()
+        && (voteVermeilAvant() ? request.resource.data.revanche.red == true
+                               : !('red' in request.resource.data.revanche));
+    }
+    function voteVermeilSeul() {
+      return request.resource.data.revanche.red == true && sansCodeApres()
+        && (voteAzurAvant() ? request.resource.data.revanche.blue == true
+                            : !('blue' in request.resource.data.revanche));
+    }
+    // Le code de la partie de revanche : les deux votes poses AVANT, aucun code encore,
+    // les votes intacts, et la forme exacte d'un code de partie (l'alphabet de
+    // makeGameCode, sans I, O, 0 ni 1).
+    function codeDeRevanche() {
+      return voteAzurAvant() && voteVermeilAvant()
+        && !('prochainCode' in resource.data.revanche)
+        && request.resource.data.revanche.blue == true
+        && request.resource.data.revanche.red == true
+        && request.resource.data.revanche.prochainCode is string
+        && request.resource.data.revanche.prochainCode.matches('^[A-HJ-NP-Z2-9]{5}$');
+    }
+
     match /games/{gameId} {
       // « get » et non « read » : le client n'interroge jamais la collection, il ouvre
       // une partie par son code. Ouvrir le listage, c'etait offrir l'annuaire de tous
       // les uid (et, par eux, les profils publics des amis).
       allow get: if request.auth != null;
       allow list: if false;
-      allow create: if request.auth != null;
-      // Un participant peut tout ecrire. Un tiers n'a qu'un droit : prendre la place
-      // Rouge encore libre, en n'ecrivant que redUid (le sien) et redPseudo — pas
-      // reecrire la partie entiere d'un inconnu.
-      allow update: if request.auth != null
-        && (resource.data.blueUid == request.auth.uid
-            || resource.data.redUid == request.auth.uid
-            || (resource.data.redUid == null
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['redUid', 'redPseudo'])
-                && request.resource.data.redUid == request.auth.uid));
+
+      allow create: if request.auth != null
+        && creationPartieBienFormee()
+        && createurLegitimeDePartie();
+
+      allow update: if request.auth != null && (
+        // Le siege Vermeil, pris par un TIERS : deux cles, la sienne et son nom. Un
+        // troisieme champ, et toute l'ecriture est refusee (le client le sait).
+        (resource.data.redUid == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['redUid', 'redPseudo'])
+          && request.resource.data.redUid == request.auth.uid
+          && partieNomBorne(request.resource.data.redPseudo))
+
+        // La preparation d'Azur, avant ses Ordres.
+        || (resource.data.blueUid == request.auth.uid
+            && resource.data.blueOrderKeys == null
+            && clesPreparationAzur() && preparationAzurBienFormee())
+        // La preparation de Vermeil, avant ses Ordres.
+        || (resource.data.redUid == request.auth.uid
+            && resource.data.redOrderKeys == null
+            && clesPreparationVermeil() && preparationVermeilBienFormee())
+
+        // Le coup d'Azur : c'est son tour, la partie a commence et n'est pas scellee.
+        || (resource.data.blueUid == request.auth.uid
+            && resource.data.turn == 'blue' && partieCommencee()
+            && resource.data.gameOver == false && !('abandonPar' in resource.data)
+            && clesDunCoup() && coupBienForme()
+            && request.resource.data.lastMove.by == 'blue' && tourRendu('blue'))
+        // Le coup de Vermeil.
+        || (resource.data.redUid == request.auth.uid
+            && resource.data.turn == 'red' && partieCommencee()
+            && resource.data.gameOver == false && !('abandonPar' in resource.data)
+            && clesDunCoup() && coupBienForme()
+            && request.resource.data.lastMove.by == 'red' && tourRendu('red'))
+
+        // La fin, posee par Azur : son propre depart, ou le silence constate de Vermeil.
+        || (resource.data.blueUid == request.auth.uid && finBienFormee()
+            && (request.resource.data.abandonPar == 'blue'
+                || (request.resource.data.finMotif == 'forfait'
+                    && onAttendVermeil() && silenceAssezLong())))
+        // La fin, posee par Vermeil.
+        || (resource.data.redUid == request.auth.uid && finBienFormee()
+            && (request.resource.data.abandonPar == 'red'
+                || (request.resource.data.finMotif == 'forfait'
+                    && onAttendAzur() && silenceAssezLong())))
+
+        // Le chat, par l'un ou l'autre camp.
+        || ((resource.data.blueUid == request.auth.uid || resource.data.redUid == request.auth.uid)
+            && chatBienForme())
+
+        // La revanche : mon vote, puis le code une fois les deux votes poses.
+        || (resource.data.blueUid == request.auth.uid && clesDeLaRevanche()
+            && (voteAzurSeul() || codeDeRevanche()))
+        || (resource.data.redUid == request.auth.uid && clesDeLaRevanche()
+            && (voteVermeilSeul() || codeDeRevanche()))
+      );
+
       allow delete: if false;
     }
 

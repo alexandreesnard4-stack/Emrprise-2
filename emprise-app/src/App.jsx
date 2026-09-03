@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } fr
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
-  doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction, arrayUnion,
+  doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
   setDoc, deleteDoc, writeBatch, collection,
 } from "firebase/firestore";
 
@@ -16945,12 +16945,15 @@ export default function Emprise() {
     chatDernierEnvoiRef.current = maintenant;
     setChatSaisie("");
     const nouveau = { id: `${maintenant}-${Math.random().toString(36).slice(2, 6)}`, by: onlineRole, texte, t: maintenant };
-    // Fenêtre glissante : au-delà de 60 messages on réécrit la liste tronquée au lieu
-    // d'empiler par arrayUnion — le document Firestore est plafonné à 1 Mo, et le
-    // dépasser rendrait la partie injouable (chaque coup serait refusé à l'écriture).
-    const maj = chatMessages.length >= 60
-      ? { chat: [...chatMessages.slice(-59), nouveau] }
-      : { chat: arrayUnion(nouveau) };
+    // Fenêtre glissante : la liste part TOUJOURS en entier, tronquée aux 59 derniers
+    // messages plus le nouveau, soit 60 au plus. slice(-59) rend la liste complète
+    // quand elle est plus courte, donc une seule branche suffit.
+    // Plus d'arrayUnion (03/09) : la règle Firestore borne la liste à 60 messages, et
+    // une liste écrite en clair est la seule forme dont on soit certain qu'elle se
+    // présente comme une liste à la règle. Le prix est une course rare — deux messages
+    // envoyés dans le même instant, le second écrase le premier — contre la certitude
+    // que le chat n'est jamais refusé et que le document ne peut plus enfler sans fin.
+    const maj = { chat: [...chatMessages.slice(-59), nouveau] };
     updateDoc(doc(db, "games", onlineGameId), maj)
       .catch(() => setOnlineError("Message non envoyé, vérifiez votre connexion."));
   }
@@ -18328,6 +18331,14 @@ export default function Emprise() {
           // de Reserve chaque camp prendra ensuite. Sans elle, l'adversaire rejouerait la
           // premiere carte a la seconde ronde.
           mortSubiteRonde: mortSubite ? mortSubiteRonde + 1 : mortSubiteRonde,
+          // L heure du SERVEUR, posee par lui et non par nous (03/09). Elle est la
+          // preuve d inactivite : la regle Firestore n accepte un forfait contre
+          // l adversaire que 225 s apres CE champ. Une horloge de navigateur ne prouvait
+          // rien, et il suffisait d une requete pour voler 15 trophees a quelqu un qui
+          // reflechissait. Champ de PREMIER NIVEAU et non cle de lastMove : la regle
+          // exige lastMoveAt == request.time, forme deja utilisee partout dans
+          // firestore.rules. Sans ce champ, plus aucun coup ne passe.
+          lastMoveAt: serverTimestamp(),
           lastMove: {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             by: owner,

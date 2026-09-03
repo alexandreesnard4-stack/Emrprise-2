@@ -99,3 +99,4 @@ Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-des
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.
 Les cadres gravés du rayon Hérauts s'affichent entiers : gemmes, pointes et coins visibles.
 Dans le hub, le sceau et le nom du joueur sont calés à gauche de la bande.
+En ligne, le serveur valide chaque écriture de la partie : un coup ne s'inscrit que dans son tour, et un forfait ne se constate qu'après le délai d'inactivité affiché à l'écran.
