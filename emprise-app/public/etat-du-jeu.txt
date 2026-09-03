@@ -101,3 +101,5 @@ Les cadres gravés du rayon Hérauts s'affichent entiers : gemmes, pointes et co
 Dans le hub, le sceau et le nom du joueur sont calés à gauche de la bande.
 En ligne, le serveur valide chaque écriture de la partie : un coup ne s'inscrit que dans son tour, et un forfait ne se constate qu'après le délai d'inactivité affiché à l'écran.
 En ligne, le serveur valide aussi chaque écriture d'un tournoi : les inscriptions, l'arbre, les résultats et le champion.
+Votre identifiant de joueur compte 8 chiffres. Les identifiants à 6 chiffres sont remplacés au premier lancement, et le nouveau s'affiche dans l'écran des amis.
+Votre présence, « En ligne » ou « Vu il y a... », n'est visible que par vos amis.

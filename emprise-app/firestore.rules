@@ -806,9 +806,16 @@ service cloud.firestore {
     // d'autre que lui ne le verra tel quel.
     function pseudoValide(p) { return p is string && p.size() <= 28; }
 
-    // Identifiant du joueur : six chiffres. Les pseudos ne sont pas uniques ; deux
-    // CARNAGE peuvent coexister, et c'est ce numero qui les distingue.
-    function codeAmiValide(c) { return c is string && c.matches('^[0-9]{6}$'); }
+    // Identifiant du joueur : HUIT chiffres depuis le 03/09. Les pseudos ne sont pas
+    // uniques ; deux CARNAGE peuvent coexister, et c'est ce numero qui les distingue.
+    // Six chiffres, c'etait un espace d un million : un million de lectures livrait
+    // l annuaire complet des uid, et par lui le profil de chacun. Huit chiffres rendent
+    // le balayage cent fois plus cher. Cent fois, pas infini : la vraie reponse reste
+    // une recherche par Cloud Function avec App Check, ou l enumeration ne passe plus
+    // du tout. C'est une etape, pas la fin.
+    function codeAmiValide(c) { return c is string && c.matches('^[0-9]{8}$'); }
+    // Un numero de l ancien format, encore porte par les comptes d avant la bascule.
+    function ancienCodeAmi(c) { return c is string && c.matches('^[0-9]{6}$'); }
 
     // Après le batch en cours, l'index /codesAmi/{code} doit exister et pointer vers
     // moi : un profil ne peut jamais annoncer un code qui ne mène pas à lui.
@@ -917,13 +924,22 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties', 'niveau', 'medaillon', 'banniere'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
-        && codeAmiValide(request.resource.data.codeAmi)
+        // Le numero doit etre au nouveau format, SAUF s il n a pas bouge et qu il vient
+        // de l ancien : sans cette tolerance, un joueur pas encore migre ne pourrait
+        // plus rien ecrire dans son profil -- ni pseudo, ni trophees, ni parure.
+        && (codeAmiValide(request.resource.data.codeAmi)
+            || (request.resource.data.codeAmi == resource.data.codeAmi
+                && ancienCodeAmi(resource.data.codeAmi)))
         && request.resource.data.creeLe == resource.data.creeLe
-        // Le numero est fige : le client ne le change jamais, et pouvoir en changer a
-        // volonte permettait de reserver des identifiants sans jamais rendre les anciens.
-        // Effet de bord heureux : plus besoin de relire l'index a chaque battement de
-        // presence, une lecture facturee toutes les deux minutes par joueur.
-        && request.resource.data.codeAmi == resource.data.codeAmi
+        // Le numero reste fige : en changer a volonte permettait de reserver des
+        // identifiants sans jamais rendre les anciens. Une seule transition est ouverte,
+        // celle de la bascule du 03/09 : un ancien numero a six chiffres se remplace par
+        // un neuf a huit, dont l index doit pointer vers moi apres le lot. Elle se ferme
+        // d elle-meme -- un code a huit chiffres n est plus un ancien.
+        && (request.resource.data.codeAmi == resource.data.codeAmi
+            || (ancienCodeAmi(resource.data.codeAmi)
+                && codeAmiValide(request.resource.data.codeAmi)
+                && indexPointeVersMoi(request.resource.data.codeAmi)))
         && vuLeValide()
         && derniereDemandeValide()
         // Le compteur anti-rafale ne s'efface pas en reecrivant le profil sans lui.
@@ -1028,6 +1044,30 @@ service cloud.firestore {
           && request.resource.data.depuis == request.time;
         allow update: if false;
         allow delete: if connecte() && moi() == uid;
+      }
+
+      // ---------- Presence ----------
+      // Un seul document, un seul champ, l heure du serveur, et une seule question a
+      // la lecture : es-tu dans MA liste d amis ?
+      //
+      // Elle vivait dans le profil public, ou n importe quel connecte pouvait la lire.
+      // Rafraichie toutes les deux minutes, elle donnait bien plus qu une date : une
+      // ecoute posee sur chaque profil rendait la presence en direct de toute la
+      // population, a qui savait enumerer les numeros. Savoir quand quelqu un est
+      // devant son telephone, sans etre son ami et sans qu il en sache rien, n a rien
+      // a faire dans un profil public.
+      //
+      // Un refus de lecture est donc la situation NORMALE pour un adversaire, un
+      // demandeur ou un joueur qu on vient d ajouter par son numero : le client
+      // l attrape et n affiche simplement pas de presence.
+      match /presence/{cle} {
+        allow get: if connecte() && (moi() == uid || exists(docAmi(uid, moi())));
+        allow list: if false;
+        allow create, update: if connecte() && moi() == uid
+          && cle == 'etat'
+          && request.resource.data.keys().hasOnly(['vuLe'])
+          && request.resource.data.vuLe == request.time;
+        allow delete: if false;
       }
     }
 

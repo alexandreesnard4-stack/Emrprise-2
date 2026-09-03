@@ -27,7 +27,11 @@ function makeGameCode() {
 // l'identite : un hachage ne se « retire » pas quand deux joueurs tombent sur le meme.
 // Au hasard et non a la suite : un numero sequentiel dirait le nombre de joueurs et
 // l'ordre d'arrivee, et exigerait un compteur partage que tout le monde se disputerait.
-const IDENTIFIANT_CHIFFRES = 6;
+// HUIT depuis le 03/09, et non six : six chiffres, c etait un espace d un million,
+// qu un million de lectures suffisait a balayer -- l annuaire complet des uid, et par
+// lui le profil de chacun. Huit rendent le balayage cent fois plus cher. Les numeros
+// deja distribues a six chiffres sont reattribues au chargement.
+const IDENTIFIANT_CHIFFRES = 8;
 function makeCodeAmi() {
   let code = "";
   for (let i = 0; i < IDENTIFIANT_CHIFFRES; i++) code += Math.floor(Math.random() * 10);
@@ -13370,9 +13374,13 @@ export default function Emprise() {
     const u1 = onSnapshot(base, (snap) => {
       if (!snap.exists()) return;
       setMonCodeAmi(snap.data().codeAmi || "");
-      // Notre propre vuLe vient d'etre ecrit en heure serveur : sa difference avec
-      // l'heure locale mesure le decalage de l'horloge de l'appareil.
-      const vs = horodatageMs(snap.data().vuLe);
+    }, rien);
+    // Le decalage de l horloge se lit sur MA presence, sortie du profil public le
+    // 03/09 : elle vient d etre ecrite en heure serveur, et sa difference avec l heure
+    // locale mesure le decalage de l appareil. Lire sa propre presence est toujours
+    // permis, ami ou non.
+    const u6 = onSnapshot(doc(base, "presence", "etat"), (snap) => {
+      const vs = snap.exists() ? horodatageMs(snap.data().vuLe) : 0;
       if (vs) decalageServeurRef.current = vs - Date.now();
     }, rien);
     const u2 = onSnapshot(collection(base, "amis"), (q) =>
@@ -13383,7 +13391,7 @@ export default function Emprise() {
       setInvitationsRecues(q.docs.map((d) => ({ uid: d.id, code: String(d.data().code || ""), t: horodatageMs(d.data().envoyeeLe) || Date.now() }))), rien);
     const u5 = onSnapshot(collection(base, "bloques"), (q) =>
       setBloques(q.docs.map((d) => ({ uid: d.id, depuis: horodatageMs(d.data().depuis) }))), rien);
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, [myUid]);
 
   // Les fiches des autres (pseudo, code, derniere presence) : une lecture par joueur,
@@ -13419,7 +13427,17 @@ export default function Emprise() {
         // Le niveau de Commandant, borne aux niveaux du jeu ; undefined quand il
         // manque -- l'affichage se tait plutot que d'annoncer un niveau 0.
         const niveau = Number.isFinite(d.niveau) && d.niveau >= 1 && d.niveau <= NIVEAU_MAX ? Math.floor(d.niveau) : undefined;
-        return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe: horodatageMs(d.vuLe),
+        // La presence vit desormais dans un sous-document que seuls les AMIS peuvent
+        // lire (03/09). Le refus est donc la situation NORMALE pour un adversaire, un
+        // demandeur, ou quelqu un qu on vient de trouver par son numero : on n affiche
+        // alors aucune presence, au lieu de faire echouer toute la fiche. Le champ vuLe
+        // des vieux profils n est plus relu : il ne bouge plus, il ne dit plus rien.
+        let vuLe = 0;
+        try {
+          const p = await getDoc(doc(db, "users", u, "presence", "etat"));
+          if (p.exists()) vuLe = horodatageMs(p.data().vuLe);
+        } catch (e) { /* pas ami : pas de presence, et c est precisement le but */ }
+        return [u, { pseudo: String(d.pseudo || ""), codeAmi: String(d.codeAmi || ""), vuLe,
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
           parties: entier(d.parties), victoires: entier(d.victoires), combos,
           ordreFavori, medaillon, banniere, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
@@ -14722,6 +14740,36 @@ export default function Emprise() {
   // Une nouvelle tentative apres un echec : sans elle, remettre la marque a zero ne
   // servait a rien, l'effet ne se rejouait pas (ses dependances n'avaient pas bouge) et
   // le joueur restait sans identifiant jusqu'au prochain lancement.
+  // Dire sa presence (03/09) : un sous-document a soi, que seuls ses amis lisent. Dans
+  // le profil public, elle donnait la presence en direct de toute la population a qui
+  // savait enumerer les numeros.
+  function direPresence() {
+    if (!myUid) return;
+    setDoc(doc(db, "users", myUid, "presence", "etat"), { vuLe: serverTimestamp() }).catch(() => {});
+  }
+  // La bascule du numero, six chiffres vers huit. Le nouvel index se cree dans la meme
+  // transaction que le profil -- la regle exige qu il pointe vers moi apres le lot --
+  // et l ancien se retire ensuite, ce que la regle permet des que le profil ne le
+  // designe plus. Un echec laisse l ancien numero en place : il reste utilisable, la
+  // regle tolere un code a six chiffres tant qu il ne bouge pas. Personne ne se
+  // retrouve donc sans numero.
+  async function migrerCodeAmi(ref, ancien) {
+    for (let essai = 0; essai < 5; essai++) {
+      const code = makeCodeAmi();
+      try {
+        await runTransaction(db, async (tx) => {
+          const idx = doc(db, "codesAmi", code);
+          const pris = await tx.get(idx);
+          if (pris.exists()) throw new Error("code-pris");
+          tx.update(ref, { codeAmi: code });
+          tx.set(idx, { uid: myUid });
+        });
+        deleteDoc(doc(db, "codesAmi", ancien)).catch(() => {});
+        return code;
+      } catch (e) { if (e.message !== "code-pris") return ""; }
+    }
+    return "";
+  }
   const [essaiProfil, setEssaiProfil] = useState(0);
   const profilSyncRef = useRef("");
   useEffect(() => {
@@ -14734,8 +14782,14 @@ export default function Emprise() {
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const d = snap.data();
-          await updateDoc(ref, { pseudo: pseudo || "", vuLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
-          if (!annule) { setMonCodeAmi(d.codeAmi || ""); setAdoubementVu(!!d.adoubementVu); }
+          await updateDoc(ref, { pseudo: pseudo || "", trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
+          direPresence();
+          // Un compte d avant le 03/09 porte un numero a six chiffres : il en recoit un
+          // a huit ici, une fois pour toutes. En cas d echec, l ancien reste en place et
+          // continue de fonctionner.
+          let mien = d.codeAmi || "";
+          if (/^[0-9]{6}$/.test(mien)) mien = (await migrerCodeAmi(ref, mien)) || mien;
+          if (!annule) { setMonCodeAmi(mien); setAdoubementVu(!!d.adoubementVu); }
           return;
         }
         for (let essai = 0; essai < 5; essai++) {
@@ -14745,9 +14799,10 @@ export default function Emprise() {
               const idx = doc(db, "codesAmi", code);
               const pris = await tx.get(idx);
               if (pris.exists()) throw new Error("code-pris");
-              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), vuLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
+              tx.set(ref, { pseudo: pseudo || "", codeAmi: code, creeLe: serverTimestamp(), trophees: tropheesPublics(), titre: titrePrincipal(stats) || "" });
               tx.set(idx, { uid: myUid });
             });
+            direPresence();
             if (!annule) setMonCodeAmi(code);
             return;
           } catch (e) { if (e.message !== "code-pris") throw e; }
@@ -14830,13 +14885,13 @@ export default function Emprise() {
   // vieillir la marque et bascule l'ami sur « Vu il y a... ».
   useEffect(() => {
     if (!myUid) return;
-    const direPresence = () => {
+    const battement = () => {
       if (document.visibilityState !== "visible") return;
-      updateDoc(doc(db, "users", myUid), { vuLe: serverTimestamp() }).catch(() => {});
+      direPresence();
     };
-    const id = setInterval(direPresence, 120000);
-    document.addEventListener("visibilitychange", direPresence);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", direPresence); };
+    const id = setInterval(battement, 120000);
+    document.addEventListener("visibilitychange", battement);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", battement); };
   }, [myUid]);
   const statsRecordedRef = useRef(false);
   // Suivi des combos de la partie en cours. Un ref et non un etat : il est lu et ecrit
