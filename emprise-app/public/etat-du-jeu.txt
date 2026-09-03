@@ -103,3 +103,4 @@ En ligne, le serveur valide chaque écriture de la partie : un coup ne s'inscrit
 En ligne, le serveur valide aussi chaque écriture d'un tournoi : les inscriptions, l'arbre, les résultats et le champion.
 Votre identifiant de joueur compte 8 chiffres. Les identifiants à 6 chiffres sont remplacés au premier lancement, et le nouveau s'affiche dans l'écran des amis.
 Votre présence, « En ligne » ou « Vu il y a... », n'est visible que par vos amis.
+En ligne, le serveur valide aussi l'appariement : une partie annoncée doit vraiment opposer les deux joueurs appariés, et une place d'attente ne se libère que pour son propriétaire.

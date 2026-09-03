@@ -733,30 +733,135 @@ service cloud.firestore {
     // melange des files IMPOSSIBLE, pas seulement improbable. Un joueur en
     // file classique n'ecrit ni ne lit jamais le document du Classe.
     function fileConnue(f) { return f == 'lobby' || f == 'classique'; }
+
+    // ---------- Le salon, 03/09 : trois intentions, et rien d'autre ----------
+    //
+    // Ce document n'avait qu'une garde : la place d'attente ne se prenait que pour soi.
+    // Tout le reste etait libre, et deux attaques en vivaient.
+    //
+    // L'AIGUILLAGE (S1), la plus vicieuse de l'audit : n'importe qui ecoutait le salon,
+    // voyait qui attendait, fabriquait une partie ou la victime etait Azur avec un
+    // plateau deja joue et un abandon deja pose, puis annoncait CETTE partie-la. La
+    // victime y entrait et perdait quinze trophees sans avoir joue un coup. Le client
+    // verifiait bien qu'il etait Azur, mais rien de plus -- et l'attaquant le savait.
+    // Desormais l'annonce et la partie sont jugees ENSEMBLE : getAfter relit la partie
+    // visee telle qu'elle sera apres la transaction, et exige qu'elle oppose vraiment
+    // celui qui attendait, en Azur, a celui qui apparie, en Vermeil. Avec la creation
+    // contrainte de /games -- plateau vide, partie non finie -- la partie forgee n'a
+    // plus ou naitre, et l'annonce qui la designerait n'a plus ou passer.
+    //
+    // LE SABOTAGE (S5) : effacer l'attente d'autrui etait permis, sciemment, parce que
+    // c'est ce que fait l'appariement legitime. On ne le distingue plus par la
+    // confiance mais par la PREUVE : effacer la place d'un autre n'est permis que dans
+    // l'ecriture qui l'apparie vraiment. Vider la file en boucle n'est plus une
+    // ecriture valide. Et la place ne se prend que si elle est libre, mienne, ou
+    // abandonnee depuis plus d'une minute -- le meme seuil que le client.
+
+    function docPartieDuSalon(c) { return /databases/$(database)/documents/games/$(c); }
+    function salonCles(cles) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(cles); }
+    function salonChange(cle) { return request.resource.data.diff(resource.data).affectedKeys().hasAny([cle]); }
+
+    // Un horodatage du salon vient du NAVIGATEUR, pas du serveur : le client le compare
+    // a son propre Date.now() pour juger une inscription perimee. On le borne donc de
+    // facon ASYMETRIQUE, et c'est voulu :
+    //  - serre vers l'avenir (une minute), parce qu'une valeur lointaine gelait la file
+    //    pour toujours -- une attente qui n'expire jamais, et plus personne n'est
+    //    apparie ;
+    //  - large vers le passe (cinq minutes), parce qu'une valeur ancienne ne nuit qu'a
+    //    celui qui l'ecrit : son inscription est aussitot tenue pour abandonnee, et le
+    //    suivant lui prend sa place. Une horloge en retard ne doit pas priver un joueur
+    //    du Classe.
+    // Reste, assume : une horloge en AVANCE de plus d'une minute empeche d'entrer en
+    // file. C'est rare, et le prix a payer pour fermer le squat perpetuel.
+    function salonInstant(v) {
+      return v is int
+        && v <= request.time.toMillis() + 60000
+        && v >= request.time.toMillis() - 300000;
+    }
+
+    // La place est-elle a prendre ? Libre, mienne, ou abandonnee depuis plus d'une
+    // minute -- ATTENTE_PERIMEE_MS cote client, le meme seuil des deux cotes.
+    function attenteAPrendre() {
+      return !('waitingUid' in resource.data) || resource.data.waitingUid == null
+        || resource.data.waitingUid == request.auth.uid
+        || !('waitingAt' in resource.data) || resource.data.waitingAt == null
+        || request.time.toMillis() >= resource.data.waitingAt + 60000;
+    }
+    // L'annonce qui m'etait adressee : la seule que je puisse effacer.
+    function annonceAMoi() {
+      return ('matchedUid' in resource.data) && resource.data.matchedUid == request.auth.uid;
+    }
+    function annonceEffacee() {
+      return request.resource.data.matchedUid == null
+        && request.resource.data.matchedGameId == null
+        && request.resource.data.matchedAt == null;
+    }
+
+    // ---------- Intention 1 : je prends la place d'attente ----------
+    // Mes champs d'affichage voyagent avec moi -- ce sont les MIENS, et personne
+    // d'autre ne peut les ecrire, puisque cette intention exige que je devienne
+    // waitingUid. L'annonce qui m'etait adressee s'efface au passage, jamais celle
+    // d'un autre.
+    function salonJeMInscris() {
+      return salonCles(['waitingUid', 'waitingAt', 'waitingTrophees', 'waitingTitre',
+                        'waitingPseudo', 'matchedUid', 'matchedGameId', 'matchedAt'])
+        && request.resource.data.waitingUid == request.auth.uid
+        && salonInstant(request.resource.data.waitingAt)
+        && attenteAPrendre()
+        && (!salonChange('matchedUid') || (annonceAMoi() && annonceEffacee()));
+    }
+
+    // ---------- Intention 2 : j'apparie celui qui attendait ----------
+    // La seule ecriture qui ait le droit d'effacer la place d'un AUTRE, et elle doit le
+    // prouver : la partie annoncee, relue apres la transaction qui la cree, oppose bien
+    // celui qui attendait, en Azur, a moi, en Vermeil. Les champs d'affichage de la
+    // victime ne sont pas dans la liste : celui qui apparie ne peut pas les reecrire au
+    // passage pour la presenter sous un faux nom.
+    function partieAnnonceeCoherente(code, azur) {
+      let p = getAfter(docPartieDuSalon(code)).data;
+      return p.blueUid == azur && p.redUid == request.auth.uid && p.appariement == true;
+    }
+    function salonJApparie() {
+      return salonCles(['waitingUid', 'waitingAt', 'matchedUid', 'matchedGameId', 'matchedAt'])
+        && ('waitingUid' in resource.data)
+        && resource.data.waitingUid != null
+        && resource.data.waitingUid != request.auth.uid
+        && request.resource.data.waitingUid == null
+        && request.resource.data.waitingAt == null
+        && request.resource.data.matchedUid == resource.data.waitingUid
+        && request.resource.data.matchedGameId is string
+        && request.resource.data.matchedGameId.matches('^[A-HJ-NP-Z2-9]{5}$')
+        && salonInstant(request.resource.data.matchedAt)
+        && partieAnnonceeCoherente(request.resource.data.matchedGameId, resource.data.waitingUid);
+    }
+
+    // ---------- Intention 3 : je me retire ----------
+    // Deux gestes du client passent par la : quitter la file, et effacer l'annonce une
+    // fois entre dans la partie. Ce qui bouge s'efface, et seulement ce qui est a moi.
+    function salonJeMeRetire() {
+      return salonCles(['waitingUid', 'waitingAt', 'matchedUid', 'matchedGameId', 'matchedAt'])
+        && (salonChange('waitingUid') || salonChange('matchedUid'))
+        && (!salonChange('waitingUid')
+            || (('waitingUid' in resource.data) && resource.data.waitingUid == request.auth.uid
+                && request.resource.data.waitingUid == null
+                && request.resource.data.waitingAt == null))
+        && (!salonChange('matchedUid') || (annonceAMoi() && annonceEffacee()))
+        // Rien ne bouge sans son chef de file : ni l'horodatage seul, ni le code seul.
+        && (!salonChange('waitingAt') || salonChange('waitingUid'))
+        && (!salonChange('matchedGameId') || salonChange('matchedUid'))
+        && (!salonChange('matchedAt') || salonChange('matchedUid'));
+    }
+
     match /matchmaking/{file} {
       allow read: if request.auth != null && fileConnue(file);
 
-      // Les champs sont fixes, et la place d'attente ne se prend QUE pour soi : on ne
-      // peut plus inscrire un autre joueur dans la file, ni y deposer n'importe quoi.
-      // Ce qui reste ouvert, sciemment : effacer une attente FRAICHE qui n'est pas la
-      // sienne. C'est exactement ce que fait l'appariement legitime — celui qui cree la
-      // partie libere la place de celui qu'il vient d'apparier — et le distinguer d'un
-      // sabotage demanderait de relire le document de partie a chaque ecriture. Un
-      // client acharne peut donc vider la file ; App Check est la vraie reponse, comme
-      // pour /games. La victime, elle, est protegee cote client : elle verifie que la
-      // partie annoncee la designe bien comme Azur avant d'y entrer.
+      // Le tout premier ecrit du document : je m'y inscris, et rien d'autre.
       allow create: if request.auth != null && fileConnue(file) && salonBienForme()
-        && (request.resource.data.waitingUid == null
-            || request.resource.data.waitingUid == request.auth.uid);
+        && request.resource.data.waitingUid == request.auth.uid
+        && salonInstant(request.resource.data.waitingAt);
 
-      // A la MISE A JOUR, on ne juge que ce qui a BOUGE. Juger le document fusionne
-      // refusait une ecriture legitime : celui qui nettoie l annonce qui lui etait
-      // adressee ne touche pas a la place d attente, mais un troisieme joueur a pu s y
-      // mettre entre-temps, et le document portait alors SON uid.
       allow update: if request.auth != null && fileConnue(file) && salonBienForme()
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['waitingUid'])
-            || request.resource.data.waitingUid == null
-            || request.resource.data.waitingUid == request.auth.uid);
+        && (salonJeMInscris() || salonJApparie() || salonJeMeRetire());
 
       allow delete: if false;
     }
