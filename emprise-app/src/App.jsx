@@ -151,11 +151,21 @@ function dureeTrajetCendres(steps) { return nbPasCendres(steps) * (CENDRES_PAS_M
 // plus de PRESENTATION_FILE_MAX en attente), on saute a l etat courant sans animation.
 // L etat autoritaire (plateau, tour, chronos, fin de partie) est applique AVANT et
 // n attend jamais l affichage.
-const PRESENTATION_FILE_MAX = 2;
-const PRESENTATION_RETARD_MAX_MS = 8000;
-function decisionPresentation({ occupe, cache, ageMs, enAttente }) {
+// LE PLAFOND DE RETARD VISIBLE (03/09) : le joueur ne doit jamais voir le plateau avec
+// plus de trois secondes de retard sur l etat du serveur, quoi qu il arrive. C est la
+// regle, et tout le reste s y plie.
+const PRESENTATION_RETARD_MAX_MS = 3000;
+// UNE seule place d attente, et c est ce qui borne le retard par construction :
+// attenteMs ne mesure que la presentation EN COURS, pas celles deja en file. Avec deux
+// places, deux presentations de trois secondes faisaient six secondes d attente reelle,
+// et le compte des elements ne disait rien de ce retard-la -- c est ainsi qu il grimpait
+// a une minute sans que la file paraisse pleine. Avec une place, l attente maximale est
+// exactement le plafond : la presentation en cours, puis la sienne.
+const PRESENTATION_FILE_MAX = 1;
+function decisionPresentation({ occupe, cache, ageMs, enAttente, attenteMs }) {
   if (cache || ageMs > PRESENTATION_RETARD_MAX_MS) return "rattraper";
   if (!occupe && enAttente === 0) return "jouer";
+  if (attenteMs > PRESENTATION_RETARD_MAX_MS) return "rattraper";
   if (enAttente + 1 > PRESENTATION_FILE_MAX) return "rattraper";
   return "enfiler";
 }
@@ -14090,9 +14100,19 @@ export default function Emprise() {
   const [plateauAffiche, setPlateauAffiche] = useState(null);
   const [rattrapage, setRattrapage] = useState(false);
   boardRef.current = board;
+  // Le plateau MONTRE, lisible depuis un effet sans dependances : l ecoute de visibilite
+  // vit pour toute la partie et ne doit pas se reabonner a chaque rendu.
+  const plateauAfficheRef = useRef(null);
+  plateauAfficheRef.current = plateauAffiche;
   useEffect(() => {
-    // Onglet revenu au premier plan avec des resolutions en attente : on rattrape.
-    const surVisibilite = () => { if (document.visibilityState === "visible" && filePresentationRef.current.length) rattraperPresentation(); };
+    // Onglet revenu au premier plan : on rattrape. Safari bride les minuteurs d un onglet
+    // cache, si bien que la file peut s etre figee avec un plateau EN RETARD et plus rien
+    // en attente -- le minuteur qui devait la vider n a jamais tire. D ou le second test,
+    // sur l affichage lui-meme : si le plateau montre n est pas l etat courant, on saute.
+    const surVisibilite = () => {
+      if (document.visibilityState !== "visible") return;
+      if (filePresentationRef.current.length || plateauAfficheRef.current) rattraperPresentation();
+    };
     document.addEventListener("visibilitychange", surVisibilite);
     return () => document.removeEventListener("visibilitychange", surVisibilite);
   }, []);
@@ -18114,8 +18134,12 @@ export default function Emprise() {
   // Le coup distant arrive : l etat est deja applique par le snapshot ; ici, seule la
   // presentation se decide -- jouer, attendre son tour, ou rattraper sans animation.
   function presenterCoupDistant(item) {
-    const occupe = presentationJusquaRef.current > Date.now();
-    const choix = decisionPresentation({ occupe, cache: item.cache, ageMs: item.ageMs, enAttente: filePresentationRef.current.length });
+    // Combien de temps ce coup devrait-il ATTENDRE avant d etre montre ? C est la seule
+    // question qui compte : au-dela du plafond, on saute a l etat courant.
+    const attenteMs = Math.max(0, presentationJusquaRef.current - Date.now());
+    const occupe = attenteMs > 0;
+    const choix = decisionPresentation({ occupe, cache: item.cache, ageMs: item.ageMs,
+      enAttente: filePresentationRef.current.length, attenteMs });
     if (choix === "rattraper") { rattraperPresentation(); return; }
     if (choix === "jouer") { jouerPresentation(item); return; }
     if (!filePresentationRef.current.length) setPlateauAffiche(boardRef.current);
@@ -18155,8 +18179,22 @@ export default function Emprise() {
     // L ecran est occupe par cette presentation : un coup ordinaire pendant 2 s (pose
     // et pivot), plus le trajet des Cendres et le tir de Portee s il y en a ; une chaine
     // jusqu a sa fin. La file en ligne attend cet horizon avant de jouer la suivante.
+    // L ECRAN EST OCCUPE le temps que les animations de ce coup se jouent -- une duree
+    // bien plus courte que clearDelay, qui n est que l horizon de MENAGE des classes CSS
+    // et se garde expres une large marge pour ne jamais couper une animation. Les deux
+    // etaient confondus : une chaine de trois captures reservait la file 6,5 s alors
+    // qu elle dure 2,7 s a l ecran, et le retard s empilait coup apres coup jusqu a la
+    // minute. Le compte honnete : la pose, la cascade d Onde (300 ms par niveau), le
+    // dernier pivot (--tour-duree, 1,4 s), plus le trajet des Cendres et les tirs de
+    // Portee s il y en a.
     const aUnTir = events.some((e) => e.kind === "portee" && e.dir);
-    presentationJusquaRef.current = Date.now() + (enChaine ? clearDelay - 800 : 2000 + trajetCendres + (aUnTir ? PORTEE_TEMPS_MS : 0));
+    const coutPresentation = enChaine
+      ? RYTHME_POSE_JOUEUR_MS + maxComboLevel * 300 + 1400 + nbTirsEnChaine * PORTEE_TEMPS_MS + trajetCendres
+      : 2000 + trajetCendres + (aUnTir ? PORTEE_TEMPS_MS : 0);
+    // Et quoi qu il arrive, la file n attend jamais plus que le plafond : les animations
+    // vont au bout de leur course, mais elles ne retiennent plus le coup suivant. AUCUNE
+    // duree d animation n a ete raccourcie -- ce n etait pas elles, le probleme.
+    presentationJusquaRef.current = Date.now() + Math.min(coutPresentation, PRESENTATION_RETARD_MAX_MS);
     // Secousse du plateau uniquement quand au moins une capture a lieu — pas sur
     // une simple pose sans prise, pour garder l'impact réservé aux moments forts.
     const hasCapture = events.some((e) => ["basic", "same", "combo", "percee", "portee", "attraction"].includes(e.kind));

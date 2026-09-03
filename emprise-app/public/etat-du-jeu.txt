@@ -104,3 +104,4 @@ En ligne, le serveur valide aussi chaque écriture d'un tournoi : les inscriptio
 Votre identifiant de joueur compte 8 chiffres. Les identifiants à 6 chiffres sont remplacés au premier lancement, et le nouveau s'affiche dans l'écran des amis.
 Votre présence, « En ligne » ou « Vu il y a... », n'est visible que par vos amis.
 En ligne, le serveur valide aussi l'appariement : une partie annoncée doit vraiment opposer les deux joueurs appariés, et une place d'attente ne se libère que pour son propriétaire.
+En ligne, le plateau ne montre jamais plus de trois secondes de retard : au-dela, il se met a jour d un fondu, sans rejouer les animations en retard.
