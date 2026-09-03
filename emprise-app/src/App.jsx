@@ -139,6 +139,28 @@ const CENDRES_PAUSE_MS = 100;
 const CENDRES_PAS_MAX = 5;
 function nbPasCendres(steps) { return Math.min(CENDRES_PAS_MAX, Math.max(1, steps || 1)); }
 function dureeTrajetCendres(steps) { return nbPasCendres(steps) * (CENDRES_PAS_MS + CENDRES_PAUSE_MS) - CENDRES_PAUSE_MS; }
+
+// La file de presentation en ligne (02/09). Une resolution recue du serveur se joue
+// a son rythme normal, ou ne se joue pas -- jamais entre les deux. Elle se joue tout
+// de suite si l ecran est libre ; sinon elle attend son tour dans la file ; et si le
+// retard est trop grand (onglet cache, coup vieux de plus de PRESENTATION_RETARD_MAX_MS,
+// plus de PRESENTATION_FILE_MAX en attente), on saute a l etat courant sans animation.
+// L etat autoritaire (plateau, tour, chronos, fin de partie) est applique AVANT et
+// n attend jamais l affichage.
+const PRESENTATION_FILE_MAX = 2;
+const PRESENTATION_RETARD_MAX_MS = 8000;
+function decisionPresentation({ occupe, cache, ageMs, enAttente }) {
+  if (cache || ageMs > PRESENTATION_RETARD_MAX_MS) return "rattraper";
+  if (!occupe && enAttente === 0) return "jouer";
+  if (enAttente + 1 > PRESENTATION_FILE_MAX) return "rattraper";
+  return "enfiler";
+}
+// L identifiant d un coup commence par son horodatage (Date.now() a l ecriture) :
+// un coup vieux (reprise, reconnexion, onglet revenu) ne s anime pas, il s applique.
+function ageDuCoup(id) {
+  const t = Number(String(id || "").split("-")[0]);
+  return Number.isFinite(t) && t > 0 ? Math.max(0, Date.now() - t) : 0;
+}
 // Un nom venu d'un autre joueur passe par le filtre ; « Adversaire », le repli des
 // etiquettes de camp, sonnerait faux pour un ami.
 function nomAffiche(brut) {
@@ -9797,6 +9819,10 @@ const APP_STYLES = `
            vers le haut et vers le bas (voir .arene-cadre), il y a la place. Les cartes
            gagnent en presence sans qu'aucun bord ne soit coupe. */
         .table.arene .cell { width: min(13.2vw, 7.6dvh); height: min(18.1vw, 10.5dvh); }
+        /* Rattrapage silencieux (02/09) : quand la file de presentation saute des
+           animations, le plateau se montre a jour d un simple fondu. Opacite seule. */
+        .table.table-rattrapage { animation: plateau-rattrape 0.45s ease; }
+        @keyframes plateau-rattrape { 0% { opacity: 0.55; } 100% { opacity: 1; } }
 
         /* ---- 1. AMBIANCE : la teinte de la ligue diffusée dans la page ----
            Même image, agrandie et floutée, effacée bien avant le haut et le bas de l'écran.
@@ -14033,6 +14059,25 @@ export default function Emprise() {
   // L'Echo la consulte pour ne jamais poser sa carte au milieu d'une cascade — sa pose
   // remplacerait les classes d'animation en attente et les flips ne se joueraient jamais.
   const animsFinishAtRef = useRef(0);
+  // La file de presentation en ligne (02/09) : voir decisionPresentation. L ecran est
+  // occupe jusqu a presentationJusquaRef (pose par flashEvents) ; les resolutions
+  // recues pendant ce temps attendent dans filePresentationRef ; plateauAffiche fige
+  // le plateau montre sur celui d AVANT le coup en attente (l etat, lui, est deja a
+  // jour) ; rattrapage porte le fondu du plateau quand on saute les animations.
+  const presentationJusquaRef = useRef(0);
+  const filePresentationRef = useRef([]);
+  const fileTimerRef = useRef(null);
+  const rattrapageTimerRef = useRef(null);
+  const boardRef = useRef(null);
+  const [plateauAffiche, setPlateauAffiche] = useState(null);
+  const [rattrapage, setRattrapage] = useState(false);
+  boardRef.current = board;
+  useEffect(() => {
+    // Onglet revenu au premier plan avec des resolutions en attente : on rattrape.
+    const surVisibilite = () => { if (document.visibilityState === "visible" && filePresentationRef.current.length) rattraperPresentation(); };
+    document.addEventListener("visibilitychange", surVisibilite);
+    return () => document.removeEventListener("visibilitychange", surVisibilite);
+  }, []);
   // Vrai entre MA pose et sa resolution (RYTHME_POSE_JOUEUR_MS) : le verrou
   // qui empeche de poser deux fois la meme carte pendant ce temps-la.
   const poseEnAttenteRef = useRef(false);
@@ -15561,6 +15606,7 @@ export default function Emprise() {
 
   function reset() {
     clearSavedGame();
+    filePresentationRef.current = []; clearTimeout(fileTimerRef.current); presentationJusquaRef.current = 0; setPlateauAffiche(null); setRattrapage(false);
     oublierPartieEnLigne();
     setHubPage("jouer"); // quitter une partie ramene toujours a la page Jouer du hub
     venuDesAmisRef.current = false;
@@ -16534,12 +16580,11 @@ export default function Emprise() {
             && coupDistant.id !== dernierCoupDistantRef.current) {
           dernierCoupDistantRef.current = coupDistant.id;
           setDernierCoup(coupDistant.position);
-          flashEvents([{ index: coupDistant.position, kind: "place" }, ...(coupDistant.events || [])], data.board, coupDistant.position);
-          if (coupDistant.freshPoison && coupDistant.freshPoison.length) {
-            setJustPoisoned(coupDistant.freshPoison);
-            clearTimeout(poisonTimerRef.current);
-            poisonTimerRef.current = setTimeout(() => setJustPoisoned([]), 1500);
-          }
+          presenterCoupDistant({
+            events: [{ index: coupDistant.position, kind: "place" }, ...(coupDistant.events || [])],
+            plateau: data.board, position: coupDistant.position, freshPoison: coupDistant.freshPoison,
+            recu: Date.now(), ageMs: ageDuCoup(coupDistant.id), cache: document.visibilityState === "hidden",
+          });
         }
       } else {
         // L'adversaire est parti avant même que la partie ne démarre. En Classé cela vaut
@@ -17971,6 +18016,54 @@ export default function Emprise() {
   // comparer les cinq rendus), sinon une partie classée se joue dans l'arène de la ligue
   // du joueur. Partout ailleurs, plateau nu comme avant.
   const areneActive = areneTest || (partieClassee ? getLeague(stats.trophies || 0).name : null);
+  // Le plateau MONTRE : celui d avant le coup en attente tant que la file n a pas joue
+  // ce coup ; l etat (board) est deja a jour. Le joueur ne peut pas poser pendant ce
+  // court retard (playCard, startCardDrag) ; ses chronos, eux, courent.
+  const plateauRendu = plateauAffiche || board;
+
+  // ═══ La file de presentation en ligne (02/09) ═══
+  function jouerPresentation(item) {
+    setPlateauAffiche(null);
+    flashEvents(item.events, item.plateau, item.position);
+    if (item.freshPoison && item.freshPoison.length) {
+      setJustPoisoned(item.freshPoison);
+      clearTimeout(poisonTimerRef.current);
+      poisonTimerRef.current = setTimeout(() => setJustPoisoned([]), 1500);
+    }
+  }
+  // Sauter a l etat courant : la file se vide, le plateau se montre a jour avec un
+  // simple fondu (opacite seule). Rien ne rejoue : le registre one-shot tient.
+  function rattraperPresentation() {
+    filePresentationRef.current = [];
+    clearTimeout(fileTimerRef.current);
+    presentationJusquaRef.current = 0;
+    setPlateauAffiche(null);
+    setRattrapage(true);
+    clearTimeout(rattrapageTimerRef.current);
+    rattrapageTimerRef.current = setTimeout(() => setRattrapage(false), 450);
+  }
+  function programmerFilePresentation() {
+    clearTimeout(fileTimerRef.current);
+    fileTimerRef.current = setTimeout(jouerSuivantPresentation, Math.max(0, presentationJusquaRef.current - Date.now()) + 50);
+  }
+  function jouerSuivantPresentation() {
+    const item = filePresentationRef.current.shift();
+    if (!item) { setPlateauAffiche(null); return; }
+    if (document.visibilityState === "hidden" || Date.now() - item.recu > PRESENTATION_RETARD_MAX_MS) { rattraperPresentation(); return; }
+    jouerPresentation(item);
+    if (filePresentationRef.current.length) programmerFilePresentation();
+  }
+  // Le coup distant arrive : l etat est deja applique par le snapshot ; ici, seule la
+  // presentation se decide -- jouer, attendre son tour, ou rattraper sans animation.
+  function presenterCoupDistant(item) {
+    const occupe = presentationJusquaRef.current > Date.now();
+    const choix = decisionPresentation({ occupe, cache: item.cache, ageMs: item.ageMs, enAttente: filePresentationRef.current.length });
+    if (choix === "rattraper") { rattraperPresentation(); return; }
+    if (choix === "jouer") { jouerPresentation(item); return; }
+    if (!filePresentationRef.current.length) setPlateauAffiche(boardRef.current);
+    filePresentationRef.current.push(item);
+    programmerFilePresentation();
+  }
 
   function flashEvents(events, plateau, position) {
     // Regroupement par case et numerotations de presentation (ordre des Abysses,
@@ -18001,6 +18094,11 @@ export default function Emprise() {
     if (enChaine) animsFinishAtRef.current = Date.now() + clearDelay;
     clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlashes({}), clearDelay);
+    // L ecran est occupe par cette presentation : un coup ordinaire pendant 2 s (pose
+    // et pivot), plus le trajet des Cendres et le tir de Portee s il y en a ; une chaine
+    // jusqu a sa fin. La file en ligne attend cet horizon avant de jouer la suivante.
+    const aUnTir = events.some((e) => e.kind === "portee" && e.dir);
+    presentationJusquaRef.current = Date.now() + (enChaine ? clearDelay - 800 : 2000 + trajetCendres + (aUnTir ? PORTEE_TEMPS_MS : 0));
     // Secousse du plateau uniquement quand au moins une capture a lieu — pas sur
     // une simple pose sans prise, pour garder l'impact réservé aux moments forts.
     const hasCapture = events.some((e) => ["basic", "same", "combo", "percee", "portee", "attraction"].includes(e.kind));
@@ -18376,6 +18474,7 @@ export default function Emprise() {
 
   function startCardDrag(owner, idx, e) {
     if (!canDragCard(owner)) return;
+    if (plateauAffiche) return; // l affichage rattrape le coup adverse : on attend
     e.preventDefault();
     dragMovedRef.current = false;
     setSelected(null);
@@ -18520,6 +18619,7 @@ export default function Emprise() {
     // aucune pose (aucune carte sélectionnée) — l'utilisateur "regardait" l'éventail,
     // taper à côté (sur le plateau) le referme, comme taper une seconde fois la vignette.
     setFanOpen(null);
+    if (plateauAffiche) return; // l affichage rattrape le coup adverse : on attend
     if (!selected || gameOver || board[position]) return;
     if (selected.owner !== turn) return;
     if (mode === "online" && selected.owner !== onlineRole) return;
@@ -22627,7 +22727,7 @@ export default function Emprise() {
             );
           })()}
           <div
-            className={`table ${areneActive ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""}`}
+            className={`table ${areneActive ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""} ${rattrapage ? "table-rattrapage" : ""}`}
             style={{
               ...variablesPlateau(cosmetiques.plateau),
               "--board-cols": COLS,
@@ -22675,7 +22775,7 @@ export default function Emprise() {
                 {banner.text}
               </div>
             )}
-            {board.map((cell, i) => {
+            {plateauRendu.map((cell, i) => {
               const previewing = !!liveDragPreviewBoard;
               // Un Scribe adverse encore dissimulé à vos yeux ne doit RIEN laisser deviner
               // pendant l'aperçu de pose — ni son rang (déjà masqué en "?"), ni le simple
