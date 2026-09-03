@@ -4626,7 +4626,7 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
       <span className={`rank right ${(card.guardianBoostedSides || []).includes("right") ? "rank-boosted" : ""} ${poisoned ? "rank-poisoned" : ""} ${resonanceDirs.includes("right") ? "rank-resonance" : ""} ${eveilCotes.includes("right") ? "rank-eveil" : ""} ${previewResonanceDirs.includes("right") ? "rank-resonance-preview" : ""} ${mauditBoostEvent ? "rank-maudit-boost" : ""}`} style={mauditBoostEvent ? { animationDelay: `${mauditBoostDelay}ms` } : undefined}>{concealed ? "?" : rankLabel(card.right)}</span>
       <span className={`rank bottom ${(card.guardianBoostedSides || []).includes("bottom") ? "rank-boosted" : ""} ${poisoned ? "rank-poisoned" : ""} ${resonanceDirs.includes("bottom") ? "rank-resonance" : ""} ${eveilCotes.includes("bottom") ? "rank-eveil" : ""} ${previewResonanceDirs.includes("bottom") ? "rank-resonance-preview" : ""} ${mauditBoostEvent ? "rank-maudit-boost" : ""}`} style={mauditBoostEvent ? { animationDelay: `${mauditBoostDelay}ms` } : undefined}>{concealed ? "?" : rankLabel(card.bottom)}</span>
       <span className={`rank left ${(card.guardianBoostedSides || []).includes("left") ? "rank-boosted" : ""} ${poisoned ? "rank-poisoned" : ""} ${resonanceDirs.includes("left") ? "rank-resonance" : ""} ${eveilCotes.includes("left") ? "rank-eveil" : ""} ${previewResonanceDirs.includes("left") ? "rank-resonance-preview" : ""} ${mauditBoostEvent ? "rank-maudit-boost" : ""}`} style={mauditBoostEvent ? { animationDelay: `${mauditBoostDelay}ms` } : undefined}>{concealed ? "?" : rankLabel(card.left)}</span>
-      {mauditBoostEvent && <span className="maudit-swell-fx" style={{ "--maudit-delay": `${mauditBoostDelay}ms` }} />}
+      {mauditBoostEvent && <span className="maudit-swell-fx" style={{ "--maudit-delay": `${mauditBoostDelay}ms` }}><i /></span>}
     </div>
   );
 });
@@ -10437,16 +10437,30 @@ const APP_STYLES = `
         /* Croissance des Maudits : effet retardé (voir mauditBoostDelay côté JS), porté par un
            calque indépendant (.maudit-swell-fx) plutôt que par la carte elle-même, pour ne
            jamais entrer en conflit avec l'animation de capture (qui, elle, joue tout de suite). */
+        /* 03/09 : le sang qui monte remplace la pulsation. Le calque n est plus qu une
+           boite de position -- ni fond, ni animation propre. Il descend SOUS les
+           pastilles de rang (elles sont au niveau 3) et se cale exactement sur la carte,
+           au lieu de la deborder de quatre pixels. */
         .maudit-swell-fx {
-          position: absolute; inset: -4px; pointer-events: none; z-index: 7; border-radius: 12px;
-          /* 01/09 : la pulsation de renfort, sur le calque et non sur la carte --
-             le calque a son propre delai (--maudit-delay), la carte n en a qu un
-             pour toutes ses animations ; c est ce qui garantit que le +1 n arrive
-             JAMAIS pendant le pivot de capture. Un calque nu ne se voit pas :
-             le sien porte une teinte, et la variante pulse-renfort-calque part
-             de l invisible pour y revenir. L ancien maudit-swell est retire. */
-          background: rgba(225, 91, 82, 0.22); border: 1px solid rgba(225, 91, 82, 0.45); opacity: 0;
-          animation: pulse-renfort-calque 0.3s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
+          /* Sur le calque et non sur la carte : le calque a son propre delai
+             (--maudit-delay), la carte n en a qu un pour toutes ses animations. C est
+             ce qui garantit que le sang n arrive JAMAIS pendant le pivot de capture. */
+          position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: 9px;
+        }
+        /* La boite de DECOUPE, et elle seule : le sang ne sort jamais de la carte. Elle
+           est un enfant, et non le calque lui-meme, parce que l eclair du Maudit deborde
+           expres sur les cotes -- un overflow sur le calque l aurait coupe. */
+        .maudit-swell-fx > i {
+          position: absolute; inset: 0; overflow: hidden; border-radius: 9px; pointer-events: none;
+        }
+        /* Le sang lui-meme : il part sous la carte, monte jusqu a sa place, tient, puis
+           reflue. Transform et opacite seulement. */
+        .maudit-swell-fx > i::before {
+          content: ""; position: absolute; inset: 0;
+          background-image: url("/icones/sang-maudit.webp");
+          background-size: cover; background-position: center bottom; background-repeat: no-repeat;
+          opacity: 0; transform: translateY(100%);
+          animation: maudit-sang 0.8s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
         }
         /* ---------- Eveil (Dores) : le troc de rangs ----------
            L'ancienne version dilatait un simple cercle depuis le centre : joli, mais elle
@@ -10897,9 +10911,14 @@ const APP_STYLES = `
           100% { opacity: 0; transform: scale(1.25) rotate(-2deg); }
         }
         @keyframes devour-rank { 0%{scale:1} 35%{scale:1.28; color:#fff; text-shadow:0 0 9px var(--devour), 0 0 16px var(--devour)} 60%{scale:0.94} 100%{scale:1} }
-        /* La meme montee en force que combo-emit-pulse, pour un CALQUE : il
-           part de l invisible et y revient, sinon sa teinte resterait a l ecran. */
-        @keyframes pulse-renfort-calque { 0% { transform: scale(1); opacity: 0; } 50% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        /* Le sang du Maudit : 350 ms de montee en fondu, 200 ms de tenue, 250 ms de
+           reflux -- 800 ms en tout, soit 44 % et 69 % de la course. */
+        @keyframes maudit-sang {
+          0%   { opacity: 0; transform: translateY(100%); }
+          44%  { opacity: 1; transform: translateY(0); }
+          69%  { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(100%); }
+        }
         @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
 
         /* Cendres, braises qui crépitent, flash à chaque pose */
