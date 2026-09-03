@@ -128,7 +128,7 @@ const RYTHME_POSE_JOUEUR_MS = 400;
 // Le pivot de capture, en millisecondes : le miroir de --tour-duree, qui vit dans le
 // CSS. Les deux doivent dire la meme chose -- la file de presentation en ligne compte
 // ce pivot dans le temps qu un coup occupe l ecran. Une sonde le verifie.
-const PIVOT_CAPTURE_MS = 600;
+const PIVOT_CAPTURE_MS = 1000;
 // Portee (02/09) : PORTEE_DEPART_MS apres le maillon (la carte posee a fini
 // d atterrir), la fleche apparait au-dessus de l Archer et y reste
 // PORTEE_ARMEMENT_MS (fondu en opacite : c est cette pause qui attire l oeil),
@@ -5943,16 +5943,18 @@ const APP_STYLES = `
            comme une carte qu on retourne a la main. Definie ICI une fois ; la
            Reserve la lit, le pivot de capture la lit, la Chimere la lit. */
         html { background: #0a0810; }
-        /* --tour-duree : le pivot de capture. 0,6 s depuis le 03/09 ; il etait a 1,4 s
-           depuis le 02/09, et a 0,9 s avant cela. Le tour a toujours fait UN tour
-           exactement, de 0 a 360 degres : c est sa lenteur, pas son nombre de tours,
-           qui le faisait paraitre interminable. A 0,6 s il claque, comme une carte
-           qu on retourne d un revers de main.
+        /* --tour-duree : le pivot de capture. UNE SECONDE, reglee a l oeil le 03/09
+           apres deux essais : 1,4 s trainait, 0,6 s claquait trop pour qu on suive la
+           carte. Le tour a toujours fait UN tour exactement, de 0 a 360 degres -- c est
+           sa duree, jamais son nombre de tours, qui a demande ces reglages.
+           Note : la carte porte aussi transition: transform .5s. Elle n interfere pas,
+           une animation l emportant toujours sur une transition de la meme propriete ;
+           et il n existe aucun transition: all dans cette feuille.
            --reserve-duree : la selection de la Reserve, decouplee -- elle garde ses
            0,9 s, et sa courbe d origine, plus lente : on y choisit, on n y capture pas.
-           --tour-courbe : la courbe standard, franche au depart et posee a l arrivee. */
-        :root { --tour-duree: .6s; --reserve-duree: .9s;
-                --tour-courbe: cubic-bezier(.4, 0, .2, 1);
+           --tour-courbe : depart doux, milieu rapide, freinage a l arrivee. */
+        :root { --tour-duree: 1s; --reserve-duree: .9s;
+                --tour-courbe: cubic-bezier(.25, .1, .25, 1);
                 --reserve-courbe: cubic-bezier(.45, .05, .25, 1); }
         body { margin: 0; background: transparent; }
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap');
@@ -10414,7 +10416,14 @@ const APP_STYLES = `
            redescend en fondu (200 ms). Transform et opacity seulement. Meme delai que la
            carte (--renfort-delai), decalage de 80 ms par Abysse compris. */
         .tentacule-fx {
-          position: absolute; left: 5%; width: 90%; height: 62%; top: -18px; z-index: 0; pointer-events: none;
+          /* Le cadre monte AU-DESSUS de la carte : son bas s arrete a 18 % de la case,
+             juste sous le bord superieur du dos, et il s eleve de la. L image y est calee
+             en bas, si bien qu elle surgit de derriere la carte et la depasse largement.
+             120 % de large : l image gagne en hauteur sans mordre sur la carte voisine,
+             le debordement tenant dans les 5 px de gouttiere entre deux cases.
+             Avant le 03/09 le cadre s arretait a 62 % de la case, image calee en bas :
+             neuf pixels depassaient, le reste etait derriere un dos opaque. */
+          position: absolute; left: -10%; width: 120%; height: 62%; bottom: 82%; z-index: 0; pointer-events: none;
           background-position: center bottom; background-size: contain; background-repeat: no-repeat;
           opacity: 0; transform: translateY(20px);
           animation: tentacule-surgit 0.65s ease; animation-delay: var(--renfort-delai, 0ms); animation-fill-mode: both;
@@ -10766,14 +10775,13 @@ const APP_STYLES = `
            cartes d une chaine recoivent leur delai de maillon en style inline
            (animationDelay), qui ecrase le delai de chaque animation de la
            liste. Le seul endroit ou une attente survit, c est dans les
-           pourcentages. 75 % = 0,6 s de tour sur 0,8 s au total (03/09, le pivot
-           est passe de 1,4 s a 0,6 s) : si --tour-duree change encore, ce
-           pourcentage doit suivre, et la duree de 0,8 s des regles qui
-           l emploient, pour garder les 0,2 s de pulsation. */
+           pourcentages. 83,33 % = 1 s de tour sur 1,2 s au total : si --tour-duree
+           change encore, ce pourcentage doit suivre, et la duree de 1,2 s des
+           regles qui l emploient, pour garder les 0,2 s de pulsation. */
         @keyframes combo-emit-pulse-apres {
-          0%, 75%  { transform: scale(1); opacity: 1; }
-          87.5%    { transform: scale(1.08); opacity: 0.85; }
-          100%     { transform: scale(1); opacity: 1; }
+          0%, 83.33% { transform: scale(1); opacity: 1; }
+          91.67%     { transform: scale(1.08); opacity: 0.85; }
+          100%       { transform: scale(1); opacity: 1; }
         }
         .card.flash-combo-emit.flash-combo-emit {
           animation: combo-emit-pulse 0.2s ease, combo-emit-glow 1.6s ease;
@@ -10784,7 +10792,7 @@ const APP_STYLES = `
            et compose : pulsation retardee, lueur, puis le tour en dernier. */
         .card.flash-combo.flash-combo-emit,
         .card.flash-portee.flash-combo-emit {
-          --anim-deco: combo-emit-pulse-apres 0.8s ease, combo-emit-glow 1.6s ease;
+          --anim-deco: combo-emit-pulse-apres 1.2s ease, combo-emit-glow 1.6s ease;
         }
         @keyframes combo-emit-glow {
           0%, 100% { filter: drop-shadow(0 0 0 transparent); }
