@@ -10730,23 +10730,23 @@ const APP_STYLES = `
            rang égal, puis la carte change de camp) */
         @keyframes flip-resonance {
           0%   { transform: translate(0, 0) rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); box-shadow: var(--flip-ancien-ombre, none); }
-          4%   { transform: translate(-2px, 0) rotateY(0); }
-          8%   { transform: translate(2px, 0) rotateY(0); }
-          12%  { transform: translate(-2px, 0) rotateY(0); }
-          16%  { transform: translate(0, 0) rotateY(0); }
-          48%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
-          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px #fff, 0 0 60px var(--gold-bright); filter: brightness(1.7); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
-          76%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
-          90%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
+          4%   { transform: translate(-2px, 0) rotateY(9deg); }
+          8%   { transform: translate(2px, 0) rotateY(18deg); }
+          12%  { transform: translate(-2px, 0) rotateY(27deg); }
+          16%  { transform: translate(0, 0) rotateY(36deg); }
+          38%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          40%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px #fff, 0 0 60px var(--gold-bright); filter: brightness(1.7); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
+          70%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
+          88%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
           100% { transform: translate(0, 0) rotateY(360deg) scale(1); filter: brightness(1); }
         }
         @keyframes flip-combo {
           0%   { transform: translate(0, 0) rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); box-shadow: var(--flip-ancien-ombre, none); }
-          20%  { transform: translate(var(--knock-x, 0px), var(--knock-y, 0px)) rotateY(0); }
-          48%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
-          50%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--combo), 0 0 60px rgba(138,99,201,0.5); filter: brightness(1.6); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
-          76%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
-          90%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
+          20%  { transform: translate(var(--knock-x, 0px), var(--knock-y, 0px)) rotateY(45deg); }
+          38%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          40%  { transform: translate(0, 0) rotateY(90deg) scale(1.14); box-shadow: 0 0 34px var(--combo), 0 0 60px rgba(138,99,201,0.5); filter: brightness(1.6); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
+          70%  { transform: translate(0, 0) rotateY(270deg) scale(1.06); filter: brightness(1.2); }
+          88%  { transform: translate(0, 0) rotateY(368deg) scale(1.02); }
           100% { transform: translate(0, 0) rotateY(360deg) scale(1); filter: brightness(1); }
         }
         /* Recul de 5px dans le sens du choc, avant le basculement, la direction dépend
@@ -10830,8 +10830,10 @@ const APP_STYLES = `
            carte serait laissee en miroir, rangs illisibles. */
         @keyframes tour-chimere {
           0%   { transform: rotateY(0); background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
-          24%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
-          25%  { transform: rotateY(90deg); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
+          38%  { background: var(--flip-ancien-bg, inherit); border-color: var(--flip-ancien-bord, currentColor); }
+          40%  { transform: rotateY(90deg); background: var(--flip-nouveau-bg, inherit); border-color: var(--flip-nouveau-bord, currentColor); }
+          70%  { transform: rotateY(270deg); }
+          88%  { transform: rotateY(368deg); }
           100% { transform: rotateY(360deg); }
         }
         /* Chimères qui active Mue : un simple pouls cyan, pas de transformation, seule la cible se retourne */
