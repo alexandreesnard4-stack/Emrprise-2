@@ -6397,10 +6397,12 @@ const APP_STYLES = `
            profil. Sa zone de centrage laisse filer les touchers (la banniere
            reste inerte), seul le texte les retient. Centre dans l'espace a
            gauche de la carte, une ligne, ellipse s'il deborde. */
+        /* 02/09 : plus de centrage -- le sceau et le nom sont cales a GAUCHE de la
+           bande (demande du Commandant) ; la carte de niveau garde la droite. */
         .hub-banniere-pseudo-zone {
           position: absolute; inset: 0;
           padding-left: 8px; padding-right: 38px; box-sizing: border-box;
-          display: flex; align-items: center; justify-content: center;
+          display: flex; align-items: center; justify-content: flex-start;
           gap: 6px;
           pointer-events: none;
         }
