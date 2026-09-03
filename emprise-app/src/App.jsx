@@ -4389,6 +4389,7 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
   // qui contournait la variable : la regle mue, plus bas dans la feuille, a meme
   // specificite que les pivots et reecrivait toute la propriete animation.
   const capturee = events.some((e) => e.kind === "basic" || e.kind === "same" || e.kind === "combo" || (e.kind === "portee" && e.dir));
+  const boucliers = capturee ? [] : events.filter((e) => (e.kind === "guardian" || e.kind === "guardian-frappe") && e.dir).map((e) => e.dir);
   // Cendres (02/09) : le moteur emet le meme evenement « attraction » sur la carte
   // POSEE (son flash de pose, ember-flicker) et sur chaque carte PRISE (adjacente
   // ou attiree). Seule la prise pivote : elle recoit en plus flash-attraction-prise.
@@ -4421,7 +4422,10 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
   // deduit a l affichage). Calque independant, comme le renfort des Maudits : la
   // carte garde une seule animation a la fois. Au delai de la capture de la carte
   // (un Gardien attaque en chaine se defend au tour de son maillon).
-  const boucliers = events.filter((e) => (e.kind === "guardian" || e.kind === "guardian-frappe") && e.dir).map((e) => e.dir);
+  // Un Gardien CAPTURE dans la meme resolution (02/09) : le pivot, rien d autre --
+  // ni bouclier ni +1 (le moteur emet guardian a toute attaque, capture ou non ;
+  // le rond bleu d autrefois, guardian-ring, partait de la). Voir boucliers, plus bas,
+  // apres capturee.
   // Cendres : la carte attirée doit se VOIR arriver. Sans point de départ, l'animation ne
   // faisait que la redimensionner sur sa case d'arrivée — elle semblait se téléporter.
   // On lui donne donc un décalage de départ, dans le sens inverse de son déplacement et
@@ -4478,7 +4482,7 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
   // Les delais de la carte : voir delaisDeCarte, partagee avec le calque des
   // tentacules (rendu dans la case, derriere la carte) qui doit suivre le meme delai.
   const { comboDelay, delaiCapture, delaiTotal, mauditBoostDelay } = delaisDeCarte(events);
-  const deltaEvents = events.filter((e) => typeof e.delta === "number" && e.delta !== 0);
+  const deltaEvents = events.filter((e) => typeof e.delta === "number" && e.delta !== 0 && !(e.kind === "guardian" && capturee));
   const tiltable = extraClass.includes("draggable"); // tilt 3D seulement sur les cartes jouables de la main
 
   // Le pas d une attraction, mesure sur le plateau : l ecart entre la case d arrivee
