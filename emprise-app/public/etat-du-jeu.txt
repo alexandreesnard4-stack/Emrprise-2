@@ -97,3 +97,4 @@ Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
 Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.
+Les cadres gravés du rayon Hérauts s'affichent entiers : gemmes, pointes et coins visibles.

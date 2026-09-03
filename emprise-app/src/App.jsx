@@ -7083,21 +7083,19 @@ const APP_STYLES = `
         .herauts-galerie { display: flex; flex-direction: column; gap: 12px; width: 100%; }
         .heraut-carte { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
         .heraut-cadre {
-          position: relative; width: 100%; aspect-ratio: 960 / 505;
+          position: relative; width: 100%; aspect-ratio: 1024 / 585;
           background-size: cover; background-position: center; background-repeat: no-repeat;
           border-radius: 8px;
         }
-        /* L ouverture du cadre grave. Les huit images ont ete recadrees a la
-           meme taille, sans marge noire autour de la pierre : la fenetre est
-           donc LA MEME pour les huit -- 12 % de retrait a gauche et a droite,
-           18 % en haut et en bas. Le portrait de l Ordre tient la gauche, le
-           texte la droite. */
-        /* 15 % et non 18 % en haut et en bas (01/09) : trois points de plus de
-           chaque cote rendent le portrait plus grand d un dixieme, et
-           l ouverture gravee les donne -- verifie a l oeil sur les huit
-           cadres, aucun sujet ne mord la pierre. */
+        /* L ouverture du cadre grave (02/09). Les huit images sont desormais
+           COMPLETES, 1024 x 585, sans aucun rognage : la gemme du haut, les pointes
+           et les coins sont dans le fichier, et le cadre (aspect-ratio 1024 / 585,
+           cover) les montre entiers. La fenetre de pierre est la meme pour les
+           huit, mesuree sur ces images : 13 % de retrait a gauche et a droite,
+           20 % en haut et en bas -- le portrait de l Ordre tient la gauche, le
+           texte la droite, sans chevaucher les barres du cadre ni les gemmes. */
         .heraut-dedans {
-          position: absolute; top: 15%; bottom: 15%; left: 12%; right: 12%;
+          position: absolute; top: 20%; bottom: 20%; left: 13%; right: 13%;
           display: flex; align-items: stretch; gap: 9px;
         }
         /* La boite prend le RAPPORT EXACT du portrait (01/09). Les onze fichiers
