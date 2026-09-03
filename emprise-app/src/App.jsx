@@ -18841,10 +18841,16 @@ export default function Emprise() {
       // Capacité de base : un Gardien ADVERSE AU MOMENT DU COMBAT gagne +1 sur
       // le côté qu'on attaque. L appartenance se lit sur board (avant), la
       // valeur sur defRank (celle que le moteur a comparee).
+      // 03/09 : la pastille ne s allume plus. On peint la VALEUR defendue -- sans
+      // elle l ecran montrait un 7 avec son anneau face a un 6 nu, et la Resonance
+      // paraissait fausse -- mais plus la marque bleue de guardianBoostedSides : une
+      // pastille qui s allume pendant l apercu, c est le signe de la Resonance, et
+      // deux mecaniques ne peuvent pas parler la meme langue. Le Gardien a son
+      // bouclier, qui se leve quand sa defense se declenche vraiment.
       const avant = board[ni];
       const g = previewBoard[ni];
       if (avant && g && avant.ability === "guardian" && avant.owner !== drag.owner) {
-        previewBoard[ni] = { ...g, guardianBoostedSides: [d.their], [d.their]: defRank(avant, d.their) };
+        previewBoard[ni] = { ...g, [d.their]: defRank(avant, d.their) };
       }
       // Capacité supérieure : le Gardien qu'on pose gagne +1 sur chaque côté qui frappe.
       if (card.ability === "guardian" && card.heroActive && board[ni] && board[ni].owner !== drag.owner) {
