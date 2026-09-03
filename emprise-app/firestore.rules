@@ -252,9 +252,18 @@ service cloud.firestore {
         // L heure du serveur est un champ de PREMIER NIVEAU, lastMoveAt, et non une cle
         // de lastMove : « request.resource.data.X == request.time » est la forme que tout
         // ce fichier utilise deja (creeLe, envoyeeLe, depuis, date), la seule dont le
-        // comportement soit certain. Un sentinelle serverTimestamp niche dans une carte
-        // etait un pari, et le perdre aurait refuse TOUS les coups.
-        && request.resource.data.lastMoveAt == request.time
+        // comportement soit certain.
+        //
+        // FACULTATIF, et c est une lecon payee cher (03/09). L exiger des le premier jour
+        // refusait les coups de tout onglet ouvert AVANT le deploiement : la carte se
+        // posait, le serveur refusait, et le SDK annulait la pose -- elle revenait en
+        // arriere sous les yeux du joueur. On ne peut pas rafraichir de force le
+        // navigateur de quelqu un ; un champ neuf ne peut donc jamais etre obligatoire le
+        // jour de sa sortie. S il est la, en revanche, il ne peut valoir que l heure du
+        // serveur : il reste infalsifiable, et c est le forfait qui l exige (voir
+        // silenceAssezLong).
+        && (!('lastMoveAt' in request.resource.data)
+            || request.resource.data.lastMoveAt == request.time)
         && request.resource.data.lastMove is map
         // Les cles de lastMove sont fermees elles aussi : « is map » seul laissait y
         // glisser un champ de bourrage d un megaoctet sur un coup par ailleurs legitime.
@@ -289,10 +298,21 @@ service cloud.firestore {
     // instant POSTERIEUR a lastMove.at (ou a createdAt avant le premier coup), donc un
     // forfait legitime arrive toujours apres cette borne.
     function delaiInactivite() { return duration.value(225, 's'); }
+    // Le silence se compte depuis le dernier coup horodate par le SERVEUR. S il n y en a
+    // pas, deux cas, et un seul est acceptable :
+    //  - aucun coup n a encore ete joue : la creation fait foi, et c est le forfait
+    //    d avant-match, celui de l adversaire qui n envoie jamais ses Ordres ;
+    //  - des coups ont ete joues mais aucun n est horodate (un client d avant le 03/09) :
+    //    on ne peut RIEN prouver, et le forfait contre l adversaire est refuse. La partie
+    //    peut alors se figer face a un joueur vraiment parti -- c est le prix, assume, de
+    //    ne pas rouvrir le vol de trophees. Chacun garde son propre abandon.
+    // Ce repli disparaitra avec la tolerance du coup, quand tous les clients auront
+    // tourne : ce sera une mission a part.
     function silenceAssezLong() {
       return ('lastMoveAt' in resource.data)
         ? request.time >= resource.data.lastMoveAt + delaiInactivite()
-        : request.time >= resource.data.createdAt + delaiInactivite();
+        : (!('lastMove' in resource.data)
+           && request.time >= resource.data.createdAt + delaiInactivite());
     }
     function finBienFormee() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['abandonPar', 'finMotif'])
