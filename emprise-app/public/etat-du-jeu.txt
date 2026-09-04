@@ -94,7 +94,7 @@ Une carte prise par les Cendres pivote comme toute capture ; attirée, elle fini
 Un pseudo compte 11 caractères au plus, pour se lire en entier sur la bande du hub.
 Contre l'Écho, après un Augure affiché, l'Écho ne joue pas la case suggérée tant qu'une autre case est libre.
 Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre, et restent visibles le temps qu'on les voie.
-Quand un Maudit est capturé, le sang monte sur sa carte, s'y tient un instant, puis reflue, en même temps que son +1 s'inscrit sur ses rangs.
+Quand un Maudit est capturé, le sang monte sur sa carte, s'y tient un instant, puis reflue — et rien d'autre — en même temps que son +1 s'inscrit sur ses rangs.
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
 Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.

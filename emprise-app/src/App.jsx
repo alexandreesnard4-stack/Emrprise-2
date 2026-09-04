@@ -10599,8 +10599,10 @@ const APP_STYLES = `
           position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: 9px;
         }
         /* La boite de DECOUPE, et elle seule : le sang ne sort jamais de la carte. Elle
-           est un enfant, et non le calque lui-meme, parce que l eclair du Maudit deborde
-           expres sur les cotes -- un overflow sur le calque l aurait coupe. */
+           est restee un ENFANT plutot que le calque lui-meme, ce qui n a plus l utilite
+           d origine (l eclair du Maudit debordait expres sur les cotes, un overflow sur
+           le calque l aurait coupe ; l eclair est parti le 04/09) mais garde la sienne :
+           c est elle qui borne le sang aux bords de la carte. */
         .maudit-swell-fx > i {
           position: absolute; inset: 0; overflow: hidden; border-radius: 9px; pointer-events: none;
         }
@@ -10775,25 +10777,13 @@ const APP_STYLES = `
         /* Archers : plus rien sur la carte touchee elle-meme (l anneau qui se dilatait,
            puis portee-impact, ont vecu). La capacite est racontee par la fleche qui
            vole du tireur a la cible (.fleche-portee), puis par le pivot de la cible. */
-        .maudit-swell-fx::after {
-          content: ""; position: absolute; inset: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
-          pointer-events: none; border: 2px solid var(--red-bright);
-          animation: devoreuse-ring 1.6s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both; z-index: 4;
-        }
-        .maudit-swell-fx::before {
-          content: ""; position: absolute; top: 50%; left: -30%; width: 160%; height: 3px; pointer-events: none; z-index: 5;
-          background: linear-gradient(90deg, transparent, #ff2a2a 42%, #fff 50%, #ff2a2a 58%, transparent);
-          transform: translateY(-50%) rotate(-22deg) scaleX(0); opacity: 0;
-          box-shadow: 0 0 10px #ff2a2a, 0 0 20px rgba(140,0,0,0.8);
-          animation: maudit-bolt 1s cubic-bezier(0.2, 0.85, 0.3, 1); animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
-        }
+        /* Maudits : plus rien ici non plus (04/09). Le calque portait encore deux effets
+           d avant le sang -- un petit rond rouge qui se dilatait (il empruntait meme
+           devoreuse-ring, l image-cle des Abysses) et un eclair rouge en diagonale. Les
+           passages precedents avaient restyle le calque sans jamais toucher a ses
+           pseudo-elements : ils jouaient donc PAR-DESSUS le sang, et au-dessus des
+           pastilles de rang. Le sang qui monte raconte seul le renfort. */
         .rank.rank-maudit-boost { animation: maudit-rank 1.4s ease; }
-        @keyframes maudit-bolt {
-          0% { opacity: 0; transform: translateY(-50%) rotate(-22deg) scaleX(0); transform-origin: left center; }
-          20% { opacity: 1; transform: translateY(-50%) rotate(-22deg) scaleX(1.1); }
-          55% { opacity: 0.85; transform: translateY(-50%) rotate(-22deg) scaleX(1); }
-          100% { opacity: 0; transform: translateY(-50%) translateX(24%) rotate(-22deg) scaleX(0.7); transform-origin: right center; }
-        }
         @keyframes maudit-rank {
           0% { scale: 1; }
           40% { scale: 1.25; color: #fff; text-shadow: 0 0 8px #ff2a2a, 0 0 15px rgba(180,0,0,0.9); }
