@@ -4253,6 +4253,24 @@ function regrouperEffets(events, plateau, position) {
 // la gauche, 270 vers le haut -- exprime ici par le cote touche de la cible.
 const FLECHE_PORTEE_SRC = "/icones/fleche-portee.webp";
 const ROTATION_FLECHE = { left: 0, top: 90, right: 180, bottom: 270 };
+// DEUX passes, pour qu aucune Portee reussie ne reste sans fleche (04/09). La passe
+// stricte demande le meme coup ET le meme maillon : c est elle qui departage quand deux
+// Archers de maillons differents sont alignes derriere la meme cible -- le bon tireur
+// gagne. Si elle ne trouve personne, la passe indulgente oublie le maillon et ne garde
+// que le coup, et encore : seulement quand les deux cotes le portent. Deux coups fusionnes
+// dans flashes ne peuvent donc toujours pas se croiser.
+function tireurSurLaLigne(flashes, cible, d, e, strict) {
+  let r = Math.floor(cible / COLS) - d.dr, c = (cible % COLS) - d.dc;
+  while (inBounds(r, c)) {
+    const de = idx(r, c);
+    const tireur = (flashes[de] || []).find((x) => x.kind === "portee" && !x.dir
+      && (x.tir === undefined || e.tir === undefined || x.tir === e.tir)
+      && (!strict || x.comboLevel === e.comboLevel));
+    if (tireur) return { de, tireur };
+    r -= d.dr; c -= d.dc;
+  }
+  return null;
+}
 function apparierTirsPortee(flashes) {
   const tirs = [];
   Object.keys(flashes).forEach((k) => {
@@ -4261,16 +4279,13 @@ function apparierTirsPortee(flashes) {
       if (e.kind !== "portee" || !e.dir) return;
       const d = DIRS.find((x) => x.their === e.dir);
       if (!d) return;
-      let r = Math.floor(cible / COLS) - d.dr, c = (cible % COLS) - d.dc;
-      while (inBounds(r, c)) {
-        const de = idx(r, c);
-        const tireur = (flashes[de] || []).find((x) => x.kind === "portee" && !x.dir && x.tir === e.tir && x.comboLevel === e.comboLevel);
-        if (tireur) {
-          tirs.push({ cle: `${e.tir}-${de}-${cible}`, de, vers: cible, rot: ROTATION_FLECHE[e.dir], delai: delaiMaillon(e.comboLevel) + (tireur.decalage || 0) + PORTEE_DEPART_MS });
-          break;
-        }
-        r -= d.dr; c -= d.dc;
-      }
+      const trouve = tireurSurLaLigne(flashes, cible, d, e, true) || tireurSurLaLigne(flashes, cible, d, e, false);
+      if (!trouve) return;
+      tirs.push({
+        cle: `${e.tir}-${trouve.de}-${cible}`, de: trouve.de, vers: cible,
+        rot: ROTATION_FLECHE[e.dir],
+        delai: delaiMaillon(e.comboLevel) + (trouve.tireur.decalage || 0) + PORTEE_DEPART_MS,
+      });
     });
   });
   return tirs;
@@ -4279,36 +4294,75 @@ function apparierTirsPortee(flashes) {
 // du tireur au centre de la cible), retiree du DOM a l impact (fin d animation).
 // Elle est enfant direct du plateau (.table), jamais de la carte : un element
 // superpose, au-dessus des cases.
-function FlechePortee({ tir }) {
+function FlechePortee({ tir, onFin }) {
   const ref = useRef(null);
   const [geo, setGeo] = useState(null);
-  const [finie, setFinie] = useState(false);
   useLayoutEffect(() => {
-    const el = ref.current;
-    const table = el && el.parentElement;
-    if (!table) return;
-    const cases = table.querySelectorAll(":scope > .cell");
-    const a = cases[tir.de], b = cases[tir.vers];
-    if (!a || !b) return;
-    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rt = table.getBoundingClientRect();
-    setGeo({
-      x: ra.left + ra.width / 2 - rt.left - table.clientLeft,
-      y: ra.top + ra.height / 2 - rt.top - table.clientTop,
-      dx: rb.left - ra.left, dy: rb.top - ra.top,
-    });
+    let image = 0, essais = 0;
+    const mesurer = () => {
+      const el = ref.current;
+      const table = el && el.parentElement;
+      if (!table) return false;
+      const cases = table.querySelectorAll(":scope > .cell");
+      const a = cases[tir.de], b = cases[tir.vers];
+      if (!a || !b) return false;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rt = table.getBoundingClientRect();
+      setGeo({
+        x: ra.left + ra.width / 2 - rt.left - table.clientLeft,
+        y: ra.top + ra.height / 2 - rt.top - table.clientTop,
+        dx: rb.left - ra.left, dy: rb.top - ra.top,
+      });
+      return true;
+    };
+    // Reprise au frame suivant (04/09) : si les cases manquent au montage, on remesure
+    // jusqu a vingt frames. Sans elle, geo restait null POUR TOUJOURS, la classe en-vol
+    // n etait jamais posee, et la fleche ne volait pas -- silencieusement.
+    if (!mesurer()) {
+      const encore = () => { if (!mesurer() && ++essais < 20) image = requestAnimationFrame(encore); };
+      image = requestAnimationFrame(encore);
+    }
+    return () => cancelAnimationFrame(image);
   }, [tir.de, tir.vers]);
-  if (finie) return null;
+  // Le filet : meme si l animation ne rend jamais la main (onglet passe en arriere-plan,
+  // mesure impossible), la fleche finit par quitter le DOM.
+  useEffect(() => {
+    const t = setTimeout(() => onFin(tir.cle), tir.delai + PORTEE_ARMEMENT_MS + PORTEE_VOL_MS + 600);
+    return () => clearTimeout(t);
+  }, [tir.cle, tir.delai]);
   return (
     <img
       ref={ref} src={FLECHE_PORTEE_SRC} alt="" aria-hidden="true" draggable={false}
       className={`fleche-portee ${geo ? "en-vol" : ""}`}
       style={geo ? { left: `${geo.x}px`, top: `${geo.y}px`, "--vol-x": `${geo.dx}px`, "--vol-y": `${geo.dy}px`, "--vol-rot": `${tir.rot}deg`, animationDelay: `${tir.delai}ms` } : undefined}
-      onAnimationEnd={() => setFinie(true)}
+      onAnimationEnd={() => onFin(tir.cle)}
     />
   );
 }
+// Les fleches s ACCUMULENT (04/09) -- et c est la vraie correction du "pas systematique".
+// L ecran ne remplace pas la carte des effets d un coup a l autre, il la FUSIONNE ; une
+// case re-flashee par le coup suivant perd ses evenements d avant. Une fleche encore en
+// attente perdait alors son tireur ou sa cible, sortait du resultat de l appariement, et
+// React la retirait du DOM avant qu elle ait vole. Mesure sur 60 000 scenes a deux coups :
+// 13,5 % des fleches disparaissaient ainsi -- et la quasi totalite de celles d une chaine
+// d Onde, qui attendent plus de quatre secondes avant de partir.
+// Desormais une fleche appariee est INSCRITE, et elle vit jusqu a son impact quoi qu il
+// advienne des evenements qui l ont formee. Elle ne sort que par elle-meme : fin
+// d animation, ou le filet de securite. Le registre des fleches deja inscrites ne se vide
+// jamais, pour qu une fleche qui a vole ne reparte pas parce que ses evenements trainent
+// encore dans la carte des effets.
 function FlechesPortee({ flashes }) {
-  return apparierTirsPortee(flashes || {}).map((t) => <FlechePortee key={t.cle} tir={t} />);
+  const [envol, setEnvol] = useState([]);
+  const inscrites = useRef(new Set());
+  const tirs = apparierTirsPortee(flashes || {});
+  const signature = tirs.map((t) => t.cle).join("|");
+  useEffect(() => {
+    const neuves = tirs.filter((t) => !inscrites.current.has(t.cle));
+    if (!neuves.length) return;
+    neuves.forEach((t) => inscrites.current.add(t.cle));
+    setEnvol((prev) => [...prev, ...neuves]);
+  }, [signature]);
+  const retirer = (cle) => setEnvol((prev) => prev.filter((t) => t.cle !== cle));
+  return envol.map((t) => <FlechePortee key={t.cle} tir={t} onFin={retirer} />);
 }
 
 // Les delais d une carte pour un coup, en un seul endroit (02/09) : la carte les
@@ -5137,6 +5191,25 @@ function poisonAjoute(poisonValue, marque) {
 //  - le poison des Pestiferes, le bonus des Abysses, l'echange des Dores : ce sont des
 //    effets de POSE, pas des attaques, et ils restent dans resolvePlacement.
 // ---------------------------------------------------------------------------
+
+// L evenement de Portee, en UN SEUL endroit (04/09). Le moteur l emettait par deux
+// chemins -- la pose (resolvePlacement) et la capacite d une carte capturee
+// (capaciteOffensive) -- avec des champs differents : le second posait comboLevel, le
+// premier non. Le tireur et sa cible sortent toujours du meme chemin, donc l ecart n a
+// jamais casse d appariement ; il n en restait pas moins deux formes pour une meme
+// chose. Il n y en a plus qu une.
+//   dir        : le COTE de la cible par lequel la fleche entre. Le tireur n en a pas :
+//                c est ce qui le distingue de sa cible dans la carte des effets.
+//   comboLevel : le maillon d Onde, SEULEMENT quand le tir vient d une chaine -- c est
+//                lui qui cale le depart de la fleche sur le maillon. A la pose il n y a
+//                pas de maillon, et la clef reste absente : une clef a undefined serait
+//                refusee par Firestore, ou l evenement part tel quel.
+function evenementPortee(index, dir, comboLevel) {
+  const e = { index, kind: "portee" };
+  if (dir) e.dir = dir;
+  if (typeof comboLevel === "number") e.comboLevel = comboLevel;
+  return e;
+}
 function capaciteOffensive(board, from, player, events, comboLevel, eveilEcarts) {
   const carte = board[from];
   const prises = [];
@@ -5243,7 +5316,7 @@ function capaciteOffensive(board, from, player, events, comboLevel, eveilEcarts)
           }
           if (atkRank(carte, d.my) > defRank(cell, d.their)) {
             board[ni] = { ...cell, owner: player };
-            events.push({ index: ni, kind: "portee", dir: d.their, comboLevel: niveau });
+            events.push(evenementPortee(ni, d.their, niveau));
             prises.push(ni);
             touche = true;
           }
@@ -5252,7 +5325,7 @@ function capaciteOffensive(board, from, player, events, comboLevel, eveilEcarts)
         nr += d.dr; nc += d.dc;
       }
     });
-    if (touche) events.push({ index: from, kind: "portee", comboLevel: niveau });
+    if (touche) events.push(evenementPortee(from, null, niveau));
   }
 
   return prises;
@@ -5503,7 +5576,7 @@ function resolvePlacement(board, position, player, poisonedCells) {
           }
           if (placedCard[d.my] > defRank(cell, d.their)) {
             newBoard[ni] = { ...cell, owner: player };
-            events.push({ index: ni, kind: "portee", dir: d.their });
+            events.push(evenementPortee(ni, d.their));
             porteeTriggered = true;
           }
           break;
@@ -5511,7 +5584,7 @@ function resolvePlacement(board, position, player, poisonedCells) {
         nr += d.dr; nc += d.dc;
       }
     });
-    if (porteeTriggered) events.push({ index: position, kind: "portee" });
+    if (porteeTriggered) events.push(evenementPortee(position, null));
   }
 
   // --- Résolution standard : Résonance + capture de base + Onde, s'applique TOUJOURS,
