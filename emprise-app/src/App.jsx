@@ -15353,7 +15353,18 @@ export default function Emprise() {
   // (Ordres imposes par le chapitre), ni duel local (deux joueurs sur un meme profil), ni
   // Confluence (on y dispose des dix Ordres : les combos y sont a portee de main, et les
   // melanger aux parties a deux Ordres rendrait le profil illisible).
-  const partieCompteAuProfil = !!monCampCombos && !testMode && !storyChapterKey && !confluenceActive;
+  // Un duel entre AMIS : en ligne, mais ni Classe, ni Partie classique, ni tournoi.
+  // C est « Jouer avec un ami » et « Defier », les deux seules facons de choisir son
+  // adversaire. La Partie classique apparie deux inconnus : elle garde son butin.
+  const partieAmicale = mode === "online" && !partieClassee && !partieClassique && !tournoiOnlineId;
+  // 04/09 : un duel entre amis ne rapporte plus RIEN. Le classement etait deja protege
+  // contre la collusion -- deux amis qui se laissent gagner a tour de role -- mais l XP,
+  // les pieces, les quetes et les titres ne l etaient pas. Une partie dure quelques
+  // minutes, et les pieces s achetent avec des gemmes : le robinet etait grand ouvert.
+  // Cette porte-ci les ferme TOUS d un coup, car tout le versement vit derriere elle
+  // dans recordGameStats. Parties jouees et victoires continuent de compter : elles
+  // vivent avant, une partie jouee reste une partie jouee, et elles n ouvrent droit a rien.
+  const partieCompteAuProfil = !!monCampCombos && !testMode && !storyChapterKey && !confluenceActive && !partieAmicale;
 
   function mesOrdresDuJeu() {
     const liste = monCampCombos === "red" ? redOrders : blueOrders;
@@ -15731,7 +15742,9 @@ export default function Emprise() {
         // simultanees se seraient ecrase l une l autre (constate en direct : le +20
         // d une quete avale par le +8 de la partie).
         const histoireQuetes = !!storyChapterKey && !testMode;
-        const confluenceQuetes = confluenceActive && !testMode && !suivi.disqualifie;
+        // La Confluence verse sa quete dediee sans passer par le profil. Un defi entre
+        // AMIS en Confluence aurait donc garde ce dernier robinet : on le ferme aussi.
+        const confluenceQuetes = confluenceActive && !testMode && !suivi.disqualifie && !partieAmicale;
         let quetesFaites = Promise.resolve();
         if (monCampCombos && (compteAuProfil || histoireQuetes || confluenceQuetes)) {
           quetesFaites = avancerQuetes({
