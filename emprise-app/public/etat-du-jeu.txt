@@ -107,4 +107,5 @@ Votre présence, « En ligne » ou « Vu il y a... », n'est visible que par vos
 En ligne, le serveur valide aussi l'appariement : une partie annoncée doit vraiment opposer les deux joueurs appariés, et une place d'attente ne se libère que pour son propriétaire.
 En ligne, le plateau ne montre jamais plus de trois secondes de retard : au-dela, il se met a jour d un fondu, sans rejouer les animations en retard.
 Une capture retourne la carte en un seul tour, en une seconde.
+Une Résonance retourne toutes ses cartes en même temps ; l'Onde enchaîne juste après, carte après carte, sans temps mort entre les deux.
 En aperçu, l'allumage des pastilles est réservé à la Résonance : un Gardien menacé montre la valeur qu'il défend, sans autre signal.

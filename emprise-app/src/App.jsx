@@ -129,14 +129,29 @@ const RYTHME_POSE_JOUEUR_MS = 400;
 // CSS. Les deux doivent dire la meme chose -- la file de presentation en ligne compte
 // ce pivot dans le temps qu un coup occupe l ecran. Une sonde le verifie.
 const PIVOT_CAPTURE_MS = 1000;
+// Le depart d une chaine d Onde (04/09) : 2 400 ms au lieu de 4 000. Le commentaire
+// d avant parlait d une Resonance de 3 s ; elle n en dure pas 3. Son element le plus long
+// est le flash des rangs, 2 s (l onde de choc en fait 1,8, le pivot 1). L Onde part donc
+// 400 ms apres la fin REELLE de la Resonance, le meme temps de respiration que la pose --
+// au lieu de 2 s de vide. Rien n est raccourci : la Resonance joue toujours ses cartes
+// ENSEMBLE, l Onde toujours une par une, 300 ms par maillon.
+// Une seule constante : delaiMaillon, qui cale le depart des fleches de Portee sur le
+// meme rythme, la lit aussi. Elle portait son propre 4000 en dur, et une fleche de chaine
+// serait partie 1,6 s apres le maillon qu elle illustre.
+const RESONANCE_MS = 2000;
+const COMBO_BASE_DELAY = RESONANCE_MS + 400;
 // Les Maudits (04/09). MAUDIT_ATTENTE_MS : le sang ne monte qu une fois le pivot de
 // capture bien fini -- on lit la capture, PUIS la croissance, jamais les deux ensemble.
-// MAUDIT_SANG_MS : 300 ms de montee, 700 ms de TENUE, 300 ms de reflux, le meme rythme
-// que les tentacules des Abysses. La duree vit ici et dans --maudit-sang-duree, et les
-// deux doivent rester d accord : c est elle qui dit a l ecran jusqu a quand garder les
-// classes d animation de la carte.
-const MAUDIT_ATTENTE_MS = 3200;
-const MAUDIT_SANG_MS = 1300;
+// Elle ne protege QUE de ce pivot-la : mauditBoostDelay vaut delaiCapture + cette
+// attente, et delaiCapture porte deja le maillon d Onde, le retard des tirs de Portee et
+// le trajet des Cendres. Il n y avait donc rien d autre a attendre, et les 3 200 ms
+// d avant laissaient 2,2 s d ecran vide entre la capture et sa suite : 1 200, le pivot
+// plus 200 de marge, disent la meme chose sans le vide.
+// MAUDIT_SANG_MS : 350 ms de montee, 1 300 ms de MAINTIEN, 350 ms de reflux. La duree vit
+// ici et dans --maudit-sang-duree, et les deux doivent rester d accord : c est elle qui
+// dit a l ecran jusqu a quand garder les classes d animation de la carte.
+const MAUDIT_ATTENTE_MS = PIVOT_CAPTURE_MS + 200;
+const MAUDIT_SANG_MS = 2000;
 // Portee (02/09) : PORTEE_DEPART_MS apres le maillon (la carte posee a fini
 // d atterrir), la fleche apparait au-dessus de l Archer et y reste
 // PORTEE_ARMEMENT_MS (fondu en opacite : c est cette pause qui attire l oeil),
@@ -4191,7 +4206,7 @@ function storyDifficultyFor(gameIndex, numGames) {
 //               PORTEE_TEMPS_MS tout ce qui vient apres -- la fleche vole, la
 //               cible pivote, PUIS la chaine reprend son pas de 300 ms.
 let compteurTirs = 0;
-function delaiMaillon(niveau) { return typeof niveau === "number" ? 4000 + niveau * 300 : 0; }
+function delaiMaillon(niveau) { return typeof niveau === "number" ? COMBO_BASE_DELAY + niveau * 300 : 0; }
 // Le Heraut des Gardiens (02/09) : le moteur n emet rien pour son +1 en attaque (atkRank
 // l ajoute en silence). Les cotes de la carte posee qui frappent un ennemi se deduisent ici,
 // comme l apercu le fait deja : un ennemi encore adjacent apres le coup (il a resiste), ou
@@ -4249,6 +4264,35 @@ function regrouperEffets(events, plateau, position) {
     map[e.index].push(copie);
   });
   return map;
+}
+
+// Ce que ce coup occupe VRAIMENT l ecran (04/09) : le dernier instant ou quelque chose
+// bouge encore, calcule avec les MEMES delais que les cartes, par delaisDeCarte. C est
+// lui qui dit a la file en ligne combien de temps l ecran est pris.
+// L estimation d avant ne lisait pas ces delais-la et se trompait dans les deux sens :
+// 3 250 ms reserves pour une Portee qui en dure 1 450, 2 300 pour une Onde qui en dure
+// 5 900. Une seule source, desormais.
+// Ce que la fonction regarde, cote par cote :
+//   - tout pivot de capture finit a delaiCapture + PIVOT_CAPTURE_MS. La fleche de Portee
+//     est comprise : la cible ne pivote qu a l impact, donc son delaiCapture la porte ;
+//   - les tentacules d une Abysse renforcee tiennent TENTACULE_MS apres leur delai ;
+//   - le sang d un Maudit, MAUDIT_SANG_MS apres le sien ;
+//   - une carte attiree par les Cendres finit son trajet, puis pivote.
+const TENTACULE_MS = 1250;
+function coutDeLaPresentation(events) {
+  const parCase = {};
+  events.forEach((e) => { (parCase[e.index] = parCase[e.index] || []).push(e); });
+  let fin = RYTHME_POSE_JOUEUR_MS + PIVOT_CAPTURE_MS;
+  Object.keys(parCase).forEach((k) => {
+    const ev = parCase[k];
+    const d = delaisDeCarte(ev);
+    fin = Math.max(fin, d.delaiCapture + PIVOT_CAPTURE_MS);
+    if (ev.some((e) => e.kind === "devoreuse")) fin = Math.max(fin, d.delaiTotal + TENTACULE_MS);
+    if (ev.some((e) => e.kind === "maudit-boost")) fin = Math.max(fin, d.mauditBoostDelay + MAUDIT_SANG_MS);
+    const tiree = ev.find((e) => e.kind === "attraction-pull");
+    if (tiree) fin = Math.max(fin, dureeTrajetCendres(tiree.steps) + PIVOT_CAPTURE_MS);
+  });
+  return fin;
 }
 
 // ---------- Portee : la fleche du tireur a la cible (02/09) ----------
@@ -4386,9 +4430,8 @@ function delaisDeCarte(events) {
   // que la vague se lise carte apres carte (03/09 : 80 ms, trop serre depuis que les
   // tentacules tiennent plus longtemps).
   const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 120 : 0;
-  // L'Onde ne démarre qu'une fois la Résonance bien terminée (3s) + 1s de pause — jamais
-  // en même temps — puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus.
-  const COMBO_BASE_DELAY = 4000;
+  // L'Onde ne démarre qu'une fois la Résonance bien terminée — jamais en même temps —
+  // puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus (COMBO_BASE_DELAY).
   const comboDelay = comboVictimEvent ? COMBO_BASE_DELAY + (comboVictimEvent.comboLevel || 0) * 300 : (comboEmitEvent ? COMBO_BASE_DELAY + (comboEmitEvent.comboLevel || 0) * 300 : 0);
   // Portee (02/09) : la cible pivote a l IMPACT de la fleche -- son maillon, plus le
   // retard des tirs d avant, plus le depart et le vol (decalage, pose par
@@ -6037,7 +6080,7 @@ const APP_STYLES = `
            --reserve-duree : la selection de la Reserve, decouplee -- elle garde ses
            0,9 s, et sa courbe d origine, plus lente : on y choisit, on n y capture pas.
            --tour-courbe : depart doux, milieu rapide, freinage a l arrivee. */
-        :root { --tour-duree: 1s; --reserve-duree: .9s; --maudit-sang-duree: 1.3s;
+        :root { --tour-duree: 1s; --reserve-duree: .9s; --maudit-sang-duree: 2s;
                 --tour-courbe: cubic-bezier(.25, .1, .25, 1);
                 --reserve-courbe: cubic-bezier(.45, .05, .25, 1); }
         body { margin: 0; background: transparent; }
@@ -6490,15 +6533,12 @@ const APP_STYLES = `
            separe deja l'etoffe de la pastille des pieces. */
         .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 0; }
         /* La banniere est INERTE : elle se change au profil. Aucun curseur. */
-        /* 70 px (52 avant, 04/09) : a 52 l etoffe etait une bande trop mince pour qu on y
-           reconnaisse quoi que ce soit -- la couronne du Sacre, la comete, tout se
-           reduisait a un liseré. Les 18 px de plus vont a l IMAGE : le sceau, le pseudo et
-           la carte de niveau restent centres sur la hauteur, chacun par sa propre regle,
-           et les pastilles voisines ne bougent pas (elles ont leur hauteur a elles, et la
-           rangee les cale en haut). */
+        /* La hauteur ne bouge pas (maquette A, 04/09). La variante a 70 px a ete essayee
+           sur telephone puis annulee par le Commandant : c est le VOILE qui laisse voir
+           l etoffe, pas la hauteur. Le hub retrouve donc exactement sa mise en page. */
         .hub-banniere {
           position: relative; display: block;
-          width: 100%; height: 70px;
+          width: 100%; height: 52px;
           border-radius: 9px; border: 1px solid rgba(203, 164, 86, 0.6);
           padding: 0; overflow: visible;
           background: linear-gradient(160deg, #241c32, #14101d);
@@ -6507,13 +6547,14 @@ const APP_STYLES = `
           position: absolute; inset: 0; border-radius: 8px; overflow: hidden;
         }
         .hub-banniere-image { background-size: cover; background-position: center; }
-        /* Le voile est LOCAL, a gauche (04/09) : dense sous le sceau et le pseudo, deja
-           moitie moins a 30 %, et plus rien passe 55 %. L etoffe respire a droite, ou il n y
-           a que la carte de niveau -- elle porte ses propres ombres portees et n a jamais eu
-           besoin du voile. Il est MOINS transparent qu avant la ou le texte se pose
-           (0,9 contre 0,72) : le pseudo se lit donc mieux, pas moins bien. */
+        /* Le voile en degrade (maquette A, 04/09) : tres dense sous le sceau et le pseudo
+           (0,92 puis 0,75 a 34 %), il s ouvre au tiers droit (0,18 a 62 %) et garde un
+           soupcon d ombre au bord (0,05) -- la carte de niveau se detache mieux sur une
+           etoffe claire. Il est PLUS dense que l ancien voile uniforme la ou le texte se
+           pose (0,92 contre 0,72) : le pseudo s y lit mieux, pas moins bien, et l image
+           apparait la ou il n y a rien a lire. */
         .hub-banniere-voile {
-          background: linear-gradient(90deg, rgba(10,8,15,0.9) 0%, rgba(10,8,15,0.6) 30%, transparent 55%);
+          background: linear-gradient(90deg, rgba(10,8,15,0.92) 0%, rgba(10,8,15,0.75) 34%, rgba(10,8,15,0.18) 62%, rgba(10,8,15,0.05) 100%);
         }
         /* Le pseudo SUR la banniere, seul BOUTON de l'etoffe : il ouvre le
            profil. Sa zone de centrage laisse filer les touchers (la banniere
@@ -6568,8 +6609,8 @@ const APP_STYLES = `
         .hub-banniere-pseudo.tres-long { font-size: 10.5px; letter-spacing: 0; padding: 2px 2px; }
         /* La carte, ENTIEREMENT A L'INTERIEUR de la banniere (demande du
            Commandant, 01/09, qui annule le chevauchement d'avant) : calee a
-           8 px du bord droit et centree sur la hauteur -- 70 de banniere pour
-           36 de carte, soit 17 px en haut comme en bas depuis le 04/09. Ombres STATIQUES
+           8 px du bord droit et centree sur la hauteur -- 52 de banniere pour
+           36 de carte, soit 8 px en haut comme en bas. Ombres STATIQUES
            (un drop-shadow ne s'anime jamais ici) ; sa bordure doree est celle
            de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
@@ -11021,14 +11062,14 @@ const APP_STYLES = `
           100% { opacity: 0; transform: scale(1.25) rotate(-2deg); }
         }
         @keyframes devour-rank { 0%{scale:1} 35%{scale:1.28; color:#fff; text-shadow:0 0 9px var(--devour), 0 0 16px var(--devour)} 60%{scale:0.94} 100%{scale:1} }
-        /* Le sang du Maudit (04/09) : 300 ms de montee en fondu, 700 ms de TENUE, 300 ms
-           de reflux -- 1,3 s en tout, soit 23 % et 77 % de la course. C est la tenue qui
-           manquait : a 200 ms il montait et repartait sans qu on ait le temps de le voir. */
+        /* Le sang du Maudit (04/09, second passage) : 350 ms de montee en fondu, 1 300 ms
+           de MAINTIEN, 350 ms de reflux -- 2 s en tout, soit 17,5 % et 82,5 % de la course.
+           Le maintien est ce qu on regarde ; le reste n est que l entree et la sortie. */
         @keyframes maudit-sang {
-          0%   { opacity: 0; transform: translateY(100%); }
-          23%  { opacity: 1; transform: translateY(0); }
-          77%  { opacity: 1; transform: translateY(0); }
-          100% { opacity: 0; transform: translateY(100%); }
+          0%    { opacity: 0; transform: translateY(100%); }
+          17.5% { opacity: 1; transform: translateY(0); }
+          82.5% { opacity: 1; transform: translateY(0); }
+          100%  { opacity: 0; transform: translateY(100%); }
         }
         @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
 
@@ -18352,10 +18393,12 @@ export default function Emprise() {
     // minute. Le compte honnete : la pose, la cascade d Onde (300 ms par niveau), le
     // dernier pivot (--tour-duree, PIVOT_CAPTURE_MS), plus le trajet des Cendres et
     // les tirs de Portee s il y en a.
-    const aUnTir = events.some((e) => e.kind === "portee" && e.dir);
-    const coutPresentation = enChaine
-      ? RYTHME_POSE_JOUEUR_MS + maxComboLevel * 300 + PIVOT_CAPTURE_MS + nbTirsEnChaine * PORTEE_TEMPS_MS + trajetCendres
-      : RYTHME_POSE_JOUEUR_MS + PIVOT_CAPTURE_MS + 400 + trajetCendres + (aUnTir ? PORTEE_TEMPS_MS : 0);
+    // 04/09 : le cout se lit maintenant aux memes delais que les cartes elles-memes
+    // (coutDeLaPresentation), au lieu d une formule a part qui se trompait dans les deux
+    // sens. Le plafond, lui, ne bouge pas : c est lui qui garantit qu aucun coup recu
+    // n attend plus de PRESENTATION_RETARD_MAX_MS, meme quand une longue chaine, elle,
+    // continue de se jouer par-dessus.
+    const coutPresentation = coutDeLaPresentation(events);
     // Et quoi qu il arrive, la file n attend jamais plus que le plafond : les animations
     // vont au bout de leur course, mais elles ne retiennent plus le coup suivant. AUCUNE
     // duree d animation n a ete raccourcie -- ce n etait pas elles, le probleme.
