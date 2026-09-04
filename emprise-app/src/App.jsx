@@ -21074,7 +21074,14 @@ export default function Emprise() {
                   <img className="pantheon-medaillon" src={imageMedaillon(l && l.medaillon)} alt="" />
                   <span className="pantheon-noms">
                     <span className="pantheon-nom">{pseudoAffichable(l && l.pseudo) || "Commandant"}</span>
-                    {l && l.titre ? <span className="pantheon-titre">{String(l.titre).slice(0, 40)}</span> : null}
+                    {/* Le titre passe par la MEME porte que les fiches d amis (04/09) :
+                        titreDuJeu ecarte ce qui n est pas un titre du jeu. Il s affichait
+                        ici brut, seulement tronque a quarante caracteres -- soit un champ
+                        de texte libre, ecrit par un joueur, montre a tous les autres. */}
+                    {(() => {
+                      const t = titreDuJeu(l && l.titre);
+                      return t ? <span className="pantheon-titre">{t.nom}</span> : null;
+                    })()}
                   </span>
                   <span className="pantheon-trophees">
                     <img src="/nav/trophee.webp" alt="" />{Math.max(0, Number(l && l.trophees) || 0)}

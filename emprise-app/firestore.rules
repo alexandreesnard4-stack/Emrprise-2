@@ -948,22 +948,110 @@ service cloud.firestore {
       return getAfter(docCode(code)).data.uid == moi();
     }
 
+    // Les dix clefs de combos du jeu. `combos` ne peut contenir QUE celles-la : une
+    // liste seulement bornee en taille restait un entrepot de trois chaines libres.
+    // A COMPLETER a chaque combo neuf -- les Geoliers n en ont pas encore.
+    function clesDeCombo() {
+      return ['or-corrompu', 'rancon', 'traine-venin', 'maree-montante', 'miroir-truque',
+              'trait-voile', 'battue', 'breche', 'fosse', 'rempart-vicie'];
+    }
+    // Les douze titres du jeu : les dix combos, plus les deux replis. Le client n en
+    // affiche jamais d autre -- titreDuJeu ecarte le reste -- la regle le lui impose.
+    // A COMPLETER, elle aussi, a chaque combo neuf.
+    function titresDuJeu() {
+      return ["L'Or Corrompu", 'La Rançon', 'La Traîne au Venin', 'La Marée Montante',
+              'Le Miroir Truqué', 'Le Trait Voilé', 'La Battue', 'La Brèche', 'La Fosse',
+              'Le Rempart Vicié', "L'Errant", "L'Alchimiste"];
+    }
+
+    // ---------- Les compteurs, bornes les uns par rapport aux autres ----------
+    // Le client republie des TOTAUX ABSOLUS, jamais des increments : profilPublic() rend
+    // Math.round(stats.gamesPlayed), et increment() n est importe nulle part. Une borne de
+    // variation par ecriture serait donc un piege : plusieurs parties peuvent s ecouler
+    // entre deux ecritures reussies (hors ligne, onglet ferme, une ecriture avalee par son
+    // .catch), le saut depasserait la borne -- et comme le total local ne redescend jamais,
+    // TOUTES les ecritures suivantes seraient refusees a leur tour. Le profil serait mort.
+    // Une borne de monotonie casserait, elle, la remise a zero offerte dans les Reglages.
+    // On borne donc les compteurs entre eux. Ces relations survivent a la republication
+    // d un total et ne dependent d aucun historique.
+    // La valeur d un compteur APRES coup : celle qu on ecrit, sinon celle deja en place,
+    // sinon zero. Ecrites une par une : les regles n ont pas d acces par variable.
+    function apresParties() {
+      return 'parties' in request.resource.data ? request.resource.data.parties
+        : ('parties' in resource.data ? resource.data.parties : 0);
+    }
+    function apresVictoires() {
+      return 'victoires' in request.resource.data ? request.resource.data.victoires
+        : ('victoires' in resource.data ? resource.data.victoires : 0);
+    }
+    function apresCombosParties() {
+      return 'combosParties' in request.resource.data ? request.resource.data.combosParties
+        : ('combosParties' in resource.data ? resource.data.combosParties : 0);
+    }
+    function apresTrophees() {
+      return 'trophees' in request.resource.data ? request.resource.data.trophees
+        : ('trophees' in resource.data ? resource.data.trophees : 0);
+    }
+    // Le PLUS GRAND des deux parties, l ancien ou le neuf. Et c est tout l enjeu : le
+    // client envoie ses compteurs en TROIS ecritures separees, si bien que le document
+    // porte transitoirement un parties neuf a cote d un trophees ancien. Comparer des
+    // millesimes differents refusait deux gestes parfaitement legitimes, tous deux quand
+    // parties DESCEND : le changement de telephone (parties repart a 3, trophees vaut
+    // encore 610) et la remise a zero depuis les Reglages (parties a 0, combosParties
+    // encore a 30). Dans les deux cas la valeur fautive est l ANCIENNE, celle qu on ne
+    // touche pas. En prenant le plus grand des deux, la relation ne punit plus une baisse.
+    function avantParties() { return 'parties' in resource.data ? resource.data.parties : 0; }
+    function partiesDeReference() {
+      return apresParties() > avantParties() ? apresParties() : avantParties();
+    }
+    // Les trois relations, chacune GARANTIE par recordGameStats : gamesPlayed monte a
+    // chaque partie enregistree ; mesVictoires seulement quand j ai gagne ; combosParties
+    // seulement quand la partie compte au profil ; et le gain de trophees arrive dans le
+    // MEME appel, au plus trente. Un joueur ne peut donc pas avoir plus de victoires que
+    // de parties, ni plus de trente trophees par partie jouee.
+    // Le garde-fou du debut : tant que le document n a JAMAIS porte parties, on ne compare
+    // rien. Les trois ecritures peuvent arriver dans n importe quel ordre -- exiger la
+    // relation avant que parties existe refuserait celle qui arrive la premiere.
+    // Victoires et parties voyagent TOUJOURS dans la meme requete cote client. Quand
+    // c est le cas, on les compare strictement entre elles -- meme millesime, aucune
+    // indulgence : c est ce qui refuse « onze victoires pour dix parties ». Sinon,
+    // seulement alors, on retombe sur la reference tolerante.
+    function victoiresCoherentes() {
+      return ('victoires' in request.resource.data && 'parties' in request.resource.data)
+        ? request.resource.data.victoires <= request.resource.data.parties
+        : apresVictoires() <= partiesDeReference();
+    }
+    function compteursCoherents() {
+      return !('parties' in request.resource.data || 'parties' in resource.data)
+        || (victoiresCoherentes()
+            && apresCombosParties() <= partiesDeReference()
+            && apresTrophees() <= partiesDeReference() * 30);
+    }
+
     // Trophées et titre, montrés aux amis : un entier raisonnable et une courte chaîne.
-    // Le client ne retient le titre que s'il est l'un des titres du jeu.
+    // Le titre ne peut etre QUE vide ou l un des titres du jeu (04/09) : c etait jusqu ici
+    // une simple borne de soixante caracteres, donc un champ de texte libre affiche a tous.
     function profilPublicValide() {
       return (!('trophees' in request.resource.data)
               || (request.resource.data.trophees is int && request.resource.data.trophees >= 0 && request.resource.data.trophees <= 100000))
           && (!('titre' in request.resource.data)
-              || (request.resource.data.titre is string && request.resource.data.titre.size() <= 60))
+              || request.resource.data.titre == ''
+              || (request.resource.data.titre is string
+                  && request.resource.data.titre in titresDuJeu()))
           // Le profil que voit un adversaire : ses parties, ses victoires, ses combos.
           // Bornes larges mais fermees — un compteur libre serait un champ de texte
           // deguise, et la liste de combos un moyen d'entreposer n'importe quoi.
+          // 100 000 et non un million (04/09) : cent mille parties a cinq minutes font
+          // huit mille heures de jeu. La borne d avant laissait passer le 999999 de l audit.
           && (!('parties' in request.resource.data)
-              || (request.resource.data.parties is int && request.resource.data.parties >= 0 && request.resource.data.parties <= 1000000))
+              || (request.resource.data.parties is int && request.resource.data.parties >= 0 && request.resource.data.parties <= 100000))
           && (!('victoires' in request.resource.data)
-              || (request.resource.data.victoires is int && request.resource.data.victoires >= 0 && request.resource.data.victoires <= 1000000))
+              || (request.resource.data.victoires is int && request.resource.data.victoires >= 0 && request.resource.data.victoires <= 100000))
+          // La liste des combos est FERMEE (04/09) : trois clefs au plus, et seulement
+          // celles du jeu. Bornee en taille, elle restait trois chaines libres a lire.
           && (!('combos' in request.resource.data)
-              || (request.resource.data.combos is list && request.resource.data.combos.size() <= 3))
+              || (request.resource.data.combos is list && request.resource.data.combos.size() <= 3
+                  && request.resource.data.combos.hasOnly(clesDeCombo())))
           // Les tournois en ligne remportes. Huit joueurs par tournoi : en gagner dix
           // mille supposerait quatre-vingt mille adversaires. La borne est large sans
           // etre ouverte, comme les autres.
@@ -976,7 +1064,10 @@ service cloud.firestore {
               || (request.resource.data.ordreFavori is string && request.resource.data.ordreFavori.size() <= 30))
           // Les parties qui ouvrent droit a un titre : le denominateur de la jauge.
           && (!('combosParties' in request.resource.data)
-              || (request.resource.data.combosParties is int && request.resource.data.combosParties >= 0 && request.resource.data.combosParties <= 1000000))
+              || (request.resource.data.combosParties is int && request.resource.data.combosParties >= 0 && request.resource.data.combosParties <= 100000))
+          // Le temoin de l Adoubement : un booleen, jamais autre chose (04/09).
+          && (!('adoubementVu' in request.resource.data)
+              || request.resource.data.adoubementVu is bool)
           // Le niveau de Commandant, montre aux amis : les niveaux du jeu vont de 1 a 50.
           && (!('niveau' in request.resource.data)
               || (request.resource.data.niveau is int && request.resource.data.niveau >= 1 && request.resource.data.niveau <= 50))
@@ -1067,6 +1158,9 @@ service cloud.firestore {
                 && indexPointeVersMoi(request.resource.data.codeAmi)))
         && vuLeValide()
         && derniereDemandeValide()
+        // Les compteurs les uns contre les autres (04/09). Sur l UPDATE seulement : la
+        // fonction lit resource.data, et un document neuf n a aucun compteur a comparer.
+        && compteursCoherents()
         // Le compteur anti-rafale ne s'efface pas en reecrivant le profil sans lui.
         && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data);
 
