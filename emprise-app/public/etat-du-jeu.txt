@@ -64,7 +64,7 @@ Le médaillon d'une quête fraîchement accomplie se retourne à l'ouverture de 
 Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
-Hub : mini-bannière équipée portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
+Hub : bande de bannière équipée, assez haute pour que son illustration se reconnaisse, portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
 Page Boutique épurée : seuls la bannière du joueur et le trésor restent en haut, le catalogue occupe le reste de l'écran.
 Un auvent d'or et de tissu coiffe la Boutique et reste accroché en haut pendant que les rayons défilent dessous.

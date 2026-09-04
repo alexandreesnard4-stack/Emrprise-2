@@ -6490,9 +6490,15 @@ const APP_STYLES = `
            separe deja l'etoffe de la pastille des pieces. */
         .hub-banniere-groupe { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 0; }
         /* La banniere est INERTE : elle se change au profil. Aucun curseur. */
+        /* 70 px (52 avant, 04/09) : a 52 l etoffe etait une bande trop mince pour qu on y
+           reconnaisse quoi que ce soit -- la couronne du Sacre, la comete, tout se
+           reduisait a un liseré. Les 18 px de plus vont a l IMAGE : le sceau, le pseudo et
+           la carte de niveau restent centres sur la hauteur, chacun par sa propre regle,
+           et les pastilles voisines ne bougent pas (elles ont leur hauteur a elles, et la
+           rangee les cale en haut). */
         .hub-banniere {
           position: relative; display: block;
-          width: 100%; height: 52px;
+          width: 100%; height: 70px;
           border-radius: 9px; border: 1px solid rgba(203, 164, 86, 0.6);
           padding: 0; overflow: visible;
           background: linear-gradient(160deg, #241c32, #14101d);
@@ -6501,8 +6507,13 @@ const APP_STYLES = `
           position: absolute; inset: 0; border-radius: 8px; overflow: hidden;
         }
         .hub-banniere-image { background-size: cover; background-position: center; }
+        /* Le voile est LOCAL, a gauche (04/09) : dense sous le sceau et le pseudo, deja
+           moitie moins a 30 %, et plus rien passe 55 %. L etoffe respire a droite, ou il n y
+           a que la carte de niveau -- elle porte ses propres ombres portees et n a jamais eu
+           besoin du voile. Il est MOINS transparent qu avant la ou le texte se pose
+           (0,9 contre 0,72) : le pseudo se lit donc mieux, pas moins bien. */
         .hub-banniere-voile {
-          background: linear-gradient(90deg, rgba(8,6,14,0.72), rgba(8,6,14,0.2) 55%, transparent);
+          background: linear-gradient(90deg, rgba(10,8,15,0.9) 0%, rgba(10,8,15,0.6) 30%, transparent 55%);
         }
         /* Le pseudo SUR la banniere, seul BOUTON de l'etoffe : il ouvre le
            profil. Sa zone de centrage laisse filer les touchers (la banniere
@@ -6538,7 +6549,12 @@ const APP_STYLES = `
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.08em;
           font-size: 14px; color: var(--bone);
-          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+          /* Trois ombres, depuis que le voile s allege a droite (04/09) : un halo serre
+             qui colle au trait, celui d avant, et une ombre plus large. C est le halo qui
+             porte le nom quand un eclat de l etoffe passe juste sous une lettre -- mesure
+             sur les bannieres les plus claires, ces pixels-la etaient deja a 1,2 de
+             contraste avec l ancien voile. Une ombre ne deplace rien et ne s anime pas. */
+          text-shadow: 0 0 2px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,0.9), 0 2px 6px rgba(0,0,0,0.75);
         }
         /* Quatre paliers selon la LONGUEUR du pseudo (01/09, recalibres le 02/09).
            Mesures sur la vraie bande a 375 px, sceau et carte de niveau en place :
@@ -6552,8 +6568,8 @@ const APP_STYLES = `
         .hub-banniere-pseudo.tres-long { font-size: 10.5px; letter-spacing: 0; padding: 2px 2px; }
         /* La carte, ENTIEREMENT A L'INTERIEUR de la banniere (demande du
            Commandant, 01/09, qui annule le chevauchement d'avant) : calee a
-           8 px du bord droit et centree sur la hauteur -- 52 de banniere pour
-           36 de carte, soit 8 px en haut comme en bas. Ombres STATIQUES
+           8 px du bord droit et centree sur la hauteur -- 70 de banniere pour
+           36 de carte, soit 17 px en haut comme en bas depuis le 04/09. Ombres STATIQUES
            (un drop-shadow ne s'anime jamais ici) ; sa bordure doree est celle
            de son propre cadre. Elle est la porte du profil. */
         .hub-niveau.hub-niveau-sur-banniere {
