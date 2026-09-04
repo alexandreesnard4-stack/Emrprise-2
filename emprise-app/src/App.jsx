@@ -6575,18 +6575,9 @@ const APP_STYLES = `
           padding: 0; overflow: visible;
           background: linear-gradient(160deg, #241c32, #14101d);
         }
-        .hub-banniere-image, .hub-banniere-voile {
+        .hub-banniere-image {
           position: absolute; inset: 0; border-radius: 8px; overflow: hidden;
-        }
-        .hub-banniere-image { background-size: cover; background-position: center; }
-        /* Le voile en degrade (maquette A, 04/09) : tres dense sous le sceau et le pseudo
-           (0,92 puis 0,75 a 34 %), il s ouvre au tiers droit (0,18 a 62 %) et garde un
-           soupcon d ombre au bord (0,05) -- la carte de niveau se detache mieux sur une
-           etoffe claire. Il est PLUS dense que l ancien voile uniforme la ou le texte se
-           pose (0,92 contre 0,72) : le pseudo s y lit mieux, pas moins bien, et l image
-           apparait la ou il n y a rien a lire. */
-        .hub-banniere-voile {
-          background: linear-gradient(90deg, rgba(10,8,15,0.92) 0%, rgba(10,8,15,0.75) 34%, rgba(10,8,15,0.18) 62%, rgba(10,8,15,0.05) 100%);
+          background-size: cover; background-position: center;
         }
         /* Le pseudo SUR la banniere, seul BOUTON de l'etoffe : il ouvre le
            profil. Sa zone de centrage laisse filer les touchers (la banniere
@@ -6594,12 +6585,29 @@ const APP_STYLES = `
            gauche de la carte, une ligne, ellipse s'il deborde. */
         /* 02/09 : plus de centrage -- le sceau et le nom sont cales a GAUCHE de la
            bande (demande du Commandant) ; la carte de niveau garde la droite. */
+        /* 04/09 : la zone devient une PLAQUE opaque accolee au bord gauche. Le voile
+           qu elle remplace assombrissait toute la bande pour rendre lisibles le sceau et
+           le nom ; la plaque n assombrit que ce qu il faut, et l etoffe se montre partout
+           ailleurs. Plus d inset: 0 -- sans « right », la plaque se taille sur son contenu.
+           max-width calc(100% - 46px) : 26 px de carte de niveau, 8 px de son bord droit,
+           12 px d air. Elle ne doit JAMAIS toucher la carte, meme avec un pseudo de onze
+           signes ; au-dela, l ellipse du bouton prend le relais, elle existe deja.
+           border-radius 8px a gauche : c est le rayon INTERIEUR du cadre (9 px moins la
+           bordure de 1 px). .hub-banniere est en overflow: visible -- la carte de niveau
+           en depend -- donc un coin carre depasserait du cadre au lieu d etre rogne.
+           Le degrade vertical et l ombre portee a droite donnent le relief de la plaque
+           gravee. Rien ici n est anime. */
         .hub-banniere-pseudo-zone {
-          position: absolute; inset: 0;
-          padding-left: 8px; padding-right: 38px; box-sizing: border-box;
+          position: absolute; left: 0; top: 0; bottom: 0;
+          max-width: calc(100% - 46px);
+          padding: 0 12px 0 8px; box-sizing: border-box;
           display: flex; align-items: center; justify-content: flex-start;
           gap: 6px;
           pointer-events: none;
+          border-radius: 8px 12px 12px 8px;
+          background: linear-gradient(180deg, rgba(16,12,24,0.94), rgba(8,6,13,0.96));
+          border-right: 1px solid rgba(203,164,86,0.5);
+          box-shadow: 3px 0 10px rgba(0,0,0,0.6);
         }
         /* Le sceau du Commandant, a gauche de son pseudo (01/09). Meme ombre
            portee que le nom : certaines bannieres ont la pierre claire, et un
@@ -19672,7 +19680,6 @@ export default function Emprise() {
                         aria-hidden="true"
                       />
                     )}
-                    <span className="hub-banniere-voile" aria-hidden="true" />
                     <span className="hub-banniere-pseudo-zone">
                       {/* Le sceau du Commandant (01/09), a gauche de son nom.
                           MEME source que l avant-partie : bourse.medaillonEquipe
