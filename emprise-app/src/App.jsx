@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } fr
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged, deleteUser, signOut } from "firebase/auth";
 import {
-  doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
+  doc, getDoc, getDocFromServer, updateDoc, onSnapshot, serverTimestamp, runTransaction,
   setDoc, deleteDoc, writeBatch, collection,
 } from "firebase/firestore";
 
@@ -13887,10 +13887,32 @@ export default function Emprise() {
       }
       // 3. Le code ami ET le profil, dans le MEME lot : la regle du code exige que mon
       //    profil ne le revendique plus apres le lot, et il n y sera plus du tout.
-      const dernier = writeBatch(db);
-      if (monCodeAmi) dernier.delete(doc(db, "codesAmi", monCodeAmi));
-      dernier.delete(doc(db, "users", myUid));
-      await avecLimiteDeTemps(dernier.commit(), 15000);
+      //    Le profil se RELIT AU SERVEUR d abord (04/09), jamais depuis l etat ni depuis
+      //    le cache. La raison est une relance : si ce lot est parti pendant que ma
+      //    limite de temps rendait la main, il s est commis tout seul, et monCodeAmi
+      //    valait encore l ancien code (l ecoute du profil sort sans rien effacer quand
+      //    le document a disparu). Redemander l effacement d un index deja parti faisait
+      //    tomber le lot entier -- la regle lit resource.data sur un document absent --
+      //    et la suppression se verrouillait a vie, sans jamais atteindre le compte
+      //    anonyme. Profil present : on efface le code QU IL PORTE, puis lui. Profil
+      //    absent : il n y a plus rien a effacer ici, on passe au menage local.
+      const profilFrais = await avecLimiteDeTemps(getDocFromServer(doc(db, "users", myUid)), 15000);
+      if (profilFrais.exists()) {
+        const codeFrais = String((profilFrais.data() || {}).codeAmi || "");
+        const dernier = writeBatch(db);
+        if (codeFrais) dernier.delete(doc(db, "codesAmi", codeFrais));
+        dernier.delete(doc(db, "users", myUid));
+        await avecLimiteDeTemps(dernier.commit(), 15000);
+      } else if (monCodeAmi) {
+        // Le profil est deja parti mais un index a pu survivre seul (code vide au
+        // moment du clic, ou lot precedent coupe entre les deux). On ne l efface que
+        // s il existe ENCORE et pointe vers moi -- jamais a l aveugle, c est
+        // precisement l effacement a l aveugle qui verrouillait tout.
+        const index = await avecLimiteDeTemps(getDocFromServer(doc(db, "codesAmi", monCodeAmi)), 15000);
+        if (index.exists() && String((index.data() || {}).uid || "") === myUid) {
+          await avecLimiteDeTemps(deleteDoc(doc(db, "codesAmi", monCodeAmi)), 15000);
+        }
+      }
     } catch (e) {
       // RIEN n est efface localement, et le drapeau retombe : le compte revit.
       // Le message ne dit PLUS « votre compte est intact » -- c etait faux des que le
@@ -13898,7 +13920,7 @@ export default function Emprise() {
       // ment sur ce qui a deja disparu est pire que l echec lui-meme.
       suppressionEnMarcheRef.current = false;
       setSuppressionEnCours(false);
-      setSuppressionErreur(e && e.message === "hors-ligne"
+      setSuppressionErreur(e && (e.message === "hors-ligne" || e.code === "unavailable")
         ? "Rien n’a pu être envoyé : vous semblez hors ligne. Votre compte est intact. Reconnectez-vous, puis réessayez."
         : "La suppression s’est interrompue. Une partie de vos données a peut-être déjà été effacée : relancez-la pour aller au bout.");
       return;

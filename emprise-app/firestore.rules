@@ -1392,10 +1392,17 @@ service cloud.firestore {
       // de « il ne le revendique plus » : il a change de code, ou il n est plus la.
       // resource.data.uid == moi() ne bouge pas : c est lui qui empeche de liberer le
       // code d un autre.
+      // Un index ABSENT s efface sans condition (04/09) : c est un non-evenement, il
+      // n y a rien a proteger. Le refuser faisait tomber le lot entier de la
+      // suppression de compte -- resource est null sur un document absent, et
+      // resource.data.uid tombait en erreur -- des qu un client relancait une
+      // suppression dont le dernier lot etait deja passe : la suppression se
+      // verrouillait a vie. Tout index qui EXISTE reste garde par son uid.
       allow delete: if connecte()
-        && resource.data.uid == moi()
-        && (!existsAfter(docUser(moi()))
-            || getAfter(docUser(moi())).data.codeAmi != code);
+        && (resource == null
+            || (resource.data.uid == moi()
+                && (!existsAfter(docUser(moi()))
+                    || getAfter(docUser(moi())).data.codeAmi != code)));
     }
   }
 }
