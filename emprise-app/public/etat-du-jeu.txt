@@ -93,7 +93,7 @@ Le minuteur de tour est une rangée de huit sceaux qui s'éteignent un à un, de
 Une carte prise par les Cendres pivote comme toute capture ; attirée, elle finit son trajet, se pose, puis pivote.
 Un pseudo compte 11 caractères au plus, pour se lire en entier sur la bande du hub.
 Contre l'Écho, après un Augure affiché, l'Écho ne joue pas la case suggérée tant qu'une autre case est libre.
-Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre.
+Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre, et restent visibles le temps qu'on les voie.
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
 Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.

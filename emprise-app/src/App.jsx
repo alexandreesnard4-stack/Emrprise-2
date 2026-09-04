@@ -4320,9 +4320,10 @@ function delaisDeCarte(events) {
   const comboEmitEvent = events.find((e) => e.kind === "combo-emit" && e.dir);
   const mauditBoostEvent = events.find((e) => e.kind === "maudit-boost");
   const devoreuseEvent = events.find((e) => e.kind === "devoreuse");
-  // Le renfort d une Abysse (01/09) : 80 ms par rang parmi celles renforcees
-  // d un coup, pour que la montee en force se lise l une apres l autre.
-  const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 80 : 0;
+  // Le renfort d une Abysse : 120 ms par rang parmi celles renforcees d un coup, pour
+  // que la vague se lise carte apres carte (03/09 : 80 ms, trop serre depuis que les
+  // tentacules tiennent plus longtemps).
+  const renfortDelay = devoreuseEvent && devoreuseEvent.ordre ? devoreuseEvent.ordre * 120 : 0;
   // L'Onde ne démarre qu'une fois la Résonance bien terminée (3s) + 1s de pause — jamais
   // en même temps — puis chaque carte de la chaîne s'enchaîne toutes les 300ms par-dessus.
   const COMBO_BASE_DELAY = 4000;
@@ -10407,7 +10408,14 @@ const APP_STYLES = `
            (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
            garde son traitement : devour-rank ne bouge pas. --flip-delay : un
            pivot sur la meme carte attend la fin de la pulsation. */
-        .card.flash-devoreuse.flash-devoreuse { animation: combo-emit-pulse 0.3s ease; position: relative; --anim-deco: combo-emit-pulse 0.3s ease; --flip-delay: 0.3s; }
+        /* 03/09 : plus AUCUNE pulsation sur une Abysse renforcee -- les tentacules la
+           remplacent entierement, ils ne s y ajoutent pas. La carte ne garde de cette
+           regle que deux choses : son contexte de position, et --flip-delay, recale sur
+           la duree des tentacules. C est lui qui fait attendre un pivot de capture sur
+           la meme carte : sans ce recalage il serait tombe en plein milieu de l effet.
+           La pulsation partagee reste en place pour ses autres usages, l emettrice
+           d une chaine d Onde et la variante qui attend la fin du pivot. */
+        .card.flash-devoreuse.flash-devoreuse { position: relative; --flip-delay: 1.25s; }
         /* Les tentacules du renfort (02/09) : calque dans la case, avant la carte dans le
            DOM, z-index 0 -- la carte, positionnee apres, se peint par-dessus. 90 % de la
            largeur, image 520 x 380 ancree en bas, sa boite calee sur le haut de la carte :
@@ -10426,12 +10434,15 @@ const APP_STYLES = `
           position: absolute; left: -10%; width: 120%; height: 62%; bottom: 82%; z-index: 0; pointer-events: none;
           background-position: center bottom; background-size: contain; background-repeat: no-repeat;
           opacity: 0; transform: translateY(20px);
-          animation: tentacule-surgit 0.65s ease; animation-delay: var(--renfort-delai, 0ms); animation-fill-mode: both;
+          animation: tentacule-surgit 1.25s ease; animation-delay: var(--renfort-delai, 0ms); animation-fill-mode: both;
         }
+        /* 1,25 s au lieu de 0,65 s (03/09) : 250 ms de montee, 700 ms de TENUE, 300 ms
+           de reflux. Ils passaient trop vite pour qu on les voie sans les chercher.
+           20 % = 250 ms sur 1250, 76 % = 950 ms. */
         @keyframes tentacule-surgit {
           0%   { opacity: 0; transform: translateY(20px); }
-          23%  { opacity: 1; transform: translateY(0); }
-          69%  { opacity: 1; transform: translateY(0); }
+          20%  { opacity: 1; transform: translateY(0); }
+          76%  { opacity: 1; transform: translateY(0); }
           100% { opacity: 0; transform: translateY(20px); }
         }
         /* Croissance des Maudits : effet retardé (voir mauditBoostDelay côté JS), porté par un
