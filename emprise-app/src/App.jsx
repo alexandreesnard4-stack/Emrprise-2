@@ -20933,7 +20933,10 @@ export default function Emprise() {
             return (
               <div className="info-overlay" onClick={() => setActiveModal("profil")}>
                 <div className="info-panel rules-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="info-panel-title">Les Traités</div>
+                  {/* Pas d info-panel-title ici : la section porte deja son propre
+                      <h3 className="combos-titre">Les Traites</h3>, et les deux titres
+                      se doublaient a l ecran. Le modele « stats » en a un parce que son
+                      contenu n en a pas. */}
                     <section className="combos-section" aria-label="Les Traités">
                       <h3 className="combos-titre">Les Traités</h3>
                       <p className="combos-sous">Jouez-les pour forger votre titre : votre style parle pour vous.</p>
