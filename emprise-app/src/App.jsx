@@ -1755,6 +1755,14 @@ function variablesPlateau(cle) {
 // bouton qui ment.
 const PARTAGE_NATIF = typeof navigator !== "undefined" && !!navigator.share;
 
+// L'adresse racine du jeu, lue sur la page elle-meme -- jamais en dur : un domaine
+// ecrit a la main se perime le jour ou le jeu change d'adresse, l'origine de la page,
+// non. Sert au champ url des partages, celui que les messageries lisent pour batir
+// l'apercu du lien.
+function lienDuJeu() {
+  try { return window.location.origin + "/"; } catch (e) { return ""; }
+}
+
 // Copier un texte, partout -- y compris hors HTTPS. navigator.clipboard n'existe que sur
 // origine securisee (https ou localhost) : sur un telephone qui ouvre http://192.168.x.x
 // il vaut undefined, et l'appeler levait une TypeError avalee par le try/catch appelant.
@@ -13991,7 +13999,7 @@ export default function Emprise() {
     if (!monCodeAmi) return;
     const texte = `Rejoins-moi sur EMPRISE, mon identifiant : #${monCodeAmi}`;
     if (navigator.share) {
-      try { await navigator.share({ text: texte }); return; } catch (e) { /* annule : on copie */ }
+      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() }); return; } catch (e) { /* annule : on copie */ }
     }
     copierCodeAmi();
   }
@@ -17594,7 +17602,7 @@ export default function Emprise() {
     if (!tournoiOnlineId) return;
     const texte = `Rejoins mon tournoi EMPRISE, huit Commandants : code ${tournoiOnlineId}`;
     if (navigator.share) {
-      try { await navigator.share({ text: texte }); return; } catch (e) { /* annule : on copie */ }
+      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() }); return; } catch (e) { /* annule : on copie */ }
     }
     copierCodeTournoi();
   }
