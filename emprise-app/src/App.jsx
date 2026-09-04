@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
-import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { signInAnonymously, onAuthStateChanged, deleteUser } from "firebase/auth";
 import {
   doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
   setDoc, deleteDoc, writeBatch, collection,
@@ -6300,6 +6300,30 @@ const APP_STYLES = `
         .settings-nom { font-family: 'Cinzel', serif; font-size: 14px; color: var(--gold-bright); }
         .settings-desc { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
         .settings-fleche { font-size: 22px; color: var(--muted); line-height: 1; }
+        /* Mon compte (04/09) : un intertitre, et la ligne de suppression teintee du
+           rouge des actions graves -- celui du bouton d abandon. On ne clique pas
+           dessus par megarde. Les deux liens legaux sont des <a> et non des <div> :
+           un lien doit se comporter en lien (ouverture dans un onglet, menu
+           contextuel, lecture d ecran). */
+        .settings-titre {
+          font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.12em;
+          color: var(--muted); text-transform: uppercase;
+          margin: 18px 0 8px 4px;
+        }
+        a.settings-row { text-decoration: none; }
+        .settings-row.settings-danger { border-color: rgba(225, 91, 82, 0.35); }
+        .settings-row.settings-danger:hover { border-color: rgba(225, 91, 82, 0.7); background: rgba(225, 91, 82, 0.07); }
+        .settings-row.settings-danger .settings-nom { color: #e98b83; }
+        .suppression-panel { max-width: 340px; }
+        .suppression-invite { font-size: 11.5px; color: var(--muted); text-align: center; letter-spacing: 0.06em; }
+        .suppression-champ {
+          width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
+          background: rgba(0,0,0,0.35); border: 1px solid rgba(225, 91, 82, 0.4);
+          color: var(--bone); font-family: 'Cinzel', serif; font-size: 14px;
+          letter-spacing: 0.14em; text-align: center;
+        }
+        .suppression-champ:focus { outline: none; border-color: rgba(225, 91, 82, 0.8); }
+        .suppression-erreur { font-size: 12px; color: #e98b83; text-align: center; line-height: 1.45; }
         .settings-bascule {
           width: 44px; height: 25px; border-radius: 999px; flex-shrink: 0;
           background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
@@ -13512,6 +13536,13 @@ export default function Emprise() {
   const [codeAmiSaisi, setCodeAmiSaisi] = useState("");
   const [avisAmis, setAvisAmis] = useState(null);               // { texte, bon }
   const [amiARetirer, setAmiARetirer] = useState(null);
+  // La suppression de compte (04/09), exigee par Apple et Google. Le mot a recopier
+  // n est pas une coquetterie : la mission interdit un « OK » colle au « Annuler »,
+  // et c est la seule barriere qui demande de LIRE avant d agir.
+  const [suppressionOuverte, setSuppressionOuverte] = useState(false);
+  const [suppressionMot, setSuppressionMot] = useState("");
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
+  const [suppressionErreur, setSuppressionErreur] = useState("");
   const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
   const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t, mode, herauts }
   // La fenetre de composition d'un defi : a qui, dans quel mode, avec ou sans Herauts.
@@ -13776,6 +13807,94 @@ export default function Emprise() {
     b.delete(doc(db, "users", uidAutre, "invitations", myUid));
     await b.commit();
   }
+  // ---------- Supprimer son compte ----------
+  // Une partie en cours l interdit : la quitter proprement d abord, sinon le document
+  // de partie resterait avec un adversaire devant un plateau mort.
+  // Une FONCTION et non un const : cette section vit plus haut que la declaration de
+  // onlineGameId et de tournoiOnlineId. Un const les lirait a l instant de son
+  // evaluation -- avant qu ils existent -- et l ecran resterait blanc. Une fonction ne
+  // les lit qu a l appel, donc au rendu, quand tout est en place.
+  function partieEnCoursPourSuppression() {
+    return phase !== "landing" || !!onlineGameId || !!tournoiOnlineId;
+  }
+
+  // Les lots de Firestore acceptent 500 ecritures ; on reste tres en dessous.
+  function parPaquets(liste, taille) {
+    const out = [];
+    for (let i = 0; i < liste.length; i += taille) out.push(liste.slice(i, i + taille));
+    return out;
+  }
+
+  async function supprimerMonCompte() {
+    if (!myUid || suppressionEnCours || partieEnCoursPourSuppression()) return;
+    setSuppressionEnCours(true);
+    setSuppressionErreur("");
+    try {
+      // 1. Les amities. Les DEUX moities dans le MEME lot : la regle de chacune exige
+      //    que l autre ne survive pas au lot. Les invitations de defi echangees avec cet
+      //    ami partent avec, dans les deux sens.
+      for (const paquet of parPaquets(amis, 100)) {
+        const b = writeBatch(db);
+        paquet.forEach((ami) => {
+          b.delete(doc(db, "users", myUid, "amis", ami.uid));
+          b.delete(doc(db, "users", ami.uid, "amis", myUid));
+          b.delete(doc(db, "users", myUid, "invitations", ami.uid));
+          b.delete(doc(db, "users", ami.uid, "invitations", myUid));
+        });
+        await b.commit();
+      }
+      // 2. Le reste des sous-collections. Les demandes que J AI ENVOYEES vivent chez
+      //    l autre, et rien ne les liste de mon cote : le journal local des envois est
+      //    la seule trace que j en aie. Limite assumee -- un envoi fait sur un AUTRE
+      //    appareil ne figure pas dans ce journal et resterait chez son destinataire,
+      //    ou il ne mene plus a rien.
+      const envoyees = Object.keys((lireEnvois().envois) || {});
+      const restes = [
+        ...demandesRecues.map((d) => doc(db, "users", myUid, "demandes", d.uid)),
+        ...envoyees.map((u) => doc(db, "users", u, "demandes", myUid)),
+        ...invitationsRecues.map((i) => doc(db, "users", myUid, "invitations", i.uid)),
+        ...bloques.map((x) => doc(db, "users", myUid, "bloques", x.uid)),
+        doc(db, "users", myUid, "presence", "etat"),
+      ];
+      for (const paquet of parPaquets(restes, 200)) {
+        const b = writeBatch(db);
+        paquet.forEach((ref) => b.delete(ref));
+        await b.commit();
+      }
+      // 3. Le code ami ET le profil, dans le MEME lot : la regle du code exige que mon
+      //    profil ne le revendique plus apres le lot, et il n y sera plus du tout.
+      const dernier = writeBatch(db);
+      if (monCodeAmi) dernier.delete(doc(db, "codesAmi", monCodeAmi));
+      dernier.delete(doc(db, "users", myUid));
+      await dernier.commit();
+    } catch (e) {
+      // RIEN n est efface localement : mieux vaut un compte intact qu un compte a
+      // moitie detruit. Le joueur peut reessayer, les suppressions deja faites ne
+      // genent pas -- effacer un document absent ne leve aucune erreur.
+      setSuppressionEnCours(false);
+      setSuppressionErreur("La suppression n’a pas abouti : votre compte est intact. Vérifiez votre connexion, puis réessayez.");
+      return;
+    }
+    // 4. Le stockage local, seulement maintenant. On balaie toutes les clefs du jeu
+    //    plutot que d en nommer dix-sept : une clef ajoutee demain serait oubliee.
+    try {
+      const clefs = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("emprise-")) clefs.push(k);
+      }
+      clefs.forEach((k) => localStorage.removeItem(k));
+      sessionStorage.removeItem("emprise-save");
+    } catch (e) { /* stockage bloque : le rechargement repartira de ce qu il trouve */ }
+    // 5. Le compte anonyme lui-meme. Son echec n est pas grave -- les donnees sont deja
+    //    parties et le rechargement ouvrira un profil neuf -- mais il faut l essayer :
+    //    c est lui, le compte, aux yeux d Apple et de Google.
+    try { if (auth.currentUser) await deleteUser(auth.currentUser); } catch (e) { /* deja sans donnees */ }
+    // 6. On repart a zero. Le rechargement rouvre l ecran de nommage : le pseudo
+    //    vient d etre efface avec le reste.
+    try { window.location.reload(); } catch (e) { setSuppressionOuverte(false); }
+  }
+
   async function ajouterParCode() {
     const code = nettoyerCodeAmi(codeAmiSaisi);
     if (code.length !== IDENTIFIANT_CHIFFRES || !myUid) return;
@@ -21292,6 +21411,34 @@ export default function Emprise() {
                   </div>
                   <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
                 </div>
+                {/* Mon compte (04/09) : les deux pages legales, exigees par Apple et
+                    Google, et la suppression du compte. Les pages vivent dans public/,
+                    servies telles quelles ; elles s ouvrent dans un onglet a part pour
+                    ne pas quitter la partie en cours. */}
+                <div className="settings-titre">Mon compte</div>
+                <a className="settings-row" href="/confidentialite.html" target="_blank" rel="noopener noreferrer">
+                  <div className="settings-texte">
+                    <div className="settings-nom">Politique de confidentialité</div>
+                    <div className="settings-desc">Ce que le jeu enregistre, et ce qu'il n'enregistre pas.</div>
+                  </div>
+                  <span className="settings-fleche" aria-hidden="true">›</span>
+                </a>
+                <a className="settings-row" href="/cgu.html" target="_blank" rel="noopener noreferrer">
+                  <div className="settings-texte">
+                    <div className="settings-nom">Conditions d'utilisation</div>
+                    <div className="settings-desc">Les règles du jeu, hors du plateau.</div>
+                  </div>
+                  <span className="settings-fleche" aria-hidden="true">›</span>
+                </a>
+                <div className="settings-row settings-danger" role="button" tabIndex={0}
+                  onClick={() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); }}
+                  onKeyDown={KEY_ACTIVATE(() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); })}>
+                  <div className="settings-texte">
+                    <div className="settings-nom">Supprimer mon compte</div>
+                    <div className="settings-desc">Efface définitivement le profil, les amis et toute la progression.</div>
+                  </div>
+                  <span className="settings-fleche" aria-hidden="true">›</span>
+                </div>
                 <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
                 {/* La version de l'application. C'est elle qu'on se lit a voix haute pour
                     savoir si un telephone est a jour : si cette ligne manque ou differe de
@@ -23940,6 +24087,51 @@ export default function Emprise() {
                 setBlocageAConfirmer(null); setProfilAdverse(null);
               }}>Bloquer</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* La confirmation de suppression. Elle ENUMERE ce qui part, dit que c est
+          definitif, et demande de recopier un mot : pas de bouton « OK » colle au
+          « Annuler » sur lequel le pouce glisse. */}
+      {suppressionOuverte && (
+        <div className="info-overlay" onClick={() => { if (!suppressionEnCours) setSuppressionOuverte(false); }}>
+          <div className="info-panel confirm-panel suppression-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="info-panel-title">Supprimer votre compte ?</div>
+            {partieEnCoursPourSuppression() ? (
+              <>
+                <div className="confirm-text">Une partie est en cours. Terminez-la ou quittez-la avant de supprimer votre compte.</div>
+                <div className="confirm-actions">
+                  <button className="reset-btn" onClick={() => setSuppressionOuverte(false)}>Retour</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="confirm-text">
+                  Vous perdrez votre profil et votre pseudonyme, votre identifiant d'ami,
+                  votre liste d'amis, toute votre progression (niveau, trophées, quêtes,
+                  titres) ainsi que vos pièces, vos gemmes et tous vos cosmétiques.
+                  <b> C'est définitif : rien ne peut être rétabli.</b>
+                </div>
+                <label className="suppression-invite" htmlFor="suppression-mot">
+                  Pour confirmer, recopiez SUPPRIMER
+                </label>
+                <input id="suppression-mot" className="suppression-champ" type="text"
+                  value={suppressionMot} autoComplete="off" spellCheck="false"
+                  onChange={(e) => setSuppressionMot(e.target.value)}
+                  disabled={suppressionEnCours} aria-label="Recopiez SUPPRIMER pour confirmer" />
+                {suppressionErreur && <div className="suppression-erreur">{suppressionErreur}</div>}
+                <div className="confirm-actions">
+                  <button className="reset-btn" disabled={suppressionEnCours}
+                    onClick={() => setSuppressionOuverte(false)}>Annuler</button>
+                  <button className="reset-btn quit-confirm"
+                    disabled={suppressionEnCours || suppressionMot.trim().toUpperCase() !== "SUPPRIMER"}
+                    onClick={supprimerMonCompte}>
+                    {suppressionEnCours ? "Suppression..." : "Supprimer définitivement"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1174,7 +1174,14 @@ service cloud.firestore {
         // Le compteur anti-rafale ne s'efface pas en reecrivant le profil sans lui.
         && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data);
 
-      allow delete: if false;
+      // Supprimer son compte (04/09) : le sien, et le sien seulement. Exige par Apple
+      // et Google pour la publication. Il n y avait AUCUN allow delete ici, donc un
+      // refus par defaut : le profil etait indestructible, y compris par son
+      // proprietaire.
+      // A savoir, et c est le client qui doit s en charger : supprimer un document ne
+      // supprime PAS ses sous-collections. Amis, demandes, invitations, bloques et
+      // presence doivent partir AVANT, sinon ils restent orphelins et invisibles.
+      allow delete: if connecte() && moi() == uid;
 
       // ---------- Demandes d'ami reçues ----------
       // Le point dur : un INCONNU écrit chez moi. Il ne peut créer QUE le document qui
@@ -1311,7 +1318,10 @@ service cloud.firestore {
           && cle == 'etat'
           && request.resource.data.keys().hasOnly(['vuLe'])
           && request.resource.data.vuLe == request.time;
-        allow delete: if false;
+        // 04/09 : son proprietaire peut l effacer, pour la suppression de compte. Le
+        // « if false » d avant tenait tant que rien ne devait disparaitre ; il laissait
+        // desormais une trace de presence derriere un compte supprime.
+        allow delete: if connecte() && moi() == uid;
       }
     }
 
@@ -1375,9 +1385,17 @@ service cloud.firestore {
         && request.resource.data.uid == moi()
         && getAfter(docUser(moi())).data.codeAmi == code;
       allow update: if false;
+      // La condition d origine -- mon profil ne revendique plus ce code apres le lot --
+      // suppose que ce profil EXISTE encore. A la suppression de compte il part dans le
+      // meme lot, et getAfter porterait alors sur un document inexistant : la regle
+      // refusait, et le code restait reserve a jamais. On accepte donc les deux formes
+      // de « il ne le revendique plus » : il a change de code, ou il n est plus la.
+      // resource.data.uid == moi() ne bouge pas : c est lui qui empeche de liberer le
+      // code d un autre.
       allow delete: if connecte()
         && resource.data.uid == moi()
-        && getAfter(docUser(moi())).data.codeAmi != code;
+        && (!existsAfter(docUser(moi()))
+            || getAfter(docUser(moi())).data.codeAmi != code);
     }
   }
 }

@@ -78,6 +78,7 @@ En partie classée, chacun voit la bannière équipée de l'adversaire dès l'é
 Un ami retiré peut être redemandé aussitôt : le délai d'un jour ne vise que les demandes restées sans réponse.
 La revanche s'affiche dès qu'on la propose, sans attendre la réponse du serveur.
 Un duel entre amis ne rapporte ni XP, ni pièces, ni avancement de quête : il se joue pour le plaisir. Les parties jouées et les victoires, elles, comptent.
+Réglages, rubrique Mon compte : la politique de confidentialité, les conditions d'utilisation, et la suppression définitive du compte.
 L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
 Avant-partie : chaque camp sur son territoire — un bandeau d'étendard portant médaillon de l'Ordre favori, pseudo, titre de style (avant le premier titre, la ligne dit que le style se dessine, pour soi comme pour l'adversaire en ligne), carte de niveau et trophées, la main et la Réserve posées dessous.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
