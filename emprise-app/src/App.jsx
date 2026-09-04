@@ -9030,6 +9030,25 @@ const APP_STYLES = `
           margin: 10px 0 6px; padding-bottom: 4px;
           border-bottom: 1px solid rgba(203,164,86,0.18);
         }
+        /* 04/09 : le bloc de style du profil est devenu une porte vers les Traites.
+           Un bouton qui ne se voit pas -- ni fond, ni bordure, ni retrait : il herite
+           tout du profil et ne deplace pas une ligne. Seul le chevron dit qu il ouvre.
+           font: inherit est indispensable : un bouton n herite pas la police tout seul,
+           et le bloc serait retombe dans la police du navigateur. */
+        .profil-style-porte {
+          display: block; width: 100%; text-align: left;
+          background: none; border: none; padding: 0; margin: 0;
+          color: inherit; font: inherit; cursor: pointer;
+          -webkit-appearance: none; appearance: none;
+        }
+        .profil-style-porte:active { opacity: 0.8; }
+        /* La ligne du titre devient une rangee pour que le chevron parte a droite. La
+           classe de base n est PAS touchee : elle sert ailleurs, aux Combos realises et
+           a la fiche d un autre Commandant. */
+        .profil-style-titre { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        /* Le chevron herite l or de la ligne. Un peu plus grand et sans interlettrage :
+           a 10 px avec 0.2em d ecart, il se serait perdu contre le bord. */
+        .profil-style-chevron { font-size: 14px; letter-spacing: 0; line-height: 1; }
         .modes-panel { position: relative; padding-top: 18px; }
         .modes-panel .info-panel-title { margin-bottom: 2px; }
         .modes-fermer {
@@ -20332,107 +20351,6 @@ export default function Emprise() {
                   })}
                 </div>
 
-                {/* ---------- Le grimoire des combos (01/09) ----------
-                    Purement informatif. Il LIT titresDuProfil et COMBOS, il ne
-                    compte rien, ne decide d aucun titre et ne touche a rien.
-                    Aucune donnee de combo n est ecrite ici : le jour ou le
-                    catalogue s enrichira, la liste s allongera toute seule. */}
-                {(() => {
-                  const profil = titresDuProfil(stats);
-                  const nomTitre = profil.titres.length ? profil.titres[0].combo.nom
-                    : profil.repli ? profil.repli.nom : null;
-                  // Le classement ne porte QUE les combos deja reussis : un
-                  // combo absent vaut zero, il ne s invente pas.
-                  const rangDe = (cle) => profil.classement.find((t) => t.combo.key === cle) || { parties: 0, taux: 0 };
-                  // 01/09 : la section s appelle « Les Traites » a l ecran.
-                  // SEULS les textes changent -- COMBOS, COMBOS_RATES, les
-                  // champs de stats (combos, combosParties) et tout ce qui
-                  // voyage vers Firestore gardent leur nom. Renommer une donnee
-                  // stockee aurait perdu les parties deja comptees.
-                  return (
-                    <section className="combos-section" aria-label="Les Traités">
-                      <h3 className="combos-titre">Les Traités</h3>
-                      <p className="combos-sous">Jouez-les pour forger votre titre : votre style parle pour vous.</p>
-                      <div className="combos-etat">
-                        {nomTitre
-                          ? `Votre style : ${nomTitre}`
-                          : `Votre style se dessine — ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
-                      </div>
-                      <div className="combos-liste">
-                        {COMBOS.map((combo) => {
-                          const r = rangDe(combo.key);
-                          const pourcent = Math.min(100, Math.round(r.taux * 100));
-                          return (
-                            <article key={combo.key} className="combo-fiche">
-                              <div className="combo-entete">
-                                <span className="combo-nom">{combo.nom}</span>
-                                {/* 01/09 : les noms remplacent les emblemes. Ils
-                                    viennent d ORDERS par la cle, jamais ecrits
-                                    ici : un Ordre renomme se renomme tout seul,
-                                    et le combo des Geoliers s affichera sans
-                                    qu on y revienne. */}
-                                <span className="combo-ordres">
-                                  {combo.ordres
-                                    .map((k) => (ORDERS.find((o) => o.key === k) || {}).name)
-                                    .filter(Boolean)
-                                    .join(" + ")}
-                                </span>
-                              </div>
-                              <p className="combo-recit">{combo.recit}</p>
-                              <p className="combo-signe">Signe : <b>{combo.signe}</b></p>
-                              {/* Le seul combo que son propre Heraut eteint. La
-                                  condition porte sur la CLE, pas sur le rang :
-                                  reordonner COMBOS ne deplacera pas l encart. */}
-                              {combo.key === "or-corrompu" && (
-                                <div className="combo-avertissement">
-                                  <span aria-hidden="true">⚠️</span>
-                                  <span>Se joue SANS le Héraut des Pestiférés : il épargne votre camp et éteint le traité.</span>
-                                </div>
-                              )}
-                              <div className="combo-jauge">
-                                <div className="combo-jauge-piste" role="img"
-                                     aria-label={`${combo.nom} : ${r.parties} partie${r.parties > 1 ? "s" : ""} sur ${profil.parties} comptée${profil.parties > 1 ? "s" : ""}`}>
-                                  <div className="combo-jauge-part" style={{ width: pourcent + "%" }} />
-                                </div>
-                                <div className="combo-jauge-texte" aria-hidden="true">
-                                  {r.parties}/{profil.parties} · {pourcent} %
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="combos-rates-bouton"
-                        aria-expanded={combosRatesOuvert}
-                        onClick={() => setCombosRatesOuvert((v) => !v)}
-                      >
-                        <span>Les mariages ratés — ce qu&apos;aucun traité ne recommande</span>
-                        <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
-                      </button>
-                      {combosRatesOuvert && (
-                        <div className="combos-rates-corps">
-                          {COMBOS_RATES.map((r) => (
-                            <p key={r.paire} className="combos-rate"><b>{r.paire}</b> : {r.texte}</p>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* « vous marchez en L Errant » ne se disait pas : les noms
-                          des titres portent leur article, et la phrase les
-                          accueille au lieu de les tronquer. Le commentaire est
-                          POSE AVANT le bloc : glisse entre deux lignes de
-                          texte, JSX y mange l espace et collait les mots. */}
-                      <div className="combos-repli">
-                        Aucun traité dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
-                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> — sinon,
-                        vous restez <b>{TITRES_REPLI.errant.nom}</b>.
-                      </div>
-                    </section>
-                  );
-                })()}
               </section>
             )}
           </main>
@@ -20902,7 +20820,20 @@ export default function Emprise() {
                     )}
                   </button>
 
-                  <div className="profil-section-titre">Le Commandant que vous êtes</div>
+                  {/* 04/09 : le bloc de style ouvre les Traites. UN SEUL bouton porte le
+                      titre de section et les trois cas dessous -- avec titres, avec le titre
+                      de repli, ou la jauge de progression. Les trois sont donc cliquables, et
+                      c est voulu : quand on n a pas encore de titre, c est la qu on a le plus
+                      besoin de voir ce qu on peut viser. Le bloc ne contient aucun element
+                      interactif, rien ne s imbrique. Le bouton n ajoute ni fond ni bordure ;
+                      seul un chevron dit qu il s ouvre. */}
+                  <button type="button" className="profil-style-porte"
+                          onClick={() => setActiveModal("traites")} aria-haspopup="dialog"
+                          title="Voir les Traités">
+                  <div className="profil-section-titre profil-style-titre">
+                    <span>Le Commandant que vous êtes</span>
+                    <span className="profil-style-chevron" aria-hidden="true">›</span>
+                  </div>
                   {profil.titres.length > 0 ? (
                     profil.titres.map((t, i) => (
                       <div key={t.combo.key} className={`profil-titre ${i === 0 ? "principal" : ""}`}>
@@ -20942,6 +20873,7 @@ export default function Emprise() {
                       </div>
                     </>
                   )}
+                  </button>
 
                   {profil.classement.length > 0 && (
                     <>
@@ -20964,6 +20896,116 @@ export default function Emprise() {
           })()}
 
           {/* ---------- Ecran Amis ---------- */}
+          {/* ---------- Les Traites, en fenetre du profil (04/09) ----------
+              La section vivait dans la page Ordres du hub, sous les huit portraits.
+              Elle est maintenant derriere le bloc de style du profil : c est la que le
+              joueur se demande quel Commandant il est, donc la que la reponse doit
+              s ouvrir. Le JSX de la section n a pas bouge d une ligne, indentation
+              comprise -- seul son toit a change.
+              La fenetre se ferme vers le PROFIL et non vers le hub : c est de la
+              qu on vient, et c est le seul chemin qui y mene. */}
+          {activeModal === "traites" && (() => {
+            const profil = titresDuProfil(stats);
+            const nomTitre = profil.titres.length ? profil.titres[0].combo.nom
+              : profil.repli ? profil.repli.nom : null;
+            // Le classement ne porte QUE les combos deja reussis : un
+            // combo absent vaut zero, il ne s invente pas.
+            const rangDe = (cle) => profil.classement.find((t) => t.combo.key === cle) || { parties: 0, taux: 0 };
+            // 01/09 : la section s appelle « Les Traites » a l ecran.
+            // SEULS les textes changent -- COMBOS, COMBOS_RATES, les
+            // champs de stats (combos, combosParties) et tout ce qui
+            // voyage vers Firestore gardent leur nom. Renommer une donnee
+            // stockee aurait perdu les parties deja comptees.
+            return (
+              <div className="info-overlay" onClick={() => setActiveModal("profil")}>
+                <div className="info-panel rules-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="info-panel-title">Les Traités</div>
+                    <section className="combos-section" aria-label="Les Traités">
+                      <h3 className="combos-titre">Les Traités</h3>
+                      <p className="combos-sous">Jouez-les pour forger votre titre : votre style parle pour vous.</p>
+                      <div className="combos-etat">
+                        {nomTitre
+                          ? `Votre style : ${nomTitre}`
+                          : `Votre style se dessine — ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
+                      </div>
+                      <div className="combos-liste">
+                        {COMBOS.map((combo) => {
+                          const r = rangDe(combo.key);
+                          const pourcent = Math.min(100, Math.round(r.taux * 100));
+                          return (
+                            <article key={combo.key} className="combo-fiche">
+                              <div className="combo-entete">
+                                <span className="combo-nom">{combo.nom}</span>
+                                {/* 01/09 : les noms remplacent les emblemes. Ils
+                                    viennent d ORDERS par la cle, jamais ecrits
+                                    ici : un Ordre renomme se renomme tout seul,
+                                    et le combo des Geoliers s affichera sans
+                                    qu on y revienne. */}
+                                <span className="combo-ordres">
+                                  {combo.ordres
+                                    .map((k) => (ORDERS.find((o) => o.key === k) || {}).name)
+                                    .filter(Boolean)
+                                    .join(" + ")}
+                                </span>
+                              </div>
+                              <p className="combo-recit">{combo.recit}</p>
+                              <p className="combo-signe">Signe : <b>{combo.signe}</b></p>
+                              {/* Le seul combo que son propre Heraut eteint. La
+                                  condition porte sur la CLE, pas sur le rang :
+                                  reordonner COMBOS ne deplacera pas l encart. */}
+                              {combo.key === "or-corrompu" && (
+                                <div className="combo-avertissement">
+                                  <span aria-hidden="true">⚠️</span>
+                                  <span>Se joue SANS le Héraut des Pestiférés : il épargne votre camp et éteint le traité.</span>
+                                </div>
+                              )}
+                              <div className="combo-jauge">
+                                <div className="combo-jauge-piste" role="img"
+                                     aria-label={`${combo.nom} : ${r.parties} partie${r.parties > 1 ? "s" : ""} sur ${profil.parties} comptée${profil.parties > 1 ? "s" : ""}`}>
+                                  <div className="combo-jauge-part" style={{ width: pourcent + "%" }} />
+                                </div>
+                                <div className="combo-jauge-texte" aria-hidden="true">
+                                  {r.parties}/{profil.parties} · {pourcent} %
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="combos-rates-bouton"
+                        aria-expanded={combosRatesOuvert}
+                        onClick={() => setCombosRatesOuvert((v) => !v)}
+                      >
+                        <span>Les mariages ratés — ce qu&apos;aucun traité ne recommande</span>
+                        <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
+                      </button>
+                      {combosRatesOuvert && (
+                        <div className="combos-rates-corps">
+                          {COMBOS_RATES.map((r) => (
+                            <p key={r.paire} className="combos-rate"><b>{r.paire}</b> : {r.texte}</p>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* « vous marchez en L Errant » ne se disait pas : les noms
+                          des titres portent leur article, et la phrase les
+                          accueille au lieu de les tronquer. Le commentaire est
+                          POSE AVANT le bloc : glisse entre deux lignes de
+                          texte, JSX y mange l espace et collait les mots. */}
+                      <div className="combos-repli">
+                        Aucun traité dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
+                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> — sinon,
+                        vous restez <b>{TITRES_REPLI.errant.nom}</b>.
+                      </div>
+                    </section>
+                  <button className="reset-btn" onClick={() => setActiveModal("profil")}>Fermer</button>
+                </div>
+              </div>
+            );
+          })()}
           {activeModal === "amis" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
