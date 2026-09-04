@@ -7046,19 +7046,16 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 17px; letter-spacing: 0.14em;
           text-transform: uppercase; color: var(--gold-bright); margin: 6px 0 0;
         }
-        /* La page Ordres se centre dans l espace libre (03/09). Il n y avait
-           aucune regle qui poussait le bloc vers le bas : .hub-page fait toute
-           la hauteur (height 100 %) et empile ses enfants en flex-start, si
-           bien que TOUT le mou se ramassait sous la grille -- mesure en
-           390x844 : 10 px d air au-dessus du titre, 236 px de ciel vide
-           dessous. Deux marges auto rendent ce mou aux deux bords. Elles ne
-           debordent jamais : quand la grille remplit deja la boite, une marge
-           auto vaut zero, donc la regle de la maison (Jouer et Ordres tiennent
-           sans defilement) reste vraie sur les ecrans courts. On vise les
-           enfants par leur nom plutot que par first-child et last-child : le
-           calque de defi se pose dans cette meme boite. */
-        .hub-page.page-ordres .hub-page-titre { margin-top: auto; }
-        .hub-page.page-ordres .hub-ordres-grille4 { margin-bottom: auto; }
+        /* La page Ordres vit en HAUT de sa boite (04/09). Le centrage vertical
+           du 03/09 -- deux marges auto qui rendaient le mou aux deux bords --
+           datait des Traites poses SOUS la grille : le bloc etait alors haut et
+           il fallait l equilibrer. Les Traites partis dans une fenetre du
+           profil, ce centrage laissait un vide de voute au-dessus du titre.
+           Dix pixels d air sous la tuile, pas colle, pas centre ; tout l espace
+           libre va au sol, sous la grille. justify-content: flex-start reste
+           sur la page : c est lui qui empeche le contenu de deborder par le
+           haut quand la boite est plus courte que lui. */
+        .hub-page.page-ordres .hub-page-titre { margin-top: 10px; }
         .hub-page-sous { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
         /* ---------- Boutique : ce qu'on possede, et bientot ce qu'on achete ---------- */
         .boutique-page { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 2px; }
