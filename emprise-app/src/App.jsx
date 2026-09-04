@@ -4617,7 +4617,6 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
   const nbPas = attractionPullEvent ? nbPasCendres(attractionPullEvent.steps) : 0;
   const trajetMs = attractionPullEvent ? dureeTrajetCendres(attractionPullEvent.steps) : 0;
   const classesTrajet = attractionPullEvent ? `pull-pas-${nbPas}${events.some((e) => e.kind === "attraction") ? " pull-capturee" : ""}` : "";
-  const devouring = events.some((e) => e.kind === "devoreuse");
   const mauditBoostEvent = events.find((e) => e.kind === "maudit-boost");
   // Résonance : côté(s) où un rang égal a matché — sur la carte capturée ("same") ET sur
   // la carte posée elle-même ("same-self"), pour que les 2 valeurs à l'origine du match
@@ -4717,13 +4716,12 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
       ))}
       {resonanceShockDir && <span className={`resonance-ring ring-from-${resonanceShockDir}`} />}
       {comboEmitEvent && <span className={`combo-impulse impulse-from-${comboEmitEvent.dir}`} style={{ animationDelay: `${comboDelay}ms` }} />}
-      {devouring && (
-        <svg className="abysse-tentacles" viewBox="0 0 100 130">
-          {[0, 45, 90, 135, 180, 225, 270, 315].map((a, i) => (
-            <path key={i} d="M50,65 C44,42 47,28 49,16 C49.5,13 50.5,13 51,16 C53,28 56,42 50,65 Z" transform={`rotate(${a} 50 65)`} />
-          ))}
-        </svg>
-      )}
+      {/* 04/09 : le SVG de tentacules violettes qui vivait ICI est retire. Il doublait le
+          calque .tentacule-fx (l image du depot), rendu dans la CASE, sous la meme
+          condition : les deux jouaient ensemble, et celui-ci passait par-dessus les
+          pastilles de rang. Il n avait en plus aucun garde-fou de rejeu, la ou le calque
+          passe par effetsDejaJoues. Le renfort d une Abysse, ce sont les tentacules du
+          calque, et rien d autre. */}
       {deltaEvents.map((e, di) => (
         <span
           key={di}
@@ -10543,11 +10541,6 @@ const APP_STYLES = `
            (elle n avait jamais eu de pivot : ember-flicker seulement). Adjacente, tout
            de suite ; attiree, voir plus bas : apres son dernier pas. */
         .card.flash-attraction-prise.flash-attraction-prise.flash-attraction-prise { animation: var(--anim-deco, none), var(--tour-nom, flip-gold) var(--tour-duree) var(--tour-courbe) var(--flip-delay, 0s) backwards, var(--anim-apres, none); }
-        /* Renfort des Abysses (01/09) : la pulsation partagee, celle de l Onde --
-           une montee en force, scale 1 a 1,08, 300 ms. L ancien devoreuse-void
-           (tassement a 0,8, bond a 1,28, halo) est retire. Le +1 sur les rangs
-           garde son traitement : devour-rank ne bouge pas. --flip-delay : un
-           pivot sur la meme carte attend la fin de la pulsation. */
         /* 03/09 : plus AUCUNE pulsation sur une Abysse renforcee -- les tentacules la
            remplacent entierement, ils ne s y ajoutent pas. La carte ne garde de cette
            regle que deux choses : son contexte de position, et --flip-delay, recale sur
@@ -10783,13 +10776,11 @@ const APP_STYLES = `
            passages precedents avaient restyle le calque sans jamais toucher a ses
            pseudo-elements : ils jouaient donc PAR-DESSUS le sang, et au-dessus des
            pastilles de rang. Le sang qui monte raconte seul le renfort. */
-        .rank.rank-maudit-boost { animation: maudit-rank 1.4s ease; }
-        @keyframes maudit-rank {
-          0% { scale: 1; }
-          40% { scale: 1.25; color: #fff; text-shadow: 0 0 8px #ff2a2a, 0 0 15px rgba(180,0,0,0.9); }
-          70% { scale: 0.96; }
-          100% { scale: 1; }
-        }
+        /* 04/09 : .rank.rank-maudit-boost / maudit-rank est retiree. Les pastilles d un
+           Maudit renforce grossissaient a 1,25, passaient au blanc et prenaient un halo
+           rouge -- l ancien effet, d avant le sang, cache lui aussi sur les pastilles.
+           Le +1 vert ne passe PAS par la : c est .delta-badge.delta-pos, un element a
+           part, anime par delta-pop, et il ne bouge pas. */
         /* Le bouclier du Gardien (02/09) : l image, centree sur le bord concerne de la
            carte (le cote attaque ; avec le Heraut, le cote qui frappe), 34 px de haut.
            Fondu + leger pop (0,7 -> 1, 200 ms), tenue 450 ms, fondu de sortie 200 ms :
@@ -11034,24 +11025,13 @@ const APP_STYLES = `
         }
 
 
-        /* Abysses, plus ample : la carte s'affaisse puis rebondit fort, ondes violettes plus larges */
-        .card.flash-devoreuse .rank { animation: devour-rank 1.6s ease; }
-        /* Abysses : tentacules d'ombre qui jaillissent de la carte puis se rétractent */
-        .abysse-tentacles {
-          position: absolute; inset: -22%; width: 144%; height: 144%; pointer-events: none; z-index: 4;
-          overflow: visible; transform-origin: center; opacity: 0;
-          filter: drop-shadow(0 0 6px var(--devour)) blur(0.4px);
-          animation: tentacle-writhe 1.7s cubic-bezier(0.3, 0.8, 0.4, 1);
-        }
-        .abysse-tentacles path { fill: var(--devour); opacity: 0.66; }
-        @keyframes tentacle-writhe {
-          0%   { opacity: 0; transform: scale(0.2) rotate(-10deg); }
-          28%  { opacity: 0.95; transform: scale(1.12) rotate(5deg); }
-          52%  { opacity: 0.85; transform: scale(0.92) rotate(-4deg); }
-          74%  { opacity: 0.7; transform: scale(1.06) rotate(3deg); }
-          100% { opacity: 0; transform: scale(1.25) rotate(-2deg); }
-        }
-        @keyframes devour-rank { 0%{scale:1} 35%{scale:1.28; color:#fff; text-shadow:0 0 9px var(--devour), 0 0 16px var(--devour)} 60%{scale:0.94} 100%{scale:1} }
+        /* 04/09 : trois choses ont disparu d ici, toutes anterieures aux tentacules.
+           .card.flash-devoreuse .rank / devour-rank : les pastilles d une Abysse
+             renforcee grossissaient a 1,28, passaient au blanc et prenaient un halo
+             violet. C est le rebond sur les rangs. Elle s etait cachee trois missions
+             durant, parce qu on s interdisait de toucher aux pastilles.
+           .abysse-tentacles / tentacle-writhe : un SVG de huit chemins violets, DANS la
+             carte, au-dessus des pastilles, qui jouait EN MEME TEMPS que le calque. */
         /* Le sang du Maudit (04/09, second passage) : 350 ms de montee en fondu, 1 300 ms
            de MAINTIEN, 350 ms de reflux -- 2 s en tout, soit 17,5 % et 82,5 % de la course.
            Le maintien est ce qu on regarde ; le reste n est que l entree et la sortie. */
@@ -11061,7 +11041,6 @@ const APP_STYLES = `
           82.5% { opacity: 1; transform: translateY(0); }
           100%  { opacity: 0; transform: translateY(100%); }
         }
-        @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
 
         /* Cendres, braises qui crépitent, flash à chaque pose */
         @keyframes ember-flicker {
