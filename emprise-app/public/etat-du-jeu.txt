@@ -1,4 +1,5 @@
 EMPRISE - État du jeu
+Version : horodatage posé automatiquement à la construction (remplacé dans la copie servie).
 Ce fichier liste ce qui est jouable aujourd'hui. Une ligne par fonctionnalité.
 
 == Moteur ==

@@ -1497,10 +1497,16 @@ function ordreLePlusJoue(stats) {
 // vides, et l'on recompte. Rien n'est tire au sort au moment le plus tendu du duel.
 const RESERVE_TAILLE = 2;
 const MORT_SUBITE_RONDES_MAX = 2;
-// La version affichee au bas des Reglages. A BOUGER a chaque livraison notable : c'est
-// elle qui permet de savoir en un regard si un telephone est a jour, au lieu de deviner
-// a travers trois messages. Le format dit la date et l'heure de la livraison.
-const VERSION_AFFICHEE = "29 août · 15h";
+// La version affichee au bas des Reglages : elle permet de savoir en un regard si un
+// telephone sert le dernier deploiement ou une vieille copie en cache.
+// 04/09 : elle n est plus ECRITE A LA MAIN. vite.config calcule l heure de la
+// construction, au fuseau de Paris, et l injecte ici -- dans le serveur de
+// developpement comme dans le build. La constante d avant affichait encore
+// "29 aout . 15h" six jours plus tard : un horodatage a la main ment des le build
+// suivant, et un repere qui ment est pire que pas de repere du tout.
+// Le repli ne sert qu au cas ou le fichier serait charge hors de Vite (les sondes hors
+// ecran, qui compilent App.jsx a la main) : il ne s affiche jamais au joueur.
+const VERSION_AFFICHEE = typeof __HORODATAGE_BUILD__ === "string" ? __HORODATAGE_BUILD__ : "construction inconnue";
 
 // L'avance du premier joueur, dans TOUS les modes. Deux points, et non un : a un point
 // la somme etait impaire (16 + 1 = 17) et l'egalite parfaite restait impossible, donc la
