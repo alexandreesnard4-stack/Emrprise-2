@@ -6585,29 +6585,21 @@ const APP_STYLES = `
            gauche de la carte, une ligne, ellipse s'il deborde. */
         /* 02/09 : plus de centrage -- le sceau et le nom sont cales a GAUCHE de la
            bande (demande du Commandant) ; la carte de niveau garde la droite. */
-        /* 04/09 : la zone devient une PLAQUE opaque accolee au bord gauche. Le voile
-           qu elle remplace assombrissait toute la bande pour rendre lisibles le sceau et
-           le nom ; la plaque n assombrit que ce qu il faut, et l etoffe se montre partout
-           ailleurs. Plus d inset: 0 -- sans « right », la plaque se taille sur son contenu.
-           max-width calc(100% - 46px) : 26 px de carte de niveau, 8 px de son bord droit,
-           12 px d air. Elle ne doit JAMAIS toucher la carte, meme avec un pseudo de onze
-           signes ; au-dela, l ellipse du bouton prend le relais, elle existe deja.
-           border-radius 8px a gauche : c est le rayon INTERIEUR du cadre (9 px moins la
-           bordure de 1 px). .hub-banniere est en overflow: visible -- la carte de niveau
-           en depend -- donc un coin carre depasserait du cadre au lieu d etre rogne.
-           Le degrade vertical et l ombre portee a droite donnent le relief de la plaque
-           gravee. Rien ici n est anime. */
+        /* 04/09, second temps : la plaque noire essayee le matin est retiree. Plus RIEN
+           ne recouvre l etoffe : ni voile, ni plaque. La zone redevient ce qu elle etait,
+           une simple mise en place invisible, et le nom ne tient plus que par ses trois
+           ombres de texte -- elles sont dimensionnees pour cela, y compris sur les
+           bannieres les plus claires.
+           La geometrie d origine revient avec elle, et ce n est pas de la nostalgie : les
+           quatre paliers de taille du pseudo ont ete calibres sur 83 px de bouton, mesures
+           dans CETTE geometrie. La plaque n en laissait que 57 et coupait un nom de six
+           lettres qui se lisait entier la veille. */
         .hub-banniere-pseudo-zone {
-          position: absolute; left: 0; top: 0; bottom: 0;
-          max-width: calc(100% - 46px);
-          padding: 0 12px 0 8px; box-sizing: border-box;
+          position: absolute; inset: 0;
+          padding-left: 8px; padding-right: 38px; box-sizing: border-box;
           display: flex; align-items: center; justify-content: flex-start;
           gap: 6px;
           pointer-events: none;
-          border-radius: 8px 12px 12px 8px;
-          background: linear-gradient(180deg, rgba(16,12,24,0.94), rgba(8,6,13,0.96));
-          border-right: 1px solid rgba(203,164,86,0.5);
-          box-shadow: 3px 0 10px rgba(0,0,0,0.6);
         }
         /* Le sceau du Commandant, a gauche de son pseudo (01/09). Meme ombre
            portee que le nom : certaines bannieres ont la pierre claire, et un
