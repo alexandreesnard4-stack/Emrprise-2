@@ -7002,6 +7002,20 @@ const APP_STYLES = `
         .hub-page.page-ordres {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
+          /* Le lieu des Ordres (04/09), pose exactement comme celui de la boutique :
+             deux couches, le voile sombre puis le mur, et la couleur pleine en repli si
+             le fichier tarde ou manque -- la page reste sombre et propre.
+             PAS de mask-image ici, contrairement a la boutique : cette page NE DEFILE
+             PAS, et un fondu du bas dessinerait une ligne au ras de la navigation.
+             Les marges automatiques du titre et de la grille ne sont pas touchees : ce
+             sont elles qui centrent les huit portraits, et un fond ne les regarde pas. */
+          background-color: #100c1a;
+          background-image:
+            linear-gradient(180deg, rgba(10,8,15,0.55), rgba(10,8,15,0.35) 40%, rgba(10,8,15,0.6)),
+            url("/fonds/fond-hub-ordres.webp");
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
         }
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
