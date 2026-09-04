@@ -3542,6 +3542,17 @@ const FONDS_ECRANS = {
   "tutorial": "/fonds/fond-tutoriel.webp",
 };
 
+// Le hub n est qu UNE phase, « landing », mais il montre TROIS pages. FONDS_ECRANS,
+// indexee par la phase, ne sait pas les distinguer : il lui faut une jumelle indexee
+// par hubPage. Meme regle qu elle, et c est ce qui compte : une page absente de la
+// table ne rend pas un trou, elle rend le ciel d orage de la couche du dessous.
+// « jouer » n y figure PAS, et ce n est pas un oubli : cette page garde le ciel seul,
+// c est son decor.
+const FONDS_HUB = {
+  boutique: "/boutique/fond-boutique.webp",
+  ordres: "/fonds/fond-hub-ordres.webp",
+};
+
 // ---------- La rotation de la boutique (01/09) ----------
 // La boutique ne montre plus tout le catalogue : une selection change toutes
 // les 24 h, sur un cycle de huit jours, IDENTIQUE POUR TOUS au meme instant.
@@ -7002,38 +7013,20 @@ const APP_STYLES = `
         .hub-page.page-ordres {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
-          /* Le lieu des Ordres (04/09), pose exactement comme celui de la boutique :
-             deux couches, le voile sombre puis le mur, et la couleur pleine en repli si
-             le fichier tarde ou manque -- la page reste sombre et propre.
-             PAS de mask-image ici, contrairement a la boutique : cette page NE DEFILE
-             PAS, et un fondu du bas dessinerait une ligne au ras de la navigation.
+          /* Le lieu des Ordres ne se peint pas ici non plus (04/09) : pose ce matin sur
+             la page, il est passe le soir au calque plein ecran, par FONDS_HUB, avec
+             celui de la boutique. Aucun fond dans cette regle, c est voulu.
              Les marges automatiques du titre et de la grille ne sont pas touchees : ce
-             sont elles qui centrent les huit portraits, et un fond ne les regarde pas. */
-          background-color: #100c1a;
-          background-image:
-            linear-gradient(180deg, rgba(10,8,15,0.55), rgba(10,8,15,0.35) 40%, rgba(10,8,15,0.6)),
-            url("/fonds/fond-hub-ordres.webp");
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
+             sont elles qui centrent les portraits, et un fond ne les regarde pas. */
         }
         .hub-page.page-boutique {
           overflow-y: auto; -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
-          /* Le fond d echoppe (02/09), pose sur l element qui DEFILE : un
-             background y reste naturellement fixe pendant que le contenu
-             glisse -- le mur ne bouge pas, les rayons defilent devant, sans
-             un div de plus et sans background-attachment fixed (casse sur
-             iOS). Deux couches : le voile sombre puis le mur ; en repli
-             (fichier absent ou pas encore charge), la couleur pleine garde
-             la page sombre et propre. */
-          background-color: #100c1a;
-          background-image:
-            linear-gradient(180deg, rgba(10,8,15,0.55), rgba(10,8,15,0.35) 40%, rgba(10,8,15,0.6)),
-            url("/boutique/fond-boutique.webp");
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
+          /* Le fond d echoppe ne se peint PLUS ici (04/09) : il est passe au calque
+             plein ecran .fond-app, via FONDS_HUB. Un rectangle pose sur la page
+             s arretait a son bord, et la couture se voyait. Le mask-image du bas,
+             lui, reste : il estompe le CONTENU qui defile sous la navigation, il n a
+             jamais eu affaire au fond. */
           /* La bande morte du haut, diagnostiquee (01/09) : le titre PLATEAUX
              demarrait DANS la zone fondue du masque (fondu de 26 px), l'oeil
              voyait des pixels laves et un titre a moitie fantome. Or le
@@ -19559,13 +19552,22 @@ export default function Emprise() {
           Quand la phase figure dans FONDS_ECRANS (02/09), son fond se pose en
           premiere couche par-dessus le ciel d orage : une image absente rend
           la couche du dessous, aucun trou, aucune logique d existence -- et
-          rien ne s anime, la phase change, le fond change, sec. */}
+          rien ne s anime, la phase change, le fond change, sec.
+          Le hub (04/09) passe par ce meme calque au lieu de peindre un rectangle sur
+          chacune de ses pages. Un rectangle s arrete au bord de la page : la couture
+          se voyait. Le calque, lui, couvre l ecran entier et porte deja le vignettage.
+          Le hub etant UNE phase pour TROIS pages, c est FONDS_HUB[hubPage] qui decide
+          la, et FONDS_ECRANS[phase] partout ailleurs. Le repli est le meme des deux
+          cotes : rien de trouve, aucune premiere couche, le ciel seul. */}
       <div
         className="fond-app"
         aria-hidden="true"
-        style={FONDS_ECRANS[phase]
-          ? { backgroundImage: `url("${FONDS_ECRANS[phase]}"), url("/fonds/ciel-orage.jpg")` }
-          : undefined}
+        style={(() => {
+          const dessus = phase === "landing" ? FONDS_HUB[hubPage] : FONDS_ECRANS[phase];
+          return dessus
+            ? { backgroundImage: `url("${dessus}"), url("/fonds/ciel-orage.jpg")` }
+            : undefined;
+        })()}
       />
 
       {/* Premiere ouverture : on demande son nom avant toute chose. L'ecran recouvre tout
