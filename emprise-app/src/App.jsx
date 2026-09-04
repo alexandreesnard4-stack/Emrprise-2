@@ -10135,15 +10135,9 @@ const APP_STYLES = `
           78% { opacity: 1; scale: 1; }
           100% { opacity: 0; scale: 1.15; }
         }
-        .table.table-shake { animation: table-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
-        @keyframes table-shake {
-          0%, 100% { transform: translate(0, 0); }
-          15% { transform: translate(-1.5px, 0.5px); }
-          30% { transform: translate(1.5px, -0.5px); }
-          45% { transform: translate(-1px, -0.5px); }
-          60% { transform: translate(1px, 0.5px); }
-          75% { transform: translate(-0.5px, 0); }
-        }
+        /* La secousse de la pose (table-shake, 0,4 s) a ete retiree le 04/09 : le plateau
+           reste immobile quand on pose une carte. Celle-ci, elle, reste -- c est un autre
+           moment, quatre secondes plus tard, et elle raconte la longueur de la chaine. */
         /* Onde : micro-secousse amplifiée du plateau entier, uniquement quand la chaîne de
            combo dépasse 2 cartes (chaîne longue = impact plus marqué). */
         .table.table-shake-big { animation: table-shake-big 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
@@ -14258,7 +14252,9 @@ export default function Emprise() {
   const [dernierCoup, setDernierCoup] = useState(null); // case du dernier coup joué : sa carte porte l'or un tour
   const [ceremonieFin, setCeremonieFin] = useState(null); // "victoire" quand la cérémonie de fin joue
   const [cerPose, setCerPose] = useState(false); // un toucher pendant la cérémonie saute à l'état final
-  const [boardShake, setBoardShake] = useState(false); // secousse du plateau à l'impact d'une capture
+  // 04/09 : la secousse du plateau a la pose est retiree. Le plateau reste immobile ;
+  // seules la carte posee et ses effets bougent. Restent, et ce sont d autres moments :
+  // la secousse amplifiee d une longue Onde (ci-dessous) et la fracture de la Defaite.
   const [boardShakeBig, setBoardShakeBig] = useState(false); // secousse amplifiée : chaîne de combo > 2 cartes
   const [banner, setBanner] = useState(null); // { text, key } — affiche "Résonance"/"Onde" sur le plateau
   const bannerTimerRef = useRef(null);
@@ -14302,13 +14298,11 @@ export default function Emprise() {
   // Vrai entre MA pose et sa resolution (RYTHME_POSE_JOUEUR_MS) : le verrou
   // qui empeche de poser deux fois la meme carte pendant ce temps-la.
   const poseEnAttenteRef = useRef(false);
-  const shakeTimerRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
   useEffect(() => {
     return () => {
       clearTimeout(flashTimerRef.current);
-      clearTimeout(shakeTimerRef.current);
       clearTimeout(shakeBigTimerRef.current);
       clearTimeout(poisonTimerRef.current);
       clearTimeout(bannerTimerRef.current);
@@ -15881,7 +15875,7 @@ export default function Emprise() {
     setMode(null);
     setConfluenceActive(false);
     setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
-    setTurn("blue"); setFirstPlayer("blue"); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
+    setTurn("blue"); setFirstPlayer("blue"); setFlashes({}); setBoardShakeBig(false); setGameOver(false);
     setDernierCoup(null); setCeremonieFin(null); setCerPose(false);
     setDrag(null); setDragHoverCell(null);
     setSelected(null);
@@ -16290,7 +16284,7 @@ export default function Emprise() {
     setRedOrders([oa, ob]);
     setRedHand(makeHand(oa, ob));
     const premier = tirerPremierJoueur();
-    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
+    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShakeBig(false); setGameOver(false);
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
     setAllowUndo(false); setAllowHint(false); setHint(null); augureDuTourRef.current = null;
@@ -17557,7 +17551,7 @@ export default function Emprise() {
     setRedOrders([a, b]);
     setRedHand(makeHand(a, b));
     const premier = tirerPremierJoueur();
-    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
+    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShakeBig(false); setGameOver(false);
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
     setAllowUndo(false); setAllowHint(false); setHint(null); augureDuTourRef.current = null;
@@ -17611,7 +17605,7 @@ export default function Emprise() {
     setRedHand(isFinalGame ? applyHeroToHand(makeHand(botOrderA, botOrderB), storyChapterKey) : makeHand(botOrderA, botOrderB));
 
     const premier = tirerPremierJoueur();
-    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false);
+    setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShakeBig(false); setGameOver(false);
     setDrag(null); setDragHoverCell(null); setHistory([]);
     resetFanState();
     // Repentir et Augure activés par défaut en mode Histoire (utile pour apprendre l'Ordre).
@@ -17708,7 +17702,7 @@ export default function Emprise() {
     setRedHand(buildFullHand());
     setTurn("blue"); setFirstPlayer("blue"); setSelected(null); setDrag(null); setDragHoverCell(null);
     resetFanState();
-    setFlashes({}); setBoardShake(false); setBoardShakeBig(false); setGameOver(false); setHistory([]);
+    setFlashes({}); setBoardShakeBig(false); setGameOver(false); setHistory([]);
     setPhase("play");
   }
 
@@ -18393,14 +18387,10 @@ export default function Emprise() {
     // vont au bout de leur course, mais elles ne retiennent plus le coup suivant. AUCUNE
     // duree d animation n a ete raccourcie -- ce n etait pas elles, le probleme.
     presentationJusquaRef.current = Date.now() + Math.min(coutPresentation, PRESENTATION_RETARD_MAX_MS);
-    // Secousse du plateau uniquement quand au moins une capture a lieu — pas sur
-    // une simple pose sans prise, pour garder l'impact réservé aux moments forts.
-    const hasCapture = events.some((e) => ["basic", "same", "combo", "percee", "portee", "attraction"].includes(e.kind));
-    if (hasCapture) {
-      setBoardShake(true);
-      clearTimeout(shakeTimerRef.current);
-      shakeTimerRef.current = setTimeout(() => setBoardShake(false), 420);
-    }
+    // 04/09 : plus de secousse du plateau a la pose. Elle se declenchait des qu un coup
+    // capturait quelque chose -- c est-a-dire presque toujours -- et faisait bouger le
+    // plateau ENTIER au moment ou l attention doit aller a la carte. Le retour haptique
+    // reste : il ne fait rien bouger.
     // Onde : micro-secousse amplifiée si la chaîne de combo capture plus de 2 cartes —
     // déclenchée après le délai de la dernière carte touchée, pour coïncider avec la fin
     // de la cascade plutôt que de retomber en même temps que le premier impact.
@@ -23035,7 +23025,7 @@ export default function Emprise() {
             );
           })()}
           <div
-            className={`table ${areneActive ? "arene" : ""} ${boardShake ? "table-shake" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""} ${rattrapage ? "table-rattrapage" : ""}`}
+            className={`table ${areneActive ? "arene" : ""} ${boardShakeBig ? "table-shake-big" : ""} ${ceremonieFin === "defaite" ? "board-defeat-shake" : ""} ${rattrapage ? "table-rattrapage" : ""}`}
             style={{
               ...variablesPlateau(cosmetiques.plateau),
               "--board-cols": COLS,
