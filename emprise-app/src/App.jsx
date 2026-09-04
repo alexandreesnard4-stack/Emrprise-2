@@ -2586,12 +2586,16 @@ async function gagnerXp(montant, piecesExplicites = null) {
 // Un tournoi en ligne remporte. Le verrou est ICI, dans le stockage, et non dans l'appel :
 // la fonction relit la sauvegarde avant de decider, si bien qu'un second appel sur le meme
 // tournoi -- au redemarrage de l'application, par exemple -- ne compte rien de plus.
-// La liste ne garde que les douze derniers identifiants.
+// 04/09 : la liste ne se tronque PLUS. Elle ne gardait que les douze derniers
+// identifiants, si bien qu au treizieme tournoi le premier en sortait -- et son code,
+// retape, reencaissait le prix. Elle ne grandit que d un identifiant par tournoi
+// reellement gagne, et elle ne quitte jamais le stockage local (profilPublic ne la
+// porte pas) : sa taille n est un probleme pour personne.
 async function recordTournoiGagne(tournoiId, prixGemmes = TOURNOI_ENJEU.prixVainqueur, prixXp = TOURNOI_ENJEU.xpVainqueur) {
   const stats = await loadStats();
   const vus = Array.isArray(stats.tournoisCredites) ? stats.tournoisCredites : [];
   if (vus.includes(tournoiId)) return stats;
-  stats.tournoisCredites = [...vus, tournoiId].slice(-12);
+  stats.tournoisCredites = [...vus, tournoiId];
   stats.tournoisGagnes = (stats.tournoisGagnes || 0) + 1;
   await writeStatsRaw(JSON.stringify(stats));
   // L'enjeu s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
@@ -13710,7 +13714,11 @@ export default function Emprise() {
   // jamais la suite, et c'est normal : un signalement n'est pas une conversation.
   async function signalerJoueur(uidAutre, motif) {
     if (!myUid || !uidAutre || uidAutre === myUid) return;
-    await setDoc(doc(collection(db, "signalements")), {
+    // L identifiant est IMPOSE par les regles depuis le 04/09 : moi_cible. Un second
+    // signalement contre la meme personne vise donc le meme document, devient un update,
+    // et se fait refuser -- ce qui est le but. Avant, doc(collection(...)) tirait un
+    // identifiant neuf a chaque appel.
+    await setDoc(doc(db, "signalements", myUid + "_" + uidAutre), {
       de: myUid, cible: uidAutre, motif: String(motif || "autre"), date: serverTimestamp(),
       pseudoCible: (fichesRef.current[uidAutre] && fichesRef.current[uidAutre].pseudo) || "",
     });

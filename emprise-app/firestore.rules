@@ -984,14 +984,7 @@ service cloud.firestore {
       return 'victoires' in request.resource.data ? request.resource.data.victoires
         : ('victoires' in resource.data ? resource.data.victoires : 0);
     }
-    function apresCombosParties() {
-      return 'combosParties' in request.resource.data ? request.resource.data.combosParties
-        : ('combosParties' in resource.data ? resource.data.combosParties : 0);
-    }
-    function apresTrophees() {
-      return 'trophees' in request.resource.data ? request.resource.data.trophees
-        : ('trophees' in resource.data ? resource.data.trophees : 0);
-    }
+
     // Le PLUS GRAND des deux parties, l ancien ou le neuf. Et c est tout l enjeu : le
     // client envoie ses compteurs en TROIS ecritures separees, si bien que le document
     // porte transitoirement un parties neuf a cote d un trophees ancien. Comparer des
@@ -1021,11 +1014,28 @@ service cloud.firestore {
         ? request.resource.data.victoires <= request.resource.data.parties
         : apresVictoires() <= partiesDeReference();
     }
+    // ON NE JUGE QUE CE QU ON ECRIT (04/09). Un compteur absent de la requete n est
+    // compare a rien. Sans cette reserve, une valeur ANCIENNE qu on ne touche meme pas
+    // faisait refuser l ecriture : stockage local perdu, le document porte encore
+    // trophees 3000 tandis que parties vient de retomber a zero, et la troisieme des
+    // trois ecritures du client -- celle qui ne parle que de tournois et de niveau --
+    // se faisait refuser pour un trophees dont elle n avait rien a dire. L effet ne la
+    // rejoue pas : tournois et niveau seraient restes a quai.
+    // Les scenarios de l audit restent tous refuses : ils ecrivent justement le compteur
+    // qu ils gonflent, et c est celui-la qu on juge.
+    // Tant que parties n existe NI dans la requete NI dans le document, on ne compare
+    // rien : un compte neuf republie {pseudo, trophees, titre} AVANT d avoir jamais
+    // ecrit parties, et trente trophees pour zero partie connue seraient refuses. Or un
+    // refus sur CETTE ecriture-la est definitif : elle ne pose jamais le code ami, ce qui
+    // bloque a son tour les cinq autres. Le garde-fou se ferme de lui-meme des la
+    // premiere ecriture qui porte parties.
     function compteursCoherents() {
       return !('parties' in request.resource.data || 'parties' in resource.data)
-        || (victoiresCoherentes()
-            && apresCombosParties() <= partiesDeReference()
-            && apresTrophees() <= partiesDeReference() * 30);
+        || (('victoires' in request.resource.data ? victoiresCoherentes() : true)
+        && ('combosParties' in request.resource.data
+            ? request.resource.data.combosParties <= partiesDeReference() : true)
+        && ('trophees' in request.resource.data
+            ? request.resource.data.trophees <= partiesDeReference() * 30 : true));
     }
 
     // Trophées et titre, montrés aux amis : un entier raisonnable et une courte chaîne.
@@ -1220,7 +1230,14 @@ service cloud.firestore {
 
         // Retirer un ami : chacun des deux peut effacer le lien, chez lui ET chez
         // l'autre (le client fait les deux suppressions dans un batch).
-        allow delete: if connecte() && (moi() == uid || moi() == amiUid);
+        // Et il DOIT les faire toutes les deux (04/09) : l autre moitie ne peut pas
+        // survivre au lot. Sans cette exigence, on pouvait n effacer que le lien de
+        // l autre et rester dans sa liste a lui -- une amitie a sens unique, invisible
+        // pour celui qui la subit. Verifie avant d imposer : les DEUX seuls endroits qui
+        // suppriment un lien, retirerAmi et bloquerJoueur, effacent deja les deux
+        // moities dans un meme lot.
+        allow delete: if connecte() && (moi() == uid || moi() == amiUid)
+          && !existsAfter(docAmi(amiUid, uid));
       }
 
       // ---------- Défis ----------
@@ -1243,7 +1260,15 @@ service cloud.firestore {
           && request.resource.data.code.matches('^[A-HJ-NP-Z2-9]{5}$')
           && request.resource.data.envoyeeLe == request.time
           && get(docPartie(request.resource.data.code)).data.blueUid == moi()
-          && get(docPartie(request.resource.data.code)).data.redUid == null;
+          && get(docPartie(request.resource.data.code)).data.redUid == null
+          // Trente secondes entre deux defis vers la meme personne, sur le modele de
+          // derniereDemande. Sans ce delai, un ami hostile faisait clignoter le bandeau
+          // de defi en boucle. La condition ne mord QUE sur un remplacement : quand
+          // l invitation precedente a ete relevee, refusee ou perimee, le document a ete
+          // efface et l ecriture suivante est une CREATION, libre. Elle ne freine donc
+          // que le rappel insistant d un defi qui attend encore.
+          && (resource == null
+              || request.time >= resource.data.envoyeeLe + duration.value(30, 's'));
 
         // Le destinataire l'efface une fois traitée, l'inviteur peut la retirer.
         allow delete: if connecte() && (moi() == uid || moi() == deUid);
@@ -1296,6 +1321,16 @@ service cloud.firestore {
     // courte chaîne, la date celle du serveur. Le pseudo de la cible est recopié tel
     // que l'auteur le voyait, pour que l'éditeur sache ce qui a été signalé même si le
     // joueur en change ensuite.
+    // L identifiant du document est IMPOSE : moi()_cible. Un auteur ne peut donc deposer
+    // qu un signalement par cible -- une seconde tentative vise le meme document, devient
+    // un update, et tombe sur le « allow update: if false » ci-dessous. Avant, chaque appel
+    // tirait un identifiant neuf : mille signalements contre la meme personne passaient.
+    // Les signalements deja enregistres sous un ancien identifiant restent en place et ne
+    // genent rien : personne ne les lit (allow read: if false), et un signalement neuf
+    // porte un identifiant different.
+    function signalementUnique(id) {
+      return id == moi() + '_' + request.resource.data.cible;
+    }
     match /signalements/{id} {
       allow read: if false;
       allow create: if connecte()
@@ -1303,6 +1338,11 @@ service cloud.firestore {
         && request.resource.data.de == moi()
         && request.resource.data.cible is string
         && request.resource.data.cible != moi()
+        && signalementUnique(id)
+        // Une cible bornee, et qui EXISTE : sans cela le champ etait un texte libre de
+        // taille illimitee, et l on pouvait signaler un identifiant invente.
+        && request.resource.data.cible.size() <= 128
+        && exists(docUser(request.resource.data.cible))
         && request.resource.data.motif is string && request.resource.data.motif.size() <= 40
         && request.resource.data.pseudoCible is string && request.resource.data.pseudoCible.size() <= 28
         && request.resource.data.date == request.time;
