@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } from "react";
 import { db, auth } from "./firebase.js";
-import { signInAnonymously, onAuthStateChanged, deleteUser } from "firebase/auth";
+import { signInAnonymously, onAuthStateChanged, deleteUser, signOut } from "firebase/auth";
 import {
   doc, getDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction,
   setDoc, deleteDoc, writeBatch, collection,
@@ -13543,6 +13543,12 @@ export default function Emprise() {
   const [suppressionMot, setSuppressionMot] = useState("");
   const [suppressionEnCours, setSuppressionEnCours] = useState(false);
   const [suppressionErreur, setSuppressionErreur] = useState("");
+  // Des le premier lot, plus AUCUNE ecriture de fond : le battement de presence recreait
+  // presence/etat toutes les 120 s, et la synchro de profil recreait le profil ET un code
+  // ami neuf, avec une relance a 20 s armee justement par les echecs. Le compte se serait
+  // reconstitue tout seul derriere sa propre suppression. Une ref et non un etat : elle
+  // doit etre vraie IMMEDIATEMENT, sans attendre un rendu.
+  const suppressionEnMarcheRef = useRef(false);
   const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
   const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t, mode, herauts }
   // La fenetre de composition d'un defi : a qui, dans quel mode, avec ou sans Herauts.
@@ -13818,22 +13824,38 @@ export default function Emprise() {
     return phase !== "landing" || !!onlineGameId || !!tournoiOnlineId;
   }
 
-  // Les lots de Firestore acceptent 500 ecritures ; on reste tres en dessous.
+  // Les paquets ne sont PAS bornes par les 500 ecritures d un lot, mais par les VINGT
+  // appels d acces que les regles autorisent par lot. Retirer une amitie coute un
+  // existsAfter par moitie, donc deux par ami : cinq amis font dix appels, la moitie du
+  // plafond. A cent amis par paquet, comme je l avais ecrit d abord, le lot en demandait
+  // deux cents et se faisait refuser en entier -- au-dela de dix amis, personne n aurait
+  // jamais pu supprimer son compte.
   function parPaquets(liste, taille) {
     const out = [];
     for (let i = 0; i < liste.length; i += taille) out.push(liste.slice(i, i + taille));
     return out;
   }
+  // Hors ligne, le SDK met l ecriture en file locale : la promesse de commit() ne se
+  // resout NI ne rejette, jamais. Sans cette limite, le bouton restait sur
+  // « Suppression... » pour toujours, la fenetre verrouillee, et le joueur ne savait pas
+  // que rien ne partait.
+  function avecLimiteDeTemps(promesse, ms) {
+    return Promise.race([
+      promesse,
+      new Promise((_, refuser) => setTimeout(() => refuser(new Error("hors-ligne")), ms)),
+    ]);
+  }
 
   async function supprimerMonCompte() {
     if (!myUid || suppressionEnCours || partieEnCoursPourSuppression()) return;
     setSuppressionEnCours(true);
+    suppressionEnMarcheRef.current = true;
     setSuppressionErreur("");
     try {
       // 1. Les amities. Les DEUX moities dans le MEME lot : la regle de chacune exige
       //    que l autre ne survive pas au lot. Les invitations de defi echangees avec cet
       //    ami partent avec, dans les deux sens.
-      for (const paquet of parPaquets(amis, 100)) {
+      for (const paquet of parPaquets(amis, 5)) {
         const b = writeBatch(db);
         paquet.forEach((ami) => {
           b.delete(doc(db, "users", myUid, "amis", ami.uid));
@@ -13841,7 +13863,7 @@ export default function Emprise() {
           b.delete(doc(db, "users", myUid, "invitations", ami.uid));
           b.delete(doc(db, "users", ami.uid, "invitations", myUid));
         });
-        await b.commit();
+        await avecLimiteDeTemps(b.commit(), 15000);
       }
       // 2. Le reste des sous-collections. Les demandes que J AI ENVOYEES vivent chez
       //    l autre, et rien ne les liste de mon cote : le journal local des envois est
@@ -13859,20 +13881,24 @@ export default function Emprise() {
       for (const paquet of parPaquets(restes, 200)) {
         const b = writeBatch(db);
         paquet.forEach((ref) => b.delete(ref));
-        await b.commit();
+        await avecLimiteDeTemps(b.commit(), 15000);
       }
       // 3. Le code ami ET le profil, dans le MEME lot : la regle du code exige que mon
       //    profil ne le revendique plus apres le lot, et il n y sera plus du tout.
       const dernier = writeBatch(db);
       if (monCodeAmi) dernier.delete(doc(db, "codesAmi", monCodeAmi));
       dernier.delete(doc(db, "users", myUid));
-      await dernier.commit();
+      await avecLimiteDeTemps(dernier.commit(), 15000);
     } catch (e) {
-      // RIEN n est efface localement : mieux vaut un compte intact qu un compte a
-      // moitie detruit. Le joueur peut reessayer, les suppressions deja faites ne
-      // genent pas -- effacer un document absent ne leve aucune erreur.
+      // RIEN n est efface localement, et le drapeau retombe : le compte revit.
+      // Le message ne dit PLUS « votre compte est intact » -- c etait faux des que le
+      // premier lot avait reussi, c est-a-dire dans la plupart des echecs. Une phrase qui
+      // ment sur ce qui a deja disparu est pire que l echec lui-meme.
+      suppressionEnMarcheRef.current = false;
       setSuppressionEnCours(false);
-      setSuppressionErreur("La suppression n’a pas abouti : votre compte est intact. Vérifiez votre connexion, puis réessayez.");
+      setSuppressionErreur(e && e.message === "hors-ligne"
+        ? "Rien n’a pu être envoyé : vous semblez hors ligne. Votre compte est intact. Reconnectez-vous, puis réessayez."
+        : "La suppression s’est interrompue. Une partie de vos données a peut-être déjà été effacée : relancez-la pour aller au bout.");
       return;
     }
     // 4. Le stockage local, seulement maintenant. On balaie toutes les clefs du jeu
@@ -13889,7 +13915,16 @@ export default function Emprise() {
     // 5. Le compte anonyme lui-meme. Son echec n est pas grave -- les donnees sont deja
     //    parties et le rechargement ouvrira un profil neuf -- mais il faut l essayer :
     //    c est lui, le compte, aux yeux d Apple et de Google.
-    try { if (auth.currentUser) await deleteUser(auth.currentUser); } catch (e) { /* deja sans donnees */ }
+    // deleteUser echoue couramment sur une session anonyme ancienne
+    // (auth/requires-recent-login), et un compte anonyme n a aucun moyen de se
+    // reauthentifier. Sans repli, le rechargement redonnait LE MEME identifiant, et la
+    // synchro de profil recreait aussitot un profil et un code ami neufs sous lui.
+    // signOut coupe ce lien : le rechargement ouvre un compte anonyme neuf.
+    try {
+      if (auth.currentUser) await deleteUser(auth.currentUser);
+    } catch (e) {
+      try { await signOut(auth); } catch (e2) { /* le rechargement fera ce qu il peut */ }
+    }
     // 6. On repart a zero. Le rechargement rouvre l ecran de nommage : le pseudo
     //    vient d etre efface avec le reste.
     try { window.location.reload(); } catch (e) { setSuppressionOuverte(false); }
@@ -15074,6 +15109,7 @@ export default function Emprise() {
   // savait enumerer les numeros.
   function direPresence() {
     if (!myUid) return;
+    if (suppressionEnMarcheRef.current) return; // un compte en cours d effacement ne se signale plus
     setDoc(doc(db, "users", myUid, "presence", "etat"), { vuLe: serverTimestamp() }).catch(() => {});
   }
   // La bascule du numero, six chiffres vers huit. Le nouvel index se cree dans la meme
@@ -15102,7 +15138,7 @@ export default function Emprise() {
   const [essaiProfil, setEssaiProfil] = useState(0);
   const profilSyncRef = useRef("");
   useEffect(() => {
-    if (!myUid || profilSyncRef.current === myUid + "/" + pseudo) return;
+    if (!myUid || suppressionEnMarcheRef.current || profilSyncRef.current === myUid + "/" + pseudo) return;
     profilSyncRef.current = myUid + "/" + pseudo;
     let annule = false;
     (async () => {
