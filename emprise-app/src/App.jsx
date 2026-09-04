@@ -129,6 +129,14 @@ const RYTHME_POSE_JOUEUR_MS = 400;
 // CSS. Les deux doivent dire la meme chose -- la file de presentation en ligne compte
 // ce pivot dans le temps qu un coup occupe l ecran. Une sonde le verifie.
 const PIVOT_CAPTURE_MS = 1000;
+// Les Maudits (04/09). MAUDIT_ATTENTE_MS : le sang ne monte qu une fois le pivot de
+// capture bien fini -- on lit la capture, PUIS la croissance, jamais les deux ensemble.
+// MAUDIT_SANG_MS : 300 ms de montee, 700 ms de TENUE, 300 ms de reflux, le meme rythme
+// que les tentacules des Abysses. La duree vit ici et dans --maudit-sang-duree, et les
+// deux doivent rester d accord : c est elle qui dit a l ecran jusqu a quand garder les
+// classes d animation de la carte.
+const MAUDIT_ATTENTE_MS = 3200;
+const MAUDIT_SANG_MS = 1300;
 // Portee (02/09) : PORTEE_DEPART_MS apres le maillon (la carte posee a fini
 // d atterrir), la fleche apparait au-dessus de l Archer et y reste
 // PORTEE_ARMEMENT_MS (fondu en opacite : c est cette pause qui attire l oeil),
@@ -4395,7 +4403,9 @@ function delaisDeCarte(events) {
   // La croissance du Maudit attend que l'animation de capture soit bien terminée avant de
   // se déclencher (comboDelay si elle vient d'une chaîne + le temps du flip + une pause
   // volontaire), pour que le joueur comprenne "capture" puis "croissance" comme 2 temps distincts.
-  const mauditBoostDelay = mauditBoostEvent ? delaiCapture + 3200 : 0;
+  // C est cet ecart qui garantit qu un pivot de capture sur la meme carte n arrive JAMAIS
+  // pendant le sang : le pivot se joue a delaiCapture, le sang 3,2 s plus tard.
+  const mauditBoostDelay = mauditBoostEvent ? delaiCapture + MAUDIT_ATTENTE_MS : 0;
   return { comboDelay, renfortDelay, delaiCapture, delaiTotal, mauditBoostDelay };
 }
 
@@ -6027,7 +6037,7 @@ const APP_STYLES = `
            --reserve-duree : la selection de la Reserve, decouplee -- elle garde ses
            0,9 s, et sa courbe d origine, plus lente : on y choisit, on n y capture pas.
            --tour-courbe : depart doux, milieu rapide, freinage a l arrivee. */
-        :root { --tour-duree: 1s; --reserve-duree: .9s;
+        :root { --tour-duree: 1s; --reserve-duree: .9s; --maudit-sang-duree: 1.3s;
                 --tour-courbe: cubic-bezier(.25, .1, .25, 1);
                 --reserve-courbe: cubic-bezier(.45, .05, .25, 1); }
         body { margin: 0; background: transparent; }
@@ -10544,7 +10554,7 @@ const APP_STYLES = `
           background-image: url("/icones/sang-maudit.webp");
           background-size: cover; background-position: center bottom; background-repeat: no-repeat;
           opacity: 0; transform: translateY(100%);
-          animation: maudit-sang 0.8s ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
+          animation: maudit-sang var(--maudit-sang-duree) ease; animation-delay: var(--maudit-delay, 0ms); animation-fill-mode: both;
         }
         /* ---------- Eveil (Dores) : le troc de rangs ----------
            L'ancienne version dilatait un simple cercle depuis le centre : joli, mais elle
@@ -10995,12 +11005,13 @@ const APP_STYLES = `
           100% { opacity: 0; transform: scale(1.25) rotate(-2deg); }
         }
         @keyframes devour-rank { 0%{scale:1} 35%{scale:1.28; color:#fff; text-shadow:0 0 9px var(--devour), 0 0 16px var(--devour)} 60%{scale:0.94} 100%{scale:1} }
-        /* Le sang du Maudit : 350 ms de montee en fondu, 200 ms de tenue, 250 ms de
-           reflux -- 800 ms en tout, soit 44 % et 69 % de la course. */
+        /* Le sang du Maudit (04/09) : 300 ms de montee en fondu, 700 ms de TENUE, 300 ms
+           de reflux -- 1,3 s en tout, soit 23 % et 77 % de la course. C est la tenue qui
+           manquait : a 200 ms il montait et repartait sans qu on ait le temps de le voir. */
         @keyframes maudit-sang {
           0%   { opacity: 0; transform: translateY(100%); }
-          44%  { opacity: 1; transform: translateY(0); }
-          69%  { opacity: 1; transform: translateY(0); }
+          23%  { opacity: 1; transform: translateY(0); }
+          77%  { opacity: 1; transform: translateY(0); }
           100% { opacity: 0; transform: translateY(100%); }
         }
         @keyframes devoreuse-ring { 0%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(13)} }
@@ -18295,7 +18306,20 @@ export default function Emprise() {
     const enChaine = maxComboLevel > 0 || nbTirsEnChaine > 0;
     // Cendres (02/09) : le trajet le plus long retarde tout le reste du coup d autant.
     const trajetCendres = Math.max(0, ...events.filter((e) => e.kind === "attraction-pull").map((e) => dureeTrajetCendres(e.steps)));
-    const clearDelay = (enChaine ? 4000 + maxComboLevel * 300 + 2400 + nbTirsEnChaine * PORTEE_TEMPS_MS : 3600) + trajetCendres;
+    // La croissance des Maudits (04/09) : elle ne part que MAUDIT_ATTENTE_MS apres le
+    // pivot de capture. Sur un coup ordinaire, cela la place a 3 200 ms alors que
+    // l horizon de menage etait de 3 600 : le sang avait 400 ms pour vivre, et les
+    // classes d animation lui tombaient dessus a peine monte. Ce n est pas qu il passait
+    // trop vite -- on le lui retirait. L horizon attend maintenant sa fin.
+    const socleCapture = enChaine ? 4000 + maxComboLevel * 300 : 0;
+    const decalageMax = Math.max(0, ...events.map((e) => e.decalage || 0));
+    const finDuSang = events.some((e) => e.kind === "maudit-boost")
+      ? socleCapture + decalageMax + MAUDIT_ATTENTE_MS + MAUDIT_SANG_MS + 400
+      : 0;
+    const clearDelay = Math.max(
+      enChaine ? 4000 + maxComboLevel * 300 + 2400 + nbTirsEnChaine * PORTEE_TEMPS_MS : 3600,
+      finDuSang,
+    ) + trajetCendres;
     // Seule une chaine d'Onde prolonge l'horizon des animations differees ; un coup
     // ordinaire ne ralentit pas le rythme de l'Echo.
     if (enChaine) animsFinishAtRef.current = Date.now() + clearDelay;
