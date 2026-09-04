@@ -17287,8 +17287,22 @@ export default function Emprise() {
 
   function demanderRevanche() {
     if (!revancheDisponible || !onlineGameId || !onlineRole) return;
+    // 04/09 : le vote se pose LOCALEMENT avant de partir. Le bouton lisait revancheVotes,
+    // qui n arrive que par l ecoute Firestore : entre l appui et l echo du serveur il
+    // disait encore « Revanche », rien ne bougeait, et l on appuyait une seconde fois.
+    // Si l ecriture echoue, le vote est retire -- on ne laisse jamais l ecran affirmer
+    // ce que le serveur ignore.
+    setRevancheVotes((v) => ({ ...(v || {}), [onlineRole]: true }));
     updateDoc(doc(db, "games", onlineGameId), { [`revanche.${onlineRole}`]: true })
-      .catch(() => setOnlineError("Impossible de proposer la revanche."));
+      .catch(() => {
+        setRevancheVotes((v) => {
+          if (!v) return v;
+          const neuf = { ...v };
+          delete neuf[onlineRole];
+          return neuf;
+        });
+        setOnlineError("Impossible de proposer la revanche.");
+      });
   }
 
   // Création de la partie de revanche par le client Azur, une fois les deux votes posés.
@@ -17304,6 +17318,12 @@ export default function Emprise() {
             const ref = doc(db, "games", candidat);
             const snap = await tx.get(ref);
             if (snap.exists()) throw new Error("code-pris");
+            // La nouvelle partie ET la publication de son code, d un seul aller-retour
+            // (04/09). Elles etaient deux ecritures a la suite, et le joueur attendait
+            // les deux avant de voir quoi que ce soit. Une transaction peut ecrire
+            // plusieurs documents ; les regles la jugent document par document, donc
+            // rien ne change pour elles. Et si le code est deja pris, TOUT est annule :
+            // l ancienne partie ne garde plus un prochainCode qui ne mene nulle part.
             tx.set(ref, {
               status: "waiting-orders", createdAt: serverTimestamp(),
               blueUid: ancienne.redUid, redUid: ancienne.blueUid,
@@ -17321,12 +17341,12 @@ export default function Emprise() {
               board: Array(CELLS).fill(null), poisonedCells: Array(CELLS).fill(""),
               turn: premier, firstPlayer: premier, gameOver: false,
             });
+            tx.update(doc(db, "games", onlineGameId), { "revanche.prochainCode": candidat });
           });
           code = candidat;
         } catch (e) { if (e.message !== "code-pris") throw e; }
       }
       if (!code) throw new Error("code-indisponible");
-      await updateDoc(doc(db, "games", onlineGameId), { "revanche.prochainCode": code });
     } catch (e) {
       revancheCreationRef.current = false;
       setOnlineError("Impossible de lancer la revanche.");
