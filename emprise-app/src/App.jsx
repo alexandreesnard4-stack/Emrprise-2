@@ -13653,6 +13653,26 @@ export default function Emprise() {
     return () => { vivant = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defiRecu && defiRecu.code]);
+  // Le verrou de renvoi vise une demande IGNOREE, pas une amitie : une demande ABOUTIE
+  // n a plus a etre retenue. Des qu un joueur devient mon ami, sa date d envoi et sa
+  // marque de session s effacent. Sans cela, retirer un ami interdisait de le reajouter
+  // pendant vingt-quatre heures (RENVOI_MIN_MS), avec un « Demande deja envoyee
+  // recemment » que rien ne venait expliquer -- le lien partait bien des deux cotes,
+  // mais la date restait dans le stockage local.
+  useEffect(() => {
+    if (!amis.length) return;
+    const envois = lireEnvois();
+    const restants = { ...envois.envois };
+    let change = false;
+    amis.forEach((ami) => { if (restants[ami.uid]) { delete restants[ami.uid]; change = true; } });
+    if (change) ecrireEnvois({ ...envois, envois: restants });
+    setDemandesEnvoyees((d) => {
+      if (!amis.some((ami) => d[ami.uid])) return d;
+      const neuf = { ...d };
+      amis.forEach((ami) => { delete neuf[ami.uid]; });
+      return neuf;
+    });
+  }, [amis]);
   // Ce qu'un bloque a pu deposer avant le blocage ne s'affiche plus.
   const demandesVisibles = demandesRecues.filter((d) => !bloques.some((b) => b.uid === d.uid));
   // La pastille ne compte QUE les demandes d'ami. Un defi n'y figure plus : il s'annonce
