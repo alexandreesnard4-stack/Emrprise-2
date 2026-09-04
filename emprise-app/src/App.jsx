@@ -59,6 +59,36 @@ const ID_ANIM_TOTAL = ID_ANIM_DEPART + (IDENTIFIANT_CHIFFRES + 1) * ID_ANIM_PAS
 function nettoyerCodeAmi(brut) {
   return String(brut || "").replace(/[^0-9]/g, "").slice(0, IDENTIFIANT_CHIFFRES);
 }
+// ---------- Liens profonds : ?tournoi=CODE et ?ami=12345678 ----------
+// Lus UNE fois au chargement du module, sur le modele de ?test-rotation. L'URL est
+// nettoyee aussitot (history.replaceState) pour que ni un rechargement ni le start_url
+// du manifeste ne rejouent l'intention ; les autres parametres (test-rotation) restent.
+// Normalisation stricte : un code de tournoi est exactement 5 lettres/chiffres en
+// majuscules (la longueur de makeGameCode), un code d'ami exactement
+// IDENTIFIANT_CHIFFRES chiffres. Tout ce qui ne colle pas est ignore en silence --
+// pas de message d'erreur pour un lien abime, le hub s'ouvre normalement.
+// Une seule intention a la fois : si les deux parametres sont valides, le tournoi
+// l'emporte (il se perime, un code d'ami non).
+const INTENTION_LIEN = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const brutTournoi = params.get("tournoi");
+    const brutAmi = params.get("ami");
+    if (brutTournoi === null && brutAmi === null) return null;
+    params.delete("tournoi");
+    params.delete("ami");
+    const reste = params.toString();
+    try {
+      window.history.replaceState(null, "", window.location.pathname + (reste ? "?" + reste : "") + window.location.hash);
+    } catch (e) { /* URL non nettoyable : l'intention reste a usage unique malgre tout */ }
+    const tournoi = String(brutTournoi || "").trim().toUpperCase();
+    if (/^[A-Z0-9]{5}$/.test(tournoi)) return { type: "tournoi", code: tournoi };
+    const ami = String(brutAmi || "").trim();
+    if (new RegExp("^[0-9]{" + IDENTIFIANT_CHIFFRES + "}$").test(ami)) return { type: "ami", code: ami };
+    return null;
+  } catch (e) { return null; } // hors navigateur, ou URL illisible : pas d'intention
+})();
+
 const AMIS_MAX = 20;                       // borne les lectures a l'ouverture du profil
 const DEMANDES_PAR_JOUR = 20;              // envoyees ; au-dela, c'est du demarchage
 const RENVOI_MIN_MS = 24 * 60 * 60 * 1000; // une demande ignoree ne se renvoie pas avant un jour
@@ -13999,7 +14029,7 @@ export default function Emprise() {
     if (!monCodeAmi) return;
     const texte = `Rejoins-moi sur EMPRISE, mon identifiant : #${monCodeAmi}`;
     if (navigator.share) {
-      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() }); return; } catch (e) { /* annule : on copie */ }
+      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() + "?ami=" + encodeURIComponent(monCodeAmi) }); return; } catch (e) { /* annule : on copie */ }
     }
     copierCodeAmi();
   }
@@ -16130,6 +16160,31 @@ export default function Emprise() {
 
   // Connexion anonyme Firebase, une fois au chargement — sert d'identifiant stable
   // pour savoir "qui je suis" dans une partie en ligne, sans compte ni mot de passe.
+  // L'intention d'un lien profond attend DEUX conditions : myUid pose, et l'ecran du
+  // pseudo de premiere ouverture referme (pseudo non vide). Un ref, pas un state :
+  // rien a re-rendre, et une intention consommee est videe -- elle ne se rejoue
+  // jamais, meme si l'effet repasse. Si l'application est deja en pleine partie au
+  // moment ou tout est pret, on la jette : on n'arrache pas un joueur a sa partie.
+  // On PRE-REMPLIT seulement : rejoindre un tournoi coute des gemmes et une demande
+  // d'ami engage, c'est au joueur d'appuyer.
+  const intentionLienRef = useRef(INTENTION_LIEN);
+  useEffect(() => {
+    const intention = intentionLienRef.current;
+    if (!intention) return;
+    if (!myUid || !pseudo) return;
+    intentionLienRef.current = null;
+    if (phase === "play") return;
+    if (intention.type === "tournoi") {
+      setCodeTournoiInput(intention.code);
+      setTournoiErreur("");
+      setPhase("tourney-online-menu");
+    } else {
+      setCodeAmiSaisi(intention.code);
+      setActiveModal("amis");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid, pseudo, phase]);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) setMyUid(user.uid);
@@ -17602,7 +17657,7 @@ export default function Emprise() {
     if (!tournoiOnlineId) return;
     const texte = `Rejoins mon tournoi EMPRISE, huit Commandants : code ${tournoiOnlineId}`;
     if (navigator.share) {
-      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() }); return; } catch (e) { /* annule : on copie */ }
+      try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() + "?tournoi=" + encodeURIComponent(tournoiOnlineId) }); return; } catch (e) { /* annule : on copie */ }
     }
     copierCodeTournoi();
   }
