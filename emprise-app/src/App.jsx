@@ -8082,6 +8082,10 @@ const APP_STYLES = `
         /* La page : plein ecran par-dessus le hub, fond opaque, seul le corps
            defile. Un etat booleen l ouvre -- ce n est pas un onglet du hub. */
         .quetes-page {
+          /* Ajoutee a l'ecran d'accueil iOS, l'application passe sous l'heure : le
+             calque plein ecran reserve la barre d'etat, l'en-tete garde son rythme.
+             Dans un onglet ordinaire env() vaut 0 : rien ne bouge. */
+          padding-top: env(safe-area-inset-top, 0px);
           position: fixed; inset: 0; z-index: 80;
           background: var(--bg);
           display: flex; flex-direction: column;
@@ -8735,7 +8739,10 @@ const APP_STYLES = `
         .arene-page {
           height: 100dvh; scroll-snap-align: center; scroll-snap-stop: always;
           display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-          gap: 6px; padding: 52px 20px 30px; box-sizing: border-box; position: relative;
+          /* 52px d'origine + la barre d'etat iOS : la reserve se fait ICI et pas sur le
+             voile fixe, car les pages font 100dvh pour le defilement a crans -- un padding
+             sur le voile les aurait desaxees de la hauteur de l'encoche. */
+          gap: 6px; padding: calc(52px + env(safe-area-inset-top, 0px)) 20px 30px; box-sizing: border-box; position: relative;
           /* Le halo de ligue (02/09) : la couleur vient de LEAGUES par la
              custom property --arene-lueur, posee inline par la galerie
              (attenuee au tiers si la page est verrouillee, pleine des la
@@ -8934,7 +8941,8 @@ const APP_STYLES = `
           border: 1px solid rgba(203,164,86,0.5);
         }
         .arenes-fermer {
-          position: fixed; top: 14px; right: 14px; z-index: 5;
+          /* Sous la barre d'etat iOS en plein ecran, le bouton devenait intouchable. */
+          position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 5;
           width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
           background: rgba(8,6,12,0.75); border: 1px solid rgba(203,164,86,0.4);
@@ -9577,7 +9585,11 @@ const APP_STYLES = `
              .order-picker portait position: relative et captait l'ancrage (le bouton
              retombait a y=132, sous le titre) : il passe en static juste en dessous, ce
              qui fait de .emprise-root la reference. */
-          position: absolute; top: 18px; left: 14px; z-index: 40;
+          /* Le rembourrage de la racine ne protege pas un enfant absolu : il se place
+             depuis le bord, au-dessus du padding. En ecran d'accueil iOS le bouton passait
+             sous l'heure ; env() vaut 0 dans un onglet ordinaire. L'ecran d'Histoire n'est
+             pas concerne : son .story-map-retour repasse en relative, top auto. */
+          position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 14px; z-index: 40;
           margin-bottom: 0; background: rgba(203,164,86,0.06); cursor: pointer;
           border: 1px solid rgba(203,164,86,0.55); border-radius: 8px; padding: 8px 16px;
           font-family: 'Spectral', Georgia, serif; font-size: 14px; color: var(--gold);
