@@ -6226,7 +6226,12 @@ const APP_STYLES = `
              son propre halo, ne perd que 1,6 de contraste : il reste a 13,0 pour 4,5
              exiges. Assombrir davantage ne protegeait plus rien, cela effacait le ciel. */
           --fond-vignette: 0.20; --fond-voile: 0.04;
-          color: var(--bone); font-family: 'Spectral', Georgia, serif; padding: 62px 14px 22px;
+          color: var(--bone); font-family: 'Spectral', Georgia, serif;
+          /* La racine reserve la barre d'etat iOS avec le bouton Retour : lui seul
+             compense (top calc + env), le titre resterait a 62px et le bouton lui
+             passerait dessus en plein ecran. Ils descendent donc ENSEMBLE ; l'ecran de
+             jeu et la carte d'Histoire ecrasent ce padding et gardent leur reserve. */
+          padding: calc(62px + env(safe-area-inset-top, 0px)) 14px 22px;
           display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box;
         }
         .landing {
@@ -11916,7 +11921,9 @@ const APP_STYLES = `
         /* Minuteur du choix des Ordres : ancre en haut a droite de l'ecran, en vis-a-vis
            du bouton Retour place en haut a gauche. */
         .ordres-minuteur {
-          position: absolute; top: 16px; right: 14px; z-index: 40;
+          /* Meme compensation que le bouton Retour d'en face : sans elle, le minuteur
+             passait seul sous l'heure en plein ecran iOS. */
+          position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 40;
           display: flex; align-items: center; gap: 7px;
           padding: 7px 13px 7px 10px; border-radius: 999px;
           background: rgba(8,6,12,0.92); border: 1px solid rgba(203,164,86,0.6);
