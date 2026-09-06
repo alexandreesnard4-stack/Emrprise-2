@@ -96,7 +96,7 @@ Le lien du jeu se présente avec son icône, son titre et son aperçu dans les m
 Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
 Chaque famille d'écrans a son fond : le choix du niveau de l'Écho, le choix des Ordres, les tournois, la Confluence, les défis, le tutoriel.
 Les fonds du hub couvrent tout l'écran, et la Boutique s'ouvre sans auvent.
-Ajouté à l'écran d'accueil d'un iPhone, le jeu laisse sa place à la barre d'état : les Quêtes, la galerie des arènes, le bouton Retour et le minuteur du choix des Ordres ne passent plus sous l'heure.
+Ajouté à l'écran d'accueil d'un iPhone, la barre d'état est un bandeau noir opaque et la page commence dessous : plus aucun écran ne passe sous l'heure, ni les Quêtes, ni la galerie des arènes, ni le bouton Retour, ni le bouton d'information de la partie.
 Le choix du niveau de l'Écho présente ses quatre niveaux en cartes illustrées, dressées sur toute la hauteur de l'écran.
 Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
