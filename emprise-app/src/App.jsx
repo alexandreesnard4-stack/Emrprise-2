@@ -14013,33 +14013,26 @@ export default function Emprise() {
         paquet.forEach((ref) => b.delete(ref));
         await avecLimiteDeTemps(b.commit(), 15000);
       }
-      // 3. Le code ami ET le profil, dans le MEME lot : la regle du code exige que mon
-      //    profil ne le revendique plus apres le lot, et il n y sera plus du tout.
-      //    Le profil se RELIT AU SERVEUR d abord (04/09), jamais depuis l etat ni depuis
-      //    le cache. La raison est une relance : si ce lot est parti pendant que ma
-      //    limite de temps rendait la main, il s est commis tout seul, et monCodeAmi
-      //    valait encore l ancien code (l ecoute du profil sort sans rien effacer quand
-      //    le document a disparu). Redemander l effacement d un index deja parti faisait
-      //    tomber le lot entier -- la regle lit resource.data sur un document absent --
-      //    et la suppression se verrouillait a vie, sans jamais atteindre le compte
-      //    anonyme. Profil present : on efface le code QU IL PORTE, puis lui. Profil
-      //    absent : il n y a plus rien a effacer ici, on passe au menage local.
+      // 3. Le tombeau ET le profil, dans le MEME lot (07/09). Le tombeau dit « ce
+      //    compte est parti » : la regle de creation d un profil le consulte, et un
+      //    compte qui s est efface ne se recree jamais. Sans lui, effacer puis recreer
+      //    permettait de changer de numero a volonte et de reprendre celui d un joueur
+      //    qui venait de partir. Le meme lot, parce que la regle du tombeau exige que
+      //    le profil n existe plus apres lui, et parce qu un profil efface SANS tombeau
+      //    serait justement la porte ouverte.
+      //    Le numero d ami, lui, n est PLUS efface : il est brule. L index codesAmi
+      //    reste, pointant vers ce compte disparu, et personne ne le reprend -- c est
+      //    ce qui protege les amis du joueur parti, qui ressaisiraient son numero.
+      //    Le profil se RELIT AU SERVEUR d abord (04/09), jamais depuis l etat ni le
+      //    cache : sur une relance dont ce lot est deja passe, il n y a plus rien a
+      //    faire ici, on passe au menage local. C est ce qui a ferme le verrouillage
+      //    a vie du 04/09.
       const profilFrais = await avecLimiteDeTemps(getDocFromServer(doc(db, "users", myUid)), 15000);
       if (profilFrais.exists()) {
-        const codeFrais = String((profilFrais.data() || {}).codeAmi || "");
         const dernier = writeBatch(db);
-        if (codeFrais) dernier.delete(doc(db, "codesAmi", codeFrais));
+        dernier.set(doc(db, "tombeaux", myUid), { le: serverTimestamp() });
         dernier.delete(doc(db, "users", myUid));
         await avecLimiteDeTemps(dernier.commit(), 15000);
-      } else if (monCodeAmi) {
-        // Le profil est deja parti mais un index a pu survivre seul (code vide au
-        // moment du clic, ou lot precedent coupe entre les deux). On ne l efface que
-        // s il existe ENCORE et pointe vers moi -- jamais a l aveugle, c est
-        // precisement l effacement a l aveugle qui verrouillait tout.
-        const index = await avecLimiteDeTemps(getDocFromServer(doc(db, "codesAmi", monCodeAmi)), 15000);
-        if (index.exists() && String((index.data() || {}).uid || "") === myUid) {
-          await avecLimiteDeTemps(deleteDoc(doc(db, "codesAmi", monCodeAmi)), 15000);
-        }
       }
     } catch (e) {
       // RIEN n est efface localement, et le drapeau retombe : le compte revit.
@@ -14092,6 +14085,12 @@ export default function Emprise() {
       const uid = String(idx.data().uid || "");
       if (uid === myUid) { setAvisAmis({ texte: "C'est votre propre identifiant.", bon: false }); return; }
       if (bloques.some((b) => b.uid === uid)) { setAvisAmis({ texte: "Identifiant introuvable.", bon: false }); return; }
+      // Un numero BRULE (07/09) : son index survit au compte qui l a porte, pour que
+      // personne ne le reprenne. Il mene donc a un profil qui n existe plus, et la
+      // reponse est la meme que pour un numero jamais attribue -- pas une demande
+      // envoyee a un fantome, que la regle des demandes aurait refusee.
+      const profilCible = await getDoc(doc(db, "users", uid));
+      if (!profilCible.exists()) { setAvisAmis({ texte: "Identifiant introuvable.", bon: false }); return; }
       await chargerFiches([uid], true);
       const nom = nomAffiche(fichesRef.current[uid]?.pseudo);
       if (amis.some((a) => a.uid === uid)) { setAvisAmis({ texte: `${nom} est déjà votre ami.`, bon: false }); return; }

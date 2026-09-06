@@ -920,6 +920,7 @@ service cloud.firestore {
     function docAmi(u, a)     { return /databases/$(database)/documents/users/$(u)/amis/$(a); }
     function docDemande(u, d) { return /databases/$(database)/documents/users/$(u)/demandes/$(d); }
     function docCode(c)       { return /databases/$(database)/documents/codesAmi/$(c); }
+    function docTombeau(u)    { return /databases/$(database)/documents/tombeaux/$(u); }
     function docBloque(u, b)  { return /databases/$(database)/documents/users/$(u)/bloques/$(b); }
     // Vrai si l'un des deux a bloqué l'autre : rien ne passe plus, dans aucun sens.
     function blocageEntre(a, b) { return exists(docBloque(a, b)) || exists(docBloque(b, a)); }
@@ -1132,7 +1133,13 @@ service cloud.firestore {
 
       // Création : soi-même seulement, champs fixés, code ami dont l'index est créé
       // dans la même transaction et pointe vers soi.
+      // Et JAMAIS sur un tombeau (07/09) : un compte qui a supprime son profil ne le
+      // recree pas. Sans cela, effacer puis recreer permettait de changer de numero a
+      // volonte -- le gel du numero ne vit que dans la regle de mise a jour -- et de
+      // reprendre celui qu un joueur qui part venait de liberer. Le parcours honnete
+      // n y passe jamais : apres la suppression, signOut, compte anonyme neuf.
       allow create: if connecte() && moi() == uid
+        && !exists(docTombeau(uid))
         && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'trophees', 'titre'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
@@ -1385,24 +1392,35 @@ service cloud.firestore {
         && request.resource.data.uid == moi()
         && getAfter(docUser(moi())).data.codeAmi == code;
       allow update: if false;
-      // La condition d origine -- mon profil ne revendique plus ce code apres le lot --
-      // suppose que ce profil EXISTE encore. A la suppression de compte il part dans le
-      // meme lot, et getAfter porterait alors sur un document inexistant : la regle
-      // refusait, et le code restait reserve a jamais. On accepte donc les deux formes
-      // de « il ne le revendique plus » : il a change de code, ou il n est plus la.
+      // Un index ne se libere que par un CHANGEMENT DE CODE d un profil vivant (la
+      // bascule six vers huit) : apres le lot, mon profil existe et designe un autre
+      // code. Le numero d un compte qui se supprime, lui, est BRULE (07/09) : l index
+      // reste, pointant vers le compte disparu, et personne ne le reprend -- ni par un
+      // carrousel effacer-recreer, ni par un compte neuf. C est ce qui protege les
+      // amis du joueur parti : ressaisir son numero ne mene plus a un inconnu. La
+      // branche « ou il n est plus la » du 04/09 a donc vecu.
       // resource.data.uid == moi() ne bouge pas : c est lui qui empeche de liberer le
-      // code d un autre.
-      // Un index ABSENT s efface sans condition (04/09) : c est un non-evenement, il
-      // n y a rien a proteger. Le refuser faisait tomber le lot entier de la
-      // suppression de compte -- resource est null sur un document absent, et
-      // resource.data.uid tombait en erreur -- des qu un client relancait une
-      // suppression dont le dernier lot etait deja passe : la suppression se
-      // verrouillait a vie. Tout index qui EXISTE reste garde par son uid.
+      // code d un autre. Un index ABSENT s efface sans condition : c est un
+      // non-evenement, et le refuser faisait tomber le lot entier d une relance.
       allow delete: if connecte()
         && (resource == null
             || (resource.data.uid == moi()
-                && (!existsAfter(docUser(moi()))
-                    || getAfter(docUser(moi())).data.codeAmi != code)));
+                && existsAfter(docUser(moi()))
+                && getAfter(docUser(moi())).data.codeAmi != code));
+    }
+
+    // ---------- Les tombeaux (07/09) ----------
+    // Un document par compte qui a supprime son profil, pose dans le MEME lot que
+    // l effacement. Il ne dit rien d autre que « ce compte est parti » ; il ne se lit
+    // pas, ne se modifie pas, ne s efface pas. La creation d un profil le consulte
+    // par exists(), qui n a pas besoin du droit de lecture.
+    match /tombeaux/{uid} {
+      allow get, list: if false;
+      allow create: if connecte() && moi() == uid
+        && !existsAfter(docUser(uid))
+        && request.resource.data.keys().hasOnly(['le'])
+        && request.resource.data.le == request.time;
+      allow update, delete: if false;
     }
   }
 }
