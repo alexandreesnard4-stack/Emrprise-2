@@ -66,7 +66,7 @@ Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
 Hub : bande de bannière équipée, assez haute pour que son illustration se reconnaisse, portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
-Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours.
+Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours, le titre et la grille tenus en haut de la page.
 Page Boutique épurée : seuls la bannière du joueur et le trésor restent en haut, le catalogue occupe le reste de l'écran.
 Un auvent d'or et de tissu coiffe la Boutique et reste accroché en haut pendant que les rayons défilent dessous.
 La Boutique a son propre fond d'échoppe sombre, distinct du ciel du hub, immobile pendant que les rayons défilent.
@@ -80,6 +80,7 @@ Un ami retiré peut être redemandé aussitôt : le délai d'un jour ne vise que
 La revanche s'affiche dès qu'on la propose, sans attendre la réponse du serveur.
 Un duel entre amis ne rapporte ni XP, ni pièces, ni avancement de quête : il se joue pour le plaisir. Les parties jouées et les victoires, elles, comptent.
 Réglages, rubrique Mon compte : la politique de confidentialité, les conditions d'utilisation, et la suppression définitive du compte.
+Réglages : un en-tête avec la croix de fermeture, qui reste visible si le panneau défile, et les entrées en trois groupes : Apprendre, Préférences, Mon compte.
 L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
 Avant-partie : chaque camp sur son territoire, avec un bandeau d'étendard portant médaillon de l'Ordre favori, pseudo, titre de style (avant le premier titre, la ligne dit que le style se dessine, pour soi comme pour l'adversaire en ligne), carte de niveau et trophées, la main et la Réserve posées dessous.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
@@ -87,9 +88,13 @@ La galerie des arènes teinte chaque page d'un halo aux couleurs de sa ligue, é
 Panthéon : l'écran du classement des meilleurs Commandants.
 Cérémonie d'entrée au premier lancement, et cérémonies de victoire et de défaite en fin de partie.
 Écran de fin : score, trophées animés, XP et pièces de la partie, la Flamme du jour portée par son icône, gains de tournoi.
-Partage des codes de partie et de tournoi (copie, et envoi quand l'appareil le permet).
+Partage des codes de partie et de tournoi : la copie donne le code seul, à coller dans le jeu ; l'envoi, quand l'appareil le permet, emporte l'adresse du jeu.
+Un lien de tournoi ou d'ami reçu ouvre directement l'écran du tournoi en ligne ou celui des amis, le code déjà saisi ; rien n'est rejoint ni envoyé tant qu'on n'appuie pas.
+Le lien du jeu se présente avec son icône, son titre et son aperçu dans les messageries, et le jeu s'installe sur l'écran d'accueil avec sa propre icône.
 Fond d'écran dédié en partie, thème de plateau choisi appliqué en jeu.
 Chaque famille d'écrans a son fond : le choix du niveau de l'Écho, le choix des Ordres, les tournois, la Confluence, les défis, le tutoriel.
+Les fonds du hub couvrent tout l'écran, et la Boutique s'ouvre sans auvent.
+Ajouté à l'écran d'accueil d'un iPhone, le jeu laisse sa place à la barre d'état : les Quêtes, la galerie des arènes, le bouton Retour et le minuteur du choix des Ordres ne passent plus sous l'heure.
 Le choix du niveau de l'Écho présente ses quatre niveaux en cartes illustrées, dressées sur toute la hauteur de l'écran.
 Les écrans de modes centrent leur contenu dans la hauteur de l'écran.
 Préférence système d'animations réduites respectée.
@@ -104,7 +109,7 @@ Quand un Maudit est capturé, le sang monte sur sa carte, s'y tient un instant, 
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
 Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.
-Les cadres gravés du rayon Hérauts s'affichent entiers : gemmes, pointes et coins visibles.
+Les cadres gravés du rayon Hérauts s'affichent entiers et détourés, la tenture passant derrière eux : gemmes, pointes et coins visibles.
 Dans le hub, le sceau et le nom du joueur sont calés à gauche de la bande.
 En ligne, le serveur valide chaque écriture de la partie : un coup ne s'inscrit que dans son tour, et un forfait ne se constate qu'après le délai d'inactivité affiché à l'écran.
 En ligne, le serveur valide aussi chaque écriture d'un tournoi : les inscriptions, l'arbre, les résultats et le champion.
