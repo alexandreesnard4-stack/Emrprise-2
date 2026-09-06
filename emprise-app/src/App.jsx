@@ -6350,7 +6350,7 @@ const APP_STYLES = `
           transition: border-color .2s, background .2s;
         }
         .settings-row:hover { border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.06); }
-        .settings-texte { flex: 1; text-align: left; }
+        .settings-texte { flex: 1; min-width: 0; text-align: left; }
         .settings-nom { font-family: 'Cinzel', serif; font-size: 14px; color: var(--gold-bright); }
         .settings-desc { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
         .settings-fleche { font-size: 22px; color: var(--muted); line-height: 1; }
@@ -13247,6 +13247,70 @@ const APP_STYLES = `
           .info-panel.settings-panel .settings-desc { font-size: 9.5px; margin-top: 2px; }
           .info-panel.settings-panel .info-panel-title { margin-bottom: 2px; }
           .info-panel.settings-panel .reset-btn { margin-top: 4px; }
+        }
+        /* Reglages seuls (05/09, maquette A, la liste groupee). La classe reglages-panel
+           n'est portee QUE par ce panneau : settings-panel, elle, sert aussi a la fiche de
+           Commandant, aux Amis, a La Flamme, aux Modes et a l'Historique classe, qui gardent
+           les regles partagees ci-dessus a l'identique. Ici : en-tete collant a croix
+           toujours visible, trois groupes, lignes compactes. Le panneau redevient DEFILANT
+           (overflow et max-height de .info-panel, remis explicitement car la regle partagee
+           les retire) : s'il depasse l'ecran d'un petit telephone, on defile et la croix
+           reste en haut -- c'est tout l'objet de l'en-tete collant. */
+        .info-panel.settings-panel.reglages-panel { overflow-y: auto; max-height: 88dvh; padding: 0 20px 20px; gap: 12px; }
+        /* L'en-tete touche les bords du panneau : il deborde du rembourrage lateral (les -20px
+           reprennent le padding de .info-panel) et c'est LUI qui porte le rembourrage haut,
+           le panneau n'en a plus. Une marge negative en haut ne marchait pas : le collant
+           exclut le rembourrage du conteneur de sa zone, top: 0 renvoyait l'en-tete 14 px
+           plus bas et les lignes defilaient dans la bande laissee au-dessus (mesure). */
+        .settings-entete {
+          position: sticky; top: 0; z-index: 2;
+          display: flex; align-items: center; justify-content: space-between;
+          margin: 0 -20px 0; padding: 14px 20px 10px;
+          /* Opaque jusqu'au bas de la croix (dont le fond est presque transparent) : a 72 %
+             l'arret tombait 6 px trop haut et une ligne pouvait transparaitre sous son bord
+             au defilement. Le fondu ne vit plus que dans le rembourrage bas. */
+          background: linear-gradient(180deg, var(--panel) calc(100% - 8px), rgba(30,26,41,0));
+        }
+        .info-panel.settings-panel.reglages-panel .settings-entete .info-panel-title { margin: 0; text-align: left; }
+        .settings-fermer {
+          width: 32px; height: 32px; border-radius: 50%; flex: none;
+          border: 1px solid rgba(203,164,86,0.5); background: rgba(203,164,86,0.08);
+          color: var(--gold-bright); font-size: 15px; line-height: 1; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .settings-groupe {
+          border: 1px solid rgba(203,164,86,0.22); border-radius: 12px;
+          background: rgba(30,26,41,0.92); overflow: hidden;
+          /* flex: none, sinon overflow: hidden ramene la hauteur minimale du groupe a zero
+             dans la colonne flex du panneau : sur un ecran court, les groupes s'ecrasaient
+             (lignes coupees) au lieu de faire defiler le panneau -- mesure a 375 x 560. */
+          flex: none;
+        }
+        .info-panel.settings-panel.reglages-panel .settings-titre { margin: 4px 6px 6px; }
+        /* Les lignes deviennent des rangees de groupe, plus des cartes. box-sizing border-box
+           reste : en content-box avec width 100 %, le padding horizontal faisait deborder le
+           chevron du panneau (piege deja rencontre). */
+        .info-panel.settings-panel.reglages-panel .settings-row {
+          box-sizing: border-box; width: 100%;
+          gap: 12px; padding: 10px 14px; min-height: 50px; margin: 0;
+          border-radius: 0; background: none; border: none;
+          border-top: 1px solid rgba(203,164,86,0.10);
+        }
+        .info-panel.settings-panel.reglages-panel .settings-row:first-child { border-top: none; }
+        .info-panel.settings-panel.reglages-panel .settings-row:hover { background: rgba(203,164,86,0.06); }
+        .info-panel.settings-panel.reglages-panel .settings-nom { font-size: 12.5px; line-height: 1.2; }
+        .info-panel.settings-panel.reglages-panel .settings-desc {
+          font-size: 11px; margin-top: 2px; line-height: 1.3;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .info-panel.settings-panel.reglages-panel .settings-fleche { font-size: 18px; }
+        .info-panel.settings-panel.reglages-panel .settings-danger { border-top-color: rgba(224,101,90,0.25); }
+        .info-panel.settings-panel.reglages-panel .settings-danger:hover { background: rgba(225,91,82,0.07); }
+        /* Ecrans courts : le rembourrage se serre, et l'en-tete suit pour continuer a
+           toucher les bords. */
+        @media (max-height: 720px) {
+          .info-panel.settings-panel.reglages-panel { padding: 0 12px 12px; gap: 8px; }
+          .settings-entete { margin: 0 -12px 0; padding: 10px 12px 8px; }
         }
         .info-panel-title {
           font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
@@ -21529,87 +21593,99 @@ export default function Emprise() {
 
           {activeModal === "settings" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
-              <div className="info-panel settings-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="info-panel-title">Réglages</div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={() => { setActiveModal(null); startTutorial(); }} onKeyDown={KEY_ACTIVATE(() => { setActiveModal(null); startTutorial(); })}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Tutoriel</div>
-                    <div className="settings-desc">Apprenez à jouer en quelques coups guidés.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
+              <div className="info-panel settings-panel reglages-panel" onClick={(e) => e.stopPropagation()}>
+                {/* Maquette A (05/09), la liste groupee : un en-tete collant dont la croix reste
+                    visible si le panneau vient a defiler, trois groupes au lieu de neuf cartes
+                    isolees, lignes compactes. Memes entrees, memes actions, memes bascules : la
+                    croix fait exactement ce que faisait le bouton Fermer du bas. */}
+                <div className="settings-entete">
+                  <div className="info-panel-title">Réglages</div>
+                  <button className="settings-fermer" onClick={() => setActiveModal(null)} aria-label="Fermer les réglages">✕</button>
                 </div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("story")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("story"))}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">L'Histoire</div>
-                    <div className="settings-desc">La Faille, les deux camps et le Rite d'Emprise.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
-                </div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("rules")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("rules"))}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Règles du jeu</div>
-                    <div className="settings-desc">Capture, Résonance, Onde et capacités d'Ordre.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
-                </div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("stats")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("stats"))}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Statistiques</div>
-                    <div className="settings-desc">Parties jouées, victoires, trophées.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
-                </div>
-                <div className="settings-row" role="button" tabIndex={0} onClick={toggleReducedMotion} onKeyDown={KEY_ACTIVATE(toggleReducedMotion)}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Animations réduites</div>
-                    <div className="settings-desc">Raccourcit les effets de capacité et saute les cérémonies.</div>
-                  </div>
-                  <div className={`settings-bascule ${reducedMotion ? "on" : ""}`} aria-hidden="true"><span /></div>
-                </div>
-                {/* La coupure des messages se decide en partie, mais elle DURE : elle est
-                    gardee d'une partie a l'autre. Sans cette ligne, un joueur ayant coupe
-                    contre un inconnu penible restait coupe contre ses amis, sans rien pour
-                    le lui apprendre ni pour revenir en arriere hors d'une partie en ligne. */}
-                <div className="settings-row" role="button" tabIndex={0} onClick={basculerMessagesDirects} onKeyDown={KEY_ACTIVATE(basculerMessagesDirects)}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Messages en partie</div>
-                    <div className="settings-desc">
-                      {messagesDirects
-                        ? "Vous recevez les messages de votre adversaire."
-                        : "Coupés. Rien ne vous parvient, et ce qui arrive pendant la coupure reste caché."}
+                <div className="settings-titre">Apprendre</div>
+                <div className="settings-groupe">
+                  <div className="settings-row" role="button" tabIndex={0} onClick={() => { setActiveModal(null); startTutorial(); }} onKeyDown={KEY_ACTIVATE(() => { setActiveModal(null); startTutorial(); })}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Tutoriel</div>
+                      <div className="settings-desc">Apprenez à jouer en quelques coups guidés.</div>
                     </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
                   </div>
-                  <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
+                  <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("story")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("story"))}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">L'Histoire</div>
+                      <div className="settings-desc">La Faille, les deux camps et le Rite d'Emprise.</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
+                  </div>
+                  <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("rules")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("rules"))}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Règles du jeu</div>
+                      <div className="settings-desc">Capture, Résonance, Onde et capacités d'Ordre.</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
+                  </div>
+                  <div className="settings-row" role="button" tabIndex={0} onClick={() => setActiveModal("stats")} onKeyDown={KEY_ACTIVATE(() => setActiveModal("stats"))}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Statistiques</div>
+                      <div className="settings-desc">Parties jouées, victoires, trophées.</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
+                  </div>
+                </div>
+                <div className="settings-titre">Préférences</div>
+                <div className="settings-groupe">
+                  <div className="settings-row" role="button" tabIndex={0} onClick={toggleReducedMotion} onKeyDown={KEY_ACTIVATE(toggleReducedMotion)}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Animations réduites</div>
+                      <div className="settings-desc">Effets raccourcis, cérémonies sautées.</div>
+                    </div>
+                    <div className={`settings-bascule ${reducedMotion ? "on" : ""}`} aria-hidden="true"><span /></div>
+                  </div>
+                  {/* La coupure des messages se decide en partie, mais elle DURE : elle est
+                      gardee d'une partie a l'autre. Sans cette ligne, un joueur ayant coupe
+                      contre un inconnu penible restait coupe contre ses amis, sans rien pour
+                      le lui apprendre ni pour revenir en arriere hors d'une partie en ligne. */}
+                  <div className="settings-row" role="button" tabIndex={0} onClick={basculerMessagesDirects} onKeyDown={KEY_ACTIVATE(basculerMessagesDirects)}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Messages en partie</div>
+                      <div className="settings-desc">
+                        {messagesDirects
+                          ? "Vous recevez ceux de votre adversaire."
+                          : "Coupés : rien ne vous parvient."}
+                      </div>
+                    </div>
+                    <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
+                  </div>
                 </div>
                 {/* Mon compte (04/09) : les deux pages legales, exigees par Apple et
                     Google, et la suppression du compte. Les pages vivent dans public/,
                     servies telles quelles ; elles s ouvrent dans un onglet a part pour
                     ne pas quitter la partie en cours. */}
                 <div className="settings-titre">Mon compte</div>
-                <a className="settings-row" href="/confidentialite.html" target="_blank" rel="noopener noreferrer">
-                  <div className="settings-texte">
-                    <div className="settings-nom">Politique de confidentialité</div>
-                    <div className="settings-desc">Ce que le jeu enregistre, et ce qu'il n'enregistre pas.</div>
+                <div className="settings-groupe">
+                  <a className="settings-row" href="/confidentialite.html" target="_blank" rel="noopener noreferrer">
+                    <div className="settings-texte">
+                      <div className="settings-nom">Politique de confidentialité</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
+                  </a>
+                  <a className="settings-row" href="/cgu.html" target="_blank" rel="noopener noreferrer">
+                    <div className="settings-texte">
+                      <div className="settings-nom">Conditions d'utilisation</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
+                  </a>
+                  <div className="settings-row settings-danger" role="button" tabIndex={0}
+                    onClick={() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); }}
+                    onKeyDown={KEY_ACTIVATE(() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); })}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Supprimer mon compte</div>
+                      <div className="settings-desc">Définitif : profil, amis, progression.</div>
+                    </div>
+                    <span className="settings-fleche" aria-hidden="true">›</span>
                   </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
-                </a>
-                <a className="settings-row" href="/cgu.html" target="_blank" rel="noopener noreferrer">
-                  <div className="settings-texte">
-                    <div className="settings-nom">Conditions d'utilisation</div>
-                    <div className="settings-desc">Les règles du jeu, hors du plateau.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
-                </a>
-                <div className="settings-row settings-danger" role="button" tabIndex={0}
-                  onClick={() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); }}
-                  onKeyDown={KEY_ACTIVATE(() => { setSuppressionMot(""); setSuppressionErreur(""); setSuppressionOuverte(true); })}>
-                  <div className="settings-texte">
-                    <div className="settings-nom">Supprimer mon compte</div>
-                    <div className="settings-desc">Efface définitivement le profil, les amis et toute la progression.</div>
-                  </div>
-                  <span className="settings-fleche" aria-hidden="true">›</span>
                 </div>
-                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
                 {/* La version de l'application. C'est elle qu'on se lit a voix haute pour
                     savoir si un telephone est a jour : si cette ligne manque ou differe de
                     celle de l'ordinateur, l'appareil sert une vieille copie. */}
