@@ -3618,23 +3618,6 @@ function jourAbsoluBoutique(maintenant) {
 const TEST_ROTATION = typeof window !== "undefined"
   && new URLSearchParams(window.location.search).get("test-rotation") === "1";
 let decalageBoutique = 0;
-// ---------- Main a plat (maquette A), derriere ?main=plat ----------
-// Lue une fois au chargement, comme test-rotation, mais PERSISTANTE (a la difference de
-// test-rotation) : l'application installee sur l'ecran d'accueil s'ouvre sur "/" sans
-// barre d'adresse, un parametre d'URL n'y entre jamais. ?main=plat memorise donc le
-// drapeau dans le stockage local ; ?main=medaillons l'efface ; sans parametre, c'est la
-// memoire qui decide. Un joueur ordinaire n'a jamais vu l'un ni l'autre : rien ne s'active.
-const MAIN_A_PLAT_DEMANDEE = (() => {
-  if (typeof window === "undefined") return false;
-  const CLE = "emprise-main-plat";
-  let demande = null;
-  try { demande = new URLSearchParams(window.location.search).get("main"); } catch (e) { return false; }
-  try {
-    if (demande === "plat") { localStorage.setItem(CLE, "1"); return true; }
-    if (demande === "medaillons") { localStorage.removeItem(CLE); return false; }
-    return localStorage.getItem(CLE) === "1";
-  } catch (e) { return demande === "plat"; } // stockage indisponible : le parametre seul compte
-})();
 function decalerBoutique(jours) {
   if (!TEST_ROTATION) return 0;
   // Ramene dans 0..7 : au huitieme clic on revient au jour de depart, sans
@@ -10077,23 +10060,6 @@ const APP_STYLES = `
           .emprise-root.ecran-jeu .card.hand.in-fan { width: clamp(64px, 19vw, 84px); height: clamp(86px, 26vw, 114px); }
           .emprise-root.ecran-jeu .order-tile { width: 54px; height: 54px; }
         }
-        /* Main a plat (?main=plat, maquette A) : deux rangees de cartes par camp a la place
-           des medaillons. Tailles calculees pour que plateau + deux mains + bandeau + boutons
-           tiennent des 800 px de haut : a 390 px de large la pile hors mains fait 539 px, il
-           reste 4 hauteurs de carte + 34 px, donc une carte de 56 px au plus a 800 px. Les
-           pastilles gardent une taille lisible (16 px a 390 px de large). Placees apres la
-           regle de bureau ci-dessus par lisibilite ; elles l'emportent de toute facon par
-           specificite (une classe de plus). */
-        .emprise-root.ecran-jeu .hand-row.a-plat {
-          flex-direction: column; gap: 5px; max-width: none; padding: 5px 7px;
-        }
-        .emprise-root.ecran-jeu .main-groupe-plat { display: flex; gap: 5px; }
-        .emprise-root.ecran-jeu .card.hand.a-plat {
-          height: min(14.5vw, 6.8dvh); width: min(10.9vw, 5.1dvh);
-        }
-        .emprise-root.ecran-jeu .card.hand.a-plat .rank {
-          width: min(4.2vw, 2dvh); height: min(4.2vw, 2dvh); font-size: min(2.5vw, 1.2dvh);
-        }
 
         .table.arene { background: transparent; border: none; box-shadow: none; overflow: visible; padding: 20px; }
         /* Sur un ecran court (iPhone SE et compagnie) il n'y a pas de place a reprendre :
@@ -14693,54 +14659,6 @@ export default function Emprise() {
       return next;
     });
   }
-  // ---------- Main a plat : l'interrupteur des Reglages ----------
-  // MAIN_A_PLAT_DEMANDEE garde son role au chargement (?main=plat, ?main=medaillons, la
-  // memoire). Mais sur iPhone, l'application installee sur l'ecran d'accueil a son PROPRE
-  // stockage, separe de Safari, et s'ouvre toujours sur "/" sans barre d'adresse : le
-  // drapeau pose depuis Safari n'y arrive jamais, alors que c'est le seul endroit ou la
-  // fenetre est assez haute pour la main a plat. D'ou cet etat, bascule depuis les
-  // Reglages, memorise dans la meme cle, sans rechargement de page.
-  const [mainPlatVoulue, setMainPlatVoulue] = useState(MAIN_A_PLAT_DEMANDEE);
-  function basculerMainPlat() {
-    setMainPlatVoulue((prev) => {
-      const next = !prev;
-      try {
-        if (next) localStorage.setItem("emprise-main-plat", "1"); else localStorage.removeItem("emprise-main-plat");
-      } catch (e) { /* tant pis, pas persiste cette session */ }
-      return next;
-    });
-  }
-  // ---------- Main a plat : la fenetre est-elle assez haute ? ----------
-  // Seuil 740 px. Il valait 800 quand la barre d'etat etait translucide : la fenetre d'un
-  // iPhone faisait 844 px DONT 59 px de barre d'etat, rendus par env(safe-area-inset-top).
-  // Avec la barre opaque (index.html), la page commence sous l'heure : la fenetre fait
-  // 785 px et il n'y a plus rien a rendre ; le meme espace utile correspond a 740 px.
-  // Mesure a 390 px de large : 142 px de bandeaux, ecarts et boutons, 397 px de plateau, et
-  // deux mains de 17 px + deux hauteurs de carte. En dessous on retombe sur les medaillons :
-  // c'est le comportement adaptatif voulu. Suivi par matchMedia (ecouteur "change",
-  // retire au demontage), sans mesurer au rendu.
-  const [grandEcran, setGrandEcran] = useState(() => {
-    try { return !!(window.matchMedia && window.matchMedia("(min-height: 740px)").matches); } catch (e) { return false; }
-  });
-  useEffect(() => {
-    if (!mainPlatVoulue) return; // interrupteur eteint : rien a suivre
-    let mq;
-    try { mq = window.matchMedia("(min-height: 740px)"); } catch (e) { return; }
-    const suivre = (e) => setGrandEcran(e.matches);
-    setGrandEcran(mq.matches);
-    // addListener : repli pour les anciens Safari, ou addEventListener n'existe pas
-    // encore sur MediaQueryList. Miroir exact au demontage.
-    if (mq.addEventListener) mq.addEventListener("change", suivre); else mq.addListener(suivre);
-    return () => { if (mq.removeEventListener) mq.removeEventListener("change", suivre); else mq.removeListener(suivre); };
-  }, [mainPlatVoulue]);
-  // Une main est a plat quand l'interrupteur est allume (drapeau au chargement, ou
-  // Reglages en cours de session), que la fenetre est assez haute et que
-  // le camp a au plus 2 groupes : une main normale, meme tombee a 1 groupe en fin de
-  // partie. Le bac a sable et la Confluence (N groupes d'une carte, confluenceActive vrai
-  // dans les deux cas) en sont exclus explicitement : compter les groupes ne suffisait
-  // pas, leurs deux dernieres cartes seraient passees a plat en pleine partie.
-  const mainAPlat = (owner) => mainPlatVoulue && grandEcran && !confluenceActive
-    && (owner === "blue" ? blueGroups : redGroups).length <= 2;
 
   // ---------- Reglages : fermeture en tirant le panneau vers le bas (06/09) ----------
   // Geste tactile seulement, la croix reste. Les ecouteurs sont poses A LA MAIN sur le
@@ -16085,7 +16003,7 @@ export default function Emprise() {
     if (main.length === 0 && reserveRestante(camp).length === 0) return null;
     return (
       <div className="main-et-reserve en-partie">
-        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""} ${mainAPlat(camp) ? "a-plat" : ""}`}>
+        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
         {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null, camp)}
@@ -19357,28 +19275,6 @@ export default function Emprise() {
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
-      // Main a plat (?main=plat, fenetre assez haute, main normale) : les cartes du groupe
-      // en rangee, EXACTEMENT comme dans l'eventail (memes props, meme startCardDrag) mais
-      // sans vignette, sans fond ni eventail. Rien ne disparait sous le doigt : le clic
-      // qui suit le toucher retombe sur la carte elle-meme, pas sur une case du plateau,
-      // et fanGrabRef n'a rien a neutraliser puisqu'aucun eventail n'est ouvert.
-      if (mainAPlat(owner)) {
-        return (
-          <div key={group.ability} className="main-groupe-plat">
-            {group.cards.map(({ card, handIdx }) => (
-              <Card
-                key={card.id}
-                card={card}
-                owner={owner}
-                extraClass={`hand a-plat ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === campAugure && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
-                onPointerDown={canInteract ? (e) => startCardDrag(owner, handIdx, e) : undefined}
-                selected={!!(selected && selected.owner === owner && selected.idx === handIdx)}
-                concealed={isConcealed(card)}
-              />
-            ))}
-          </div>
-        );
-      }
       const isOpen = !!(fanOpen && fanOpen.owner === owner && fanOpen.ability === group.ability);
       const isClosing = !isOpen && !!(fanClosing && fanClosing.owner === owner && fanClosing.ability === group.ability);
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
@@ -21853,16 +21749,6 @@ export default function Emprise() {
                       </div>
                     </div>
                     <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
-                  </div>
-                  {/* Main a plat (essai) : l'application installee sur iPhone a son propre
-                      stockage, separe de Safari, et s'ouvre sans barre d'adresse, le drapeau
-                      ?main=plat n'y entre jamais. D'ou cet interrupteur, pose depuis l'application. */}
-                  <div className="settings-row" role="button" tabIndex={0} onClick={basculerMainPlat} onKeyDown={KEY_ACTIVATE(basculerMainPlat)}>
-                    <div className="settings-texte">
-                      <div className="settings-nom">Main à plat (essai)</div>
-                      <div className="settings-desc">Deux rangées de cartes à la place des médaillons, sur les grands écrans.</div>
-                    </div>
-                    <div className={"settings-bascule " + (mainPlatVoulue ? "on" : "")} aria-hidden="true"><span /></div>
                   </div>
                 </div>
                 {/* Mon compte (04/09) : les deux pages legales, exigees par Apple et
