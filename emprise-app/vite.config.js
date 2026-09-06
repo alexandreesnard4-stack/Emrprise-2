@@ -48,7 +48,9 @@ function horodateEtatDuJeu(horodatage) {
       const f = fileURLToPath(new URL("./dist/etat-du-jeu.txt", import.meta.url));
       if (!fs.existsSync(f)) return;
       const lignes = fs.readFileSync(f, "utf8").split(/\r?\n/);
-      const ligne = `Version du ${horodatage} — horodatage posé automatiquement à la construction.`;
+      // Deux-points et non tiret cadratin : la copie servie est un texte visible, et le
+      // depot n'en tolere aucun (le fichier source en a ete purge le 04/09).
+      const ligne = `Version du ${horodatage} : horodatage posé automatiquement à la construction.`;
       const deja = lignes.findIndex((l) => l.startsWith("Version "));
       if (deja >= 0) lignes[deja] = ligne;
       else lignes.splice(1, 0, ligne);
