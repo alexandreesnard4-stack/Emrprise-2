@@ -14693,6 +14693,23 @@ export default function Emprise() {
       return next;
     });
   }
+  // ---------- Main a plat : l'interrupteur des Reglages ----------
+  // MAIN_A_PLAT_DEMANDEE garde son role au chargement (?main=plat, ?main=medaillons, la
+  // memoire). Mais sur iPhone, l'application installee sur l'ecran d'accueil a son PROPRE
+  // stockage, separe de Safari, et s'ouvre toujours sur "/" sans barre d'adresse : le
+  // drapeau pose depuis Safari n'y arrive jamais, alors que c'est le seul endroit ou la
+  // fenetre est assez haute pour la main a plat. D'ou cet etat, bascule depuis les
+  // Reglages, memorise dans la meme cle, sans rechargement de page.
+  const [mainPlatVoulue, setMainPlatVoulue] = useState(MAIN_A_PLAT_DEMANDEE);
+  function basculerMainPlat() {
+    setMainPlatVoulue((prev) => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem("emprise-main-plat", "1"); else localStorage.removeItem("emprise-main-plat");
+      } catch (e) { /* tant pis, pas persiste cette session */ }
+      return next;
+    });
+  }
   // ---------- Main a plat : la fenetre est-elle assez haute ? ----------
   // A 800 px et plus, plateau + deux mains a plat + bandeau + boutons tiennent (mesure a
   // 390 px de large : 142 px de bandeaux, ecarts et boutons, 397 px de plateau, et deux
@@ -14703,7 +14720,7 @@ export default function Emprise() {
     try { return !!(window.matchMedia && window.matchMedia("(min-height: 800px)").matches); } catch (e) { return false; }
   });
   useEffect(() => {
-    if (!MAIN_A_PLAT_DEMANDEE) return; // sans le drapeau, rien a suivre
+    if (!mainPlatVoulue) return; // interrupteur eteint : rien a suivre
     let mq;
     try { mq = window.matchMedia("(min-height: 800px)"); } catch (e) { return; }
     const suivre = (e) => setGrandEcran(e.matches);
@@ -14712,13 +14729,14 @@ export default function Emprise() {
     // encore sur MediaQueryList. Miroir exact au demontage.
     if (mq.addEventListener) mq.addEventListener("change", suivre); else mq.addListener(suivre);
     return () => { if (mq.removeEventListener) mq.removeEventListener("change", suivre); else mq.removeListener(suivre); };
-  }, []);
-  // Une main est a plat quand le drapeau est pose, que la fenetre est assez haute et que
+  }, [mainPlatVoulue]);
+  // Une main est a plat quand l'interrupteur est allume (drapeau au chargement, ou
+  // Reglages en cours de session), que la fenetre est assez haute et que
   // le camp a au plus 2 groupes : une main normale, meme tombee a 1 groupe en fin de
   // partie. Le bac a sable et la Confluence (N groupes d'une carte, confluenceActive vrai
   // dans les deux cas) en sont exclus explicitement : compter les groupes ne suffisait
   // pas, leurs deux dernieres cartes seraient passees a plat en pleine partie.
-  const mainAPlat = (owner) => MAIN_A_PLAT_DEMANDEE && grandEcran && !confluenceActive
+  const mainAPlat = (owner) => mainPlatVoulue && grandEcran && !confluenceActive
     && (owner === "blue" ? blueGroups : redGroups).length <= 2;
 
   // ---------- Reglages : fermeture en tirant le panneau vers le bas (06/09) ----------
@@ -21832,6 +21850,16 @@ export default function Emprise() {
                       </div>
                     </div>
                     <div className={`settings-bascule ${messagesDirects ? "on" : ""}`} aria-hidden="true"><span /></div>
+                  </div>
+                  {/* Main a plat (essai) : l'application installee sur iPhone a son propre
+                      stockage, separe de Safari, et s'ouvre sans barre d'adresse, le drapeau
+                      ?main=plat n'y entre jamais. D'ou cet interrupteur, pose depuis l'application. */}
+                  <div className="settings-row" role="button" tabIndex={0} onClick={basculerMainPlat} onKeyDown={KEY_ACTIVATE(basculerMainPlat)}>
+                    <div className="settings-texte">
+                      <div className="settings-nom">Main à plat (essai)</div>
+                      <div className="settings-desc">Deux rangées de cartes à la place des médaillons, sur les grands écrans.</div>
+                    </div>
+                    <div className={"settings-bascule " + (mainPlatVoulue ? "on" : "")} aria-hidden="true"><span /></div>
                   </div>
                 </div>
                 {/* Mon compte (04/09) : les deux pages legales, exigees par Apple et
