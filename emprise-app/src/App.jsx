@@ -14659,6 +14659,98 @@ export default function Emprise() {
       return next;
     });
   }
+  // ---------- Reglages : fermeture en tirant le panneau vers le bas (06/09) ----------
+  // Geste tactile seulement, la croix reste. Les ecouteurs sont poses A LA MAIN sur le
+  // panneau, avec { passive: false } pour touchmove : le onTouchMove de React est passif
+  // et son preventDefault serait ignore, le panneau defilerait en meme temps qu'il bouge.
+  // On n'anime QUE transform : hauteur, voile et ombres ont deja fait tomber les images
+  // par seconde de 52 a 14 sur ce projet. touch-action et overscroll-behavior de
+  // .info-overlay et .info-panel ne bougent pas, ils protegent le reste du jeu.
+  const reglagesRef = useRef(null);
+  useEffect(() => {
+    const el = reglagesRef.current;
+    if (activeModal !== "settings" || !el) return;
+    el.style.transform = ""; el.style.transition = ""; // jamais decale a l'ouverture
+    const SEUIL = 10;          // px de course verticale avant de prendre la main
+    const FERMETURE = 110;     // px tires : au-dela, on ferme
+    const LANCER = 0.5;        // px par milliseconde : un lancer vers le bas ferme aussi
+    const RESISTANCE = 3;      // vers le haut, le deplacement est divise par 3...
+    const PLAFOND_HAUT = 40;   // ...et ne depasse jamais -40 px
+    let suivi = null;
+    // Retour a zero : transition sur transform seul, 0,22 s. En animations reduites,
+    // retour sec : on efface directement, il n'y aura pas de transitionend a attendre.
+    const remettre = () => {
+      if (reducedMotion) { el.style.transition = ""; el.style.transform = ""; return; }
+      el.style.transition = "transform 0.22s";
+      el.style.transform = "translateY(0px)";
+    };
+    const debut = (e) => {
+      // Un second doigt pose sur le panneau : on le remet en place avant d'oublier le
+      // suivi, sinon il resterait en l'air jusqu'au prochain geste.
+      if (e.touches.length !== 1) { if (suivi && suivi.pris) remettre(); suivi = null; return; }
+      const t = e.touches[0];
+      // Depuis l'en-tete, toujours ; ailleurs, seulement si le panneau est en haut de son
+      // defilement AU MOMENT ou le doigt se pose. Memorise ici, jamais recalcule : un
+      // rebond de defilement ferait basculer la condition en plein mouvement.
+      const cible = e.target && e.target.closest ? e.target.closest(".settings-entete") : null;
+      const autorise = !!cible || el.scrollTop <= 0;
+      suivi = { x0: t.clientX, y0: t.clientY, yPrec: t.clientY, tPrec: e.timeStamp, vitesse: 0, pris: false, abandonne: !autorise };
+      el.style.transition = "";
+    };
+    const mouvement = (e) => {
+      if (!suivi || suivi.abandonne || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - suivi.x0, dy = t.clientY - suivi.y0;
+      if (!suivi.pris) {
+        // Sous le seuil : RIEN, et surtout pas de preventDefault, sinon un appui sur une
+        // bascule ou sur la croix serait avale par le geste.
+        if (Math.abs(dy) < SEUIL && Math.abs(dx) < SEUIL) return;
+        // Horizontal dominant : abandon pour de bon. Vers le haut : c'est un defilement
+        // de la liste, pas le geste ; on le laisse au navigateur.
+        if (Math.abs(dx) > Math.abs(dy) || dy < 0) { suivi.abandonne = true; return; }
+        suivi.pris = true;
+      }
+      if (e.cancelable) e.preventDefault();
+      const dt = e.timeStamp - suivi.tPrec;
+      if (dt > 0) suivi.vitesse = (t.clientY - suivi.yPrec) / dt;
+      suivi.yPrec = t.clientY; suivi.tPrec = e.timeStamp;
+      const y = dy >= 0 ? dy : Math.max(-PLAFOND_HAUT, dy / RESISTANCE);
+      el.style.transform = "translateY(" + y + "px)";
+    };
+    const fin = (e) => {
+      if (!suivi) return;
+      const s = suivi; suivi = null;
+      if (!s.pris) return;
+      const tire = s.yPrec - s.y0;
+      // Un doigt immobile n'a plus d'elan : la vitesse du dernier mouvement ne compte que
+      // s'il date de moins de 100 ms. Et une annulation systeme (touchcancel) ne ferme
+      // jamais, elle remet seulement en place.
+      const vitesse = e.timeStamp - s.tPrec < 100 ? s.vitesse : 0;
+      if (e.type !== "touchcancel" && (tire > FERMETURE || vitesse > LANCER)) { setActiveModal(null); return; } // ce que fait la croix
+      remettre();
+    };
+    const finTransition = (e) => {
+      // Seulement la transition du panneau lui-meme (celle du bouton de bascule remonte
+      // jusqu'ici), et jamais en plein geste : en animations reduites, la regle globale
+      // fait de chaque deplacement une transition de 1 ms dont la fin remettrait le
+      // panneau a zero entre deux mouvements du doigt.
+      if (e.target !== el || e.propertyName !== "transform" || suivi) return;
+      el.style.transform = ""; el.style.transition = "";
+    };
+    el.addEventListener("touchstart", debut, { passive: true });
+    el.addEventListener("touchmove", mouvement, { passive: false });
+    el.addEventListener("touchend", fin);
+    el.addEventListener("touchcancel", fin);
+    el.addEventListener("transitionend", finTransition);
+    return () => {
+      el.removeEventListener("touchstart", debut);
+      el.removeEventListener("touchmove", mouvement);
+      el.removeEventListener("touchend", fin);
+      el.removeEventListener("touchcancel", fin);
+      el.removeEventListener("transitionend", finTransition);
+      el.style.transform = ""; el.style.transition = ""; // jamais decale a la fermeture
+    };
+  }, [activeModal, reducedMotion]);
   // ---------- Le Pantheon ----------
   // Le classement tient dans UN document, classement/top100, reecrit par le serveur.
   // Le client le lit d'un getDoc a l'ouverture de l'ecran : JAMAIS de onSnapshot, jamais
@@ -21593,7 +21685,7 @@ export default function Emprise() {
 
           {activeModal === "settings" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
-              <div className="info-panel settings-panel reglages-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="info-panel settings-panel reglages-panel" ref={reglagesRef} onClick={(e) => e.stopPropagation()}>
                 {/* Maquette A (05/09), la liste groupee : un en-tete collant dont la croix reste
                     visible si le panneau vient a defiler, trois groupes au lieu de neuf cartes
                     isolees, lignes compactes. Memes entrees, memes actions, memes bascules : la
