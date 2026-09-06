@@ -82,7 +82,6 @@ Un duel entre amis ne rapporte ni XP, ni pièces, ni avancement de quête : il s
 Réglages, rubrique Mon compte : la politique de confidentialité, les conditions d'utilisation, et la suppression définitive du compte.
 Réglages : un en-tête avec la croix de fermeture, qui reste visible si le panneau défile, et les entrées en trois groupes : Apprendre, Préférences, Mon compte.
 Réglages : le panneau se ferme aussi en le tirant vers le bas au doigt ; la croix reste, et un simple appui sur une bascule n'est jamais pris pour un tirage.
-Réglages, groupe Préférences : un interrupteur Main à plat (essai), qui affiche deux rangées de cartes à la place des médaillons sur les grands écrans (800 px de haut et plus) ; mémorisé sur l'appareil, éteint par défaut.
 L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
 Avant-partie : chaque camp sur son territoire, avec un bandeau d'étendard portant médaillon de l'Ordre favori, pseudo, titre de style (avant le premier titre, la ligne dit que le style se dessine, pour soi comme pour l'adversaire en ligne), carte de niveau et trophées, la main et la Réserve posées dessous.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
