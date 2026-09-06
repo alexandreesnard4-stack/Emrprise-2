@@ -8045,15 +8045,22 @@ const APP_STYLES = `
         .order-option.order-option-locked .teaser-devoile .thumb-teaser { filter: none; }
 
         /* ---------- La capsule Quete accomplie, en partie ---------- */
-        /* Purement visuelle : pointer-events none, au-dessus du plateau et de
-           la main (z 60), sous l'eventail (70) et sous tout panneau. Entree en
-           fondu + legere montee, tenue, sortie en fondu -- opacity et transform
-           seulement, l'ombre est statique. */
+        /* Purement visuelle : pointer-events none. En HAUT de l ecran (07/09), sur la
+           zone des messages -- la ligne d etat, qui annonce deja la quete au lecteur
+           d ecran. A 158 px du bas elle tombait pile sur la main du joueur, et son
+           z 60 la mettait SOUS les vignettes d Ordre (66) et sous la Reserve (71) :
+           elle s affichait derriere. z 78 : au-dessus des vignettes, de l eventail
+           (70), de la Reserve et des boutons de chat (75-76), sous la page Quetes
+           (80) et les panneaux (90). env(safe-area-inset-top) vaut 0 dans un onglet
+           et avec la barre d etat opaque : 8 px du haut. La largeur se borne a
+           100 px de moins que la fenetre pour ne pas mordre le bouton « i ». Entree
+           en fondu + legere descente, tenue, sortie en fondu -- opacity et
+           transform seulement, l ombre est statique. */
         .capsule-quete {
-          position: fixed; left: 50%; bottom: 158px; z-index: 60;
+          position: fixed; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 78;
           transform: translate(-50%, 0);
           display: flex; align-items: center; gap: 8px;
-          max-width: min(320px, calc(100vw - 40px));
+          max-width: min(300px, calc(100vw - 100px)); box-sizing: border-box;
           background: rgba(19,13,29,0.94);
           border: 1px solid rgba(203,164,86,0.5); border-radius: 999px;
           padding: 7px 14px;
@@ -8073,7 +8080,7 @@ const APP_STYLES = `
         }
         /* Entree ~200 ms (10 % de 2,1 s), tenue ~1,6 s, sortie ~300 ms. */
         @keyframes capsule-vie {
-          0% { opacity: 0; transform: translate(-50%, 6px); }
+          0% { opacity: 0; transform: translate(-50%, -6px); }
           10% { opacity: 1; transform: translate(-50%, 0); }
           86% { opacity: 1; transform: translate(-50%, 0); }
           100% { opacity: 0; transform: translate(-50%, 0); }
