@@ -3618,6 +3618,11 @@ function jourAbsoluBoutique(maintenant) {
 const TEST_ROTATION = typeof window !== "undefined"
   && new URLSearchParams(window.location.search).get("test-rotation") === "1";
 let decalageBoutique = 0;
+// ---------- Main a plat (maquette A), derriere ?main=plat ----------
+// Meme lecture que test-rotation : une fois au chargement, jamais stockee. Sans le
+// parametre, rien ne s'active : la main reste en medaillons et eventail.
+const MAIN_A_PLAT_DEMANDEE = typeof window !== "undefined"
+  && new URLSearchParams(window.location.search).get("main") === "plat";
 function decalerBoutique(jours) {
   if (!TEST_ROTATION) return 0;
   // Ramene dans 0..7 : au huitieme clic on revient au jour de depart, sans
@@ -10060,6 +10065,20 @@ const APP_STYLES = `
           .emprise-root.ecran-jeu .card.hand.in-fan { width: clamp(64px, 19vw, 84px); height: clamp(86px, 26vw, 114px); }
           .emprise-root.ecran-jeu .order-tile { width: 54px; height: 54px; }
         }
+        /* Main a plat (?main=plat, maquette A) : deux rangees de cartes par camp a la place
+           des medaillons. Tailles calculees pour que plateau + deux mains + bandeau + boutons
+           tiennent des 740 px de haut. Placees apres la regle de bureau ci-dessus par
+           lisibilite ; elles l'emportent de toute facon par specificite (une classe de plus). */
+        .emprise-root.ecran-jeu .hand-row.a-plat {
+          flex-direction: column; gap: 5px; max-width: none; padding: 5px 7px;
+        }
+        .emprise-root.ecran-jeu .main-groupe-plat { display: flex; gap: 5px; }
+        .emprise-root.ecran-jeu .card.hand.a-plat {
+          height: min(17.5vw, 8.2dvh); width: min(13.2vw, 6.2dvh);
+        }
+        .emprise-root.ecran-jeu .card.hand.a-plat .rank {
+          width: min(4.6vw, 2.2dvh); height: min(4.6vw, 2.2dvh); font-size: min(2.7vw, 1.3dvh);
+        }
 
         .table.arene { background: transparent; border: none; box-shadow: none; overflow: visible; padding: 20px; }
         /* Sur un ecran court (iPhone SE et compagnie) il n'y a pas de place a reprendre :
@@ -14659,6 +14678,32 @@ export default function Emprise() {
       return next;
     });
   }
+  // ---------- Main a plat : la fenetre est-elle assez haute ? ----------
+  // A 740 px et plus, plateau + deux mains a plat + bandeau + boutons tiennent. En
+  // dessous on retombe sur les medaillons : c'est le comportement adaptatif voulu. Suivi
+  // par matchMedia (ecouteur "change", retire au demontage), sans mesurer au rendu.
+  const [grandEcran, setGrandEcran] = useState(() => {
+    try { return !!(window.matchMedia && window.matchMedia("(min-height: 740px)").matches); } catch (e) { return false; }
+  });
+  useEffect(() => {
+    if (!MAIN_A_PLAT_DEMANDEE) return; // sans le drapeau, rien a suivre
+    let mq;
+    try { mq = window.matchMedia("(min-height: 740px)"); } catch (e) { return; }
+    const suivre = (e) => setGrandEcran(e.matches);
+    setGrandEcran(mq.matches);
+    // addListener : repli pour les anciens Safari, ou addEventListener n'existe pas
+    // encore sur MediaQueryList. Miroir exact au demontage.
+    if (mq.addEventListener) mq.addEventListener("change", suivre); else mq.addListener(suivre);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", suivre); else mq.removeListener(suivre); };
+  }, []);
+  // Une main est a plat quand le drapeau est pose, que la fenetre est assez haute et que
+  // le camp a au plus 2 groupes : une main normale, meme tombee a 1 groupe en fin de
+  // partie. Le bac a sable et la Confluence (N groupes d'une carte, confluenceActive vrai
+  // dans les deux cas) en sont exclus explicitement : compter les groupes ne suffisait
+  // pas, leurs deux dernieres cartes seraient passees a plat en pleine partie.
+  const mainAPlat = (owner) => MAIN_A_PLAT_DEMANDEE && grandEcran && !confluenceActive
+    && (owner === "blue" ? blueGroups : redGroups).length <= 2;
+
   // ---------- Reglages : fermeture en tirant le panneau vers le bas (06/09) ----------
   // Geste tactile seulement, la croix reste. Les ecouteurs sont poses A LA MAIN sur le
   // panneau, avec { passive: false } pour touchmove : le onTouchMove de React est passif
@@ -16002,7 +16047,7 @@ export default function Emprise() {
     if (main.length === 0 && reserveRestante(camp).length === 0) return null;
     return (
       <div className="main-et-reserve en-partie">
-        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
+        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""} ${mainAPlat(camp) ? "a-plat" : ""}`}>
           {renderHandGroups(camp)}
         </div>
         {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null, camp)}
@@ -19274,6 +19319,28 @@ export default function Emprise() {
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
+      // Main a plat (?main=plat, fenetre assez haute, main normale) : les cartes du groupe
+      // en rangee, EXACTEMENT comme dans l'eventail (memes props, meme startCardDrag) mais
+      // sans vignette, sans fond ni eventail. Rien ne disparait sous le doigt : le clic
+      // qui suit le toucher retombe sur la carte elle-meme, pas sur une case du plateau,
+      // et fanGrabRef n'a rien a neutraliser puisqu'aucun eventail n'est ouvert.
+      if (mainAPlat(owner)) {
+        return (
+          <div key={group.ability} className="main-groupe-plat">
+            {group.cards.map(({ card, handIdx }) => (
+              <Card
+                key={card.id}
+                card={card}
+                owner={owner}
+                extraClass={`hand a-plat ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === campAugure && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
+                onPointerDown={canInteract ? (e) => startCardDrag(owner, handIdx, e) : undefined}
+                selected={!!(selected && selected.owner === owner && selected.idx === handIdx)}
+                concealed={isConcealed(card)}
+              />
+            ))}
+          </div>
+        );
+      }
       const isOpen = !!(fanOpen && fanOpen.owner === owner && fanOpen.ability === group.ability);
       const isClosing = !isOpen && !!(fanClosing && fanClosing.owner === owner && fanClosing.ability === group.ability);
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
