@@ -14711,18 +14711,21 @@ export default function Emprise() {
     });
   }
   // ---------- Main a plat : la fenetre est-elle assez haute ? ----------
-  // A 800 px et plus, plateau + deux mains a plat + bandeau + boutons tiennent (mesure a
-  // 390 px de large : 142 px de bandeaux, ecarts et boutons, 397 px de plateau, et deux
-  // mains de 17 px + deux hauteurs de carte). En dessous on retombe sur les medaillons :
+  // Seuil 740 px. Il valait 800 quand la barre d'etat etait translucide : la fenetre d'un
+  // iPhone faisait 844 px DONT 59 px de barre d'etat, rendus par env(safe-area-inset-top).
+  // Avec la barre opaque (index.html), la page commence sous l'heure : la fenetre fait
+  // 785 px et il n'y a plus rien a rendre ; le meme espace utile correspond a 740 px.
+  // Mesure a 390 px de large : 142 px de bandeaux, ecarts et boutons, 397 px de plateau, et
+  // deux mains de 17 px + deux hauteurs de carte. En dessous on retombe sur les medaillons :
   // c'est le comportement adaptatif voulu. Suivi par matchMedia (ecouteur "change",
   // retire au demontage), sans mesurer au rendu.
   const [grandEcran, setGrandEcran] = useState(() => {
-    try { return !!(window.matchMedia && window.matchMedia("(min-height: 800px)").matches); } catch (e) { return false; }
+    try { return !!(window.matchMedia && window.matchMedia("(min-height: 740px)").matches); } catch (e) { return false; }
   });
   useEffect(() => {
     if (!mainPlatVoulue) return; // interrupteur eteint : rien a suivre
     let mq;
-    try { mq = window.matchMedia("(min-height: 800px)"); } catch (e) { return; }
+    try { mq = window.matchMedia("(min-height: 740px)"); } catch (e) { return; }
     const suivre = (e) => setGrandEcran(e.matches);
     setGrandEcran(mq.matches);
     // addListener : repli pour les anciens Safari, ou addEventListener n'existe pas

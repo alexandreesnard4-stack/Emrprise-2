@@ -32,7 +32,10 @@
          ecran se serait affiche sur du noir nu. -->
     <link rel="preload" as="image" href="/fonds/ciel-orage.jpg" fetchpriority="high" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Barre d'etat opaque : la page commence sous l'heure, plus rien ne peut passer
+         dessous ; env(safe-area-inset-top) vaut 0 dans l'application installee. iOS fige
+         ce reglage a l'ajout a l'ecran d'accueil : retirer puis remettre l'icone pour le voir. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   </head>
   <body>
     <div id="root"></div>
