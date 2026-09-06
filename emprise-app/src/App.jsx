@@ -3619,10 +3619,22 @@ const TEST_ROTATION = typeof window !== "undefined"
   && new URLSearchParams(window.location.search).get("test-rotation") === "1";
 let decalageBoutique = 0;
 // ---------- Main a plat (maquette A), derriere ?main=plat ----------
-// Meme lecture que test-rotation : une fois au chargement, jamais stockee. Sans le
-// parametre, rien ne s'active : la main reste en medaillons et eventail.
-const MAIN_A_PLAT_DEMANDEE = typeof window !== "undefined"
-  && new URLSearchParams(window.location.search).get("main") === "plat";
+// Lue une fois au chargement, comme test-rotation, mais PERSISTANTE (a la difference de
+// test-rotation) : l'application installee sur l'ecran d'accueil s'ouvre sur "/" sans
+// barre d'adresse, un parametre d'URL n'y entre jamais. ?main=plat memorise donc le
+// drapeau dans le stockage local ; ?main=medaillons l'efface ; sans parametre, c'est la
+// memoire qui decide. Un joueur ordinaire n'a jamais vu l'un ni l'autre : rien ne s'active.
+const MAIN_A_PLAT_DEMANDEE = (() => {
+  if (typeof window === "undefined") return false;
+  const CLE = "emprise-main-plat";
+  let demande = null;
+  try { demande = new URLSearchParams(window.location.search).get("main"); } catch (e) { return false; }
+  try {
+    if (demande === "plat") { localStorage.setItem(CLE, "1"); return true; }
+    if (demande === "medaillons") { localStorage.removeItem(CLE); return false; }
+    return localStorage.getItem(CLE) === "1";
+  } catch (e) { return demande === "plat"; } // stockage indisponible : le parametre seul compte
+})();
 function decalerBoutique(jours) {
   if (!TEST_ROTATION) return 0;
   // Ramene dans 0..7 : au huitieme clic on revient au jour de depart, sans
@@ -10067,17 +10079,20 @@ const APP_STYLES = `
         }
         /* Main a plat (?main=plat, maquette A) : deux rangees de cartes par camp a la place
            des medaillons. Tailles calculees pour que plateau + deux mains + bandeau + boutons
-           tiennent des 740 px de haut. Placees apres la regle de bureau ci-dessus par
-           lisibilite ; elles l'emportent de toute facon par specificite (une classe de plus). */
+           tiennent des 800 px de haut : a 390 px de large la pile hors mains fait 539 px, il
+           reste 4 hauteurs de carte + 34 px, donc une carte de 56 px au plus a 800 px. Les
+           pastilles gardent une taille lisible (16 px a 390 px de large). Placees apres la
+           regle de bureau ci-dessus par lisibilite ; elles l'emportent de toute facon par
+           specificite (une classe de plus). */
         .emprise-root.ecran-jeu .hand-row.a-plat {
           flex-direction: column; gap: 5px; max-width: none; padding: 5px 7px;
         }
         .emprise-root.ecran-jeu .main-groupe-plat { display: flex; gap: 5px; }
         .emprise-root.ecran-jeu .card.hand.a-plat {
-          height: min(17.5vw, 8.2dvh); width: min(13.2vw, 6.2dvh);
+          height: min(14.5vw, 6.8dvh); width: min(10.9vw, 5.1dvh);
         }
         .emprise-root.ecran-jeu .card.hand.a-plat .rank {
-          width: min(4.6vw, 2.2dvh); height: min(4.6vw, 2.2dvh); font-size: min(2.7vw, 1.3dvh);
+          width: min(4.2vw, 2dvh); height: min(4.2vw, 2dvh); font-size: min(2.5vw, 1.2dvh);
         }
 
         .table.arene { background: transparent; border: none; box-shadow: none; overflow: visible; padding: 20px; }
@@ -14679,16 +14694,18 @@ export default function Emprise() {
     });
   }
   // ---------- Main a plat : la fenetre est-elle assez haute ? ----------
-  // A 740 px et plus, plateau + deux mains a plat + bandeau + boutons tiennent. En
-  // dessous on retombe sur les medaillons : c'est le comportement adaptatif voulu. Suivi
-  // par matchMedia (ecouteur "change", retire au demontage), sans mesurer au rendu.
+  // A 800 px et plus, plateau + deux mains a plat + bandeau + boutons tiennent (mesure a
+  // 390 px de large : 142 px de bandeaux, ecarts et boutons, 397 px de plateau, et deux
+  // mains de 17 px + deux hauteurs de carte). En dessous on retombe sur les medaillons :
+  // c'est le comportement adaptatif voulu. Suivi par matchMedia (ecouteur "change",
+  // retire au demontage), sans mesurer au rendu.
   const [grandEcran, setGrandEcran] = useState(() => {
-    try { return !!(window.matchMedia && window.matchMedia("(min-height: 740px)").matches); } catch (e) { return false; }
+    try { return !!(window.matchMedia && window.matchMedia("(min-height: 800px)").matches); } catch (e) { return false; }
   });
   useEffect(() => {
     if (!MAIN_A_PLAT_DEMANDEE) return; // sans le drapeau, rien a suivre
     let mq;
-    try { mq = window.matchMedia("(min-height: 740px)"); } catch (e) { return; }
+    try { mq = window.matchMedia("(min-height: 800px)"); } catch (e) { return; }
     const suivre = (e) => setGrandEcran(e.matches);
     setGrandEcran(mq.matches);
     // addListener : repli pour les anciens Safari, ou addEventListener n'existe pas
