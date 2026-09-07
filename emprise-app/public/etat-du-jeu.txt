@@ -66,7 +66,7 @@ Lignes des quêtes accomplies sur l'écran de fin de partie.
 
 == Interface ==
 Hub : bande de bannière équipée, assez haute pour que son illustration se reconnaisse, portant le pseudo et la carte de niveau (toucher le pseudo ou la carte ouvre le profil), flamme et trophées dessous, trésor pièces et gemmes (chaque pastille ouvre son rayon de la boutique), bouton Quêtes en parchemin avec pastille, historique des parties classées, réglages, bouton Amis.
-Le hub porte l'icône de la Campagne, un coffre ouvert dans la grappe en haut à droite : son panneau annonce le passe de saison, deux mois et soixante paliers, qui ouvrira après le lancement du jeu.
+Le hub porte l'icône de la Campagne, un coffre ouvert sous le parchemin des Quêtes, à gauche : son panneau annonce le passe de saison, deux mois et soixante paliers, qui ouvrira après le lancement du jeu.
 Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours, le titre et la grille tenus en haut de la page.
 Page Boutique épurée : seuls la bannière du joueur et le trésor restent en haut, le catalogue occupe le reste de l'écran.
 Un auvent d'or et de tissu coiffe la Boutique et reste accroché en haut pendant que les rayons défilent dessous.
