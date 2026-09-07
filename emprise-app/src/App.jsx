@@ -15030,9 +15030,14 @@ export default function Emprise() {
   // le onChange : nettoyer a chaque frappe est une chose, juger a chaque frappe en est une
   // autre — un nom honnete passerait par des etats intermediaires refuses et le champ
   // semblerait casse.
-  // La ceremonie s'efface d'elle-meme, ou sous le doigt du joueur. Les deux minuteurs
-  // meurent au demontage : personne ne doit se retrouver enferme dans une animation,
-  // meme belle, meme courte.
+  // La ceremonie ne se saute plus (07/09) : elle dure 2,8 s (ADOUBEMENT_MS plus la
+  // sortie) et se termine d elle-meme, par ces deux minuteurs et eux seuls. Ils meurent
+  // au demontage : personne ne se retrouve enferme dans une animation, meme belle,
+  // meme courte. Le clic qui l abregeait a ete sacrifie a un clic fantome : le
+  // pointerdown qui abrege le devoilement de l identifiant montait la ceremonie
+  // aussitot, et le click que le navigateur envoie apres ce meme pointerdown tombait
+  // sur le voile a peine monte et le refermait. Un seul toucher sautait les deux, et
+  // le joueur ne voyait jamais « Commandant ».
   useEffect(() => {
     if (!adoubement) return;
     const t1 = setTimeout(() => setAdoubement((a) => (a ? { ...a, etat: "sort" } : null)), ADOUBEMENT_MS);
@@ -15040,15 +15045,6 @@ export default function Emprise() {
     return () => { clearTimeout(t1); clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adoubement && adoubement.nom]);
-
-  // N'importe quelle touche l'abrege, comme n'importe quel toucher. Le clic est pose sur
-  // le voile lui-meme ; ceci est pour qui joue au clavier.
-  useEffect(() => {
-    if (!adoubement) return;
-    const passer = () => setAdoubement(null);
-    window.addEventListener("keydown", passer);
-    return () => window.removeEventListener("keydown", passer);
-  }, [adoubement]);
 
   // Le devoilement de l'identifiant s'acheve de lui-meme, ou sous le doigt du Commandant.
   // Meme regle que la ceremonie juste au-dessus : le minuteur meurt au demontage, et rien
@@ -19886,7 +19882,6 @@ export default function Emprise() {
       {adoubement && (
         <div
           className={`adoubement ${adoubement.etat === "sort" ? "sort" : ""}`}
-          onClick={() => setAdoubement(null)}
         >
           <div className="adoubement-scene" role="status">
             <div className="adoubement-halo" aria-hidden="true" />
@@ -19900,7 +19895,6 @@ export default function Emprise() {
             </div>
             <div className="adoubement-trait" aria-hidden="true" />
             <div className="adoubement-titre">Commandant</div>
-            <span className="lecteur-seul">Appuyez n&apos;importe où pour continuer.</span>
           </div>
         </div>
       )}
