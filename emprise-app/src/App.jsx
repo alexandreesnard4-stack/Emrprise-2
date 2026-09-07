@@ -6522,6 +6522,8 @@ const APP_STYLES = `
            la droite -- 2 colonnes regulieres, memes tuiles, memes ecarts, plus
            d'escalier. Les amis prennent la case droite de la seconde ligne. */
         .hub-portes { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        /* La colonne de gauche (07/09) : le parchemin, puis le coffre de la Campagne. */
+        .hub-gauche-rang { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
         .hub-haut-rang {
           display: grid; grid-template-columns: repeat(2, 48px); gap: 12px;
           justify-items: end;
@@ -6971,7 +6973,7 @@ const APP_STYLES = `
         .hub-rouage-img { width: 34px; height: 34px; object-fit: contain; display: block; }
         /* Le coffre ouvert de la Campagne (283 x 256, plus large que haut) : contain,
            sans quoi il serait ecrase dans le carre. */
-        .hub-icone-campagne { width: 34px; height: 34px; object-fit: contain; display: block; }
+        .hub-icone-campagne { width: 40px; height: 40px; object-fit: contain; display: block; }
         /* Le miroir des parties passees : illustration detouree, plus haute que large. */
         .hub-icone-miroir {
           width: 29px; height: 36px; object-fit: contain; display: block;
@@ -20056,6 +20058,13 @@ export default function Emprise() {
                 l affichage se retire, les pastilles reviennent intactes. */}
             {hubPage !== "boutique" && (
             <div className="hub-portes">
+            {/* La marge gauche est une colonne (07/09) : le parchemin des quetes, et
+                dessous le coffre de la Campagne -- demande du Commandant, sous les quetes
+                et non dans la grille de droite. Le coffre suit la meme regle d affichage
+                que la grille (absent sur la page Ordres) : la colonne garde ainsi sa
+                hauteur d avant sur cette page, dont la grille tient a 6 px pres sur un
+                iPhone SE. */}
+            <span className="hub-gauche-rang">
             <button
               className="hub-rouage hub-quetes"
               onClick={ouvrirPageQuetes}
@@ -20069,13 +20078,10 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
               )}
             </button>
+            {/* La Campagne, le passe de saison, qui n existe pas encore : ni paliers, ni XP
+                de saison, ni achat ici. Un coffre OUVERT, distinct du parchemin au-dessus ;
+                le panneau dit ce qu elle sera. */}
             {hubPage !== "ordres" && (
-            <span className="hub-haut-rang" key={"boutons-" + hubPage}>
-            {/* La Campagne (07/09) : la grille passe de trois a quatre boutons, soit deux
-                lignes pleines de 2 x 48 px -- rien a redimensionner. L icone est un coffre
-                OUVERT, distinct du petit coffre ferme des Quetes, a gauche du hub. Le
-                panneau annonce la Campagne, le passe de saison, qui n existe pas encore :
-                ni paliers, ni XP de saison, ni achat ici. */}
             <button
               className="hub-rouage"
               onClick={() => setActiveModal("campagne")}
@@ -20084,6 +20090,10 @@ export default function Emprise() {
             >
               <img className="hub-icone-campagne" src="/nav/campagne.webp" alt="" />
             </button>
+            )}
+            </span>
+            {hubPage !== "ordres" && (
+            <span className="hub-haut-rang" key={"boutons-" + hubPage}>
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
