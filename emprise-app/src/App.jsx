@@ -22900,14 +22900,17 @@ export default function Emprise() {
                 const longtemps = Date.now() - defiEnvoye.t > DEFI_PERIME_MS;
                 // Pas de code ici : l'ami a recu le defi, il n'a rien a taper. L'afficher
                 // ne faisait qu'encombrer un ecran ou il n'y a rien a faire qu'attendre.
+                // L illustration plein ecran est un calque positionne (z 0 dans l isolation
+                // de .order-picker) : tout texte pose dessus doit remonter avec
+                // attente-sur-image, sinon il se peint dessous et n apparait jamais.
                 return (
                   <>
-                    <div className="sub">Défi envoyé à <b>{nom}</b></div>
+                    <div className="sub attente-sur-image">Défi envoyé à <b>{nom}</b></div>
                     {/* Ce qu'on a compose : le defieur relit son propre choix. */}
-                    <div className="sub" style={{ marginTop: 2, opacity: 0.8 }}>
+                    <div className="sub attente-sur-image" style={{ marginTop: 2, opacity: 0.8 }}>
                       {defiEtiquette(defiEnvoye.mode || "classique", !!defiEnvoye.herauts)}
                     </div>
-                    <div className="sub" style={{ marginTop: 4 }}>
+                    <div className="sub attente-sur-image" style={{ marginTop: 4 }}>
                       {advPresent ? `${nom} a relevé le défi ! Il compose sa main...`
                         : longtemps ? `${nom} n'a pas répondu.`
                         : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour.`
