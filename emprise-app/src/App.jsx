@@ -6969,6 +6969,9 @@ const APP_STYLES = `
         /* La roue de pierre remplace le pictogramme. Le bouton tourne deja au survol :
            l'illustration suit le mouvement. */
         .hub-rouage-img { width: 34px; height: 34px; object-fit: contain; display: block; }
+        /* Le coffre ouvert de la Campagne (283 x 256, plus large que haut) : contain,
+           sans quoi il serait ecrase dans le carre. */
+        .hub-icone-campagne { width: 34px; height: 34px; object-fit: contain; display: block; }
         /* Le miroir des parties passees : illustration detouree, plus haute que large. */
         .hub-icone-miroir {
           width: 29px; height: 36px; object-fit: contain; display: block;
@@ -20068,6 +20071,19 @@ export default function Emprise() {
             </button>
             {hubPage !== "ordres" && (
             <span className="hub-haut-rang" key={"boutons-" + hubPage}>
+            {/* La Campagne (07/09) : la grille passe de trois a quatre boutons, soit deux
+                lignes pleines de 2 x 48 px -- rien a redimensionner. L icone est un coffre
+                OUVERT, distinct du petit coffre ferme des Quetes, a gauche du hub. Le
+                panneau annonce la Campagne, le passe de saison, qui n existe pas encore :
+                ni paliers, ni XP de saison, ni achat ici. */}
+            <button
+              className="hub-rouage"
+              onClick={() => setActiveModal("campagne")}
+              title="La Campagne"
+              aria-label="La Campagne"
+            >
+              <img className="hub-icone-campagne" src="/nav/campagne.webp" alt="" />
+            </button>
             <button
               className="hub-rouage hub-horloge"
               onClick={() => setActiveModal("historique")}
@@ -21256,6 +21272,29 @@ export default function Emprise() {
               </div>
             );
           })()}
+          {activeModal === "campagne" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel rules-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="info-panel-title">La Campagne</div>
+                <div className="rules-section">
+                  <div className="rules-p">
+                    Une saison de deux mois, soixante paliers. Chaque point d'expérience gagné
+                    en partie ou en quête vous y fait monter, et chaque palier verse sa part.
+                  </div>
+                  <div className="rules-p">
+                    La voie libre est ouverte à tous. Le Serment, lui, ajoute des quêtes
+                    supplémentaires, des gemmes, des pièces, et huit pièces d'équipement
+                    qu'on ne trouvera jamais en boutique : trois bannières, trois dos de
+                    cartes et deux plateaux.
+                  </div>
+                  <div className="rules-p">
+                    Elle n'est pas encore ouverte. Elle le sera après le lancement du jeu.
+                  </div>
+                </div>
+                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
+              </div>
+            </div>
+          )}
           {activeModal === "amis" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
