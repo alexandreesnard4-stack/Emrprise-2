@@ -1626,6 +1626,24 @@ const PLATEAUX = [
     case: "linear-gradient(180deg, rgba(0,0,0,0.45), rgba(230,150,200,0.03) 62%, rgba(240,170,214,0.05))",
     caseBord: "rgba(214,126,178,0.11)",
     lueur: "rgba(246,206,230,0.11)" },
+  // Les deux plateaux de La Campagne. Ils ont la meme forme que les autres, plus un
+  // drapeau : campagne. Ils ne se vendent PAS -- ni en rotation, ni au rayon des
+  // offerts -- et les deux gardes qui l assurent sont dans BOUTIQUE_FAMILLES et dans
+  // le rayon Plateaux. prix 0 ne veut pas dire offert ici, il veut dire hors commerce :
+  // un plateau de saison se gagne au Chemin, jamais au comptoir. Le jour ou la
+  // reclamation existera, c est elle qui les posera dans les possessions.
+  { cle: "table-serment", nom: "La Table du Serment", monde: "La table où l'on jure avant de partir", prix: 0, campagne: true,
+    dalle: "linear-gradient(180deg, #33211d 0%, #251714 46%, #130b09 100%)",
+    bord: "rgba(203,164,86,0.26)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.5), rgba(203,164,86,0.03) 62%, rgba(232,200,119,0.055))",
+    caseBord: "rgba(203,164,86,0.13)",
+    lueur: "rgba(248,224,180,0.13)" },
+  { cle: "ban", nom: "Le Ban", monde: "L'appel qui lève les Ordres", prix: 0, campagne: true,
+    dalle: "linear-gradient(180deg, #1b1a17 0%, #131210 46%, #080807 100%)",
+    bord: "rgba(232,200,119,0.34)",
+    case: "linear-gradient(180deg, rgba(0,0,0,0.52), rgba(232,200,119,0.035) 62%, rgba(246,220,150,0.07))",
+    caseBord: "rgba(232,200,119,0.16)",
+    lueur: "rgba(252,236,196,0.16)" },
 ];
 const PLATEAU_DEFAUT = "faille";
 
@@ -3736,7 +3754,9 @@ function melangeDeterministe(liste, graine) {
 // Les seuils de prix se LISENT sur les entrees : un article ajoute au
 // catalogue entre dans la rotation tout seul, sans toucher a ce code.
 const BOUTIQUE_FAMILLES = [
-  { cle: "plateaux", quota: 2, articles: () => PLATEAUX.filter((a) => a.prix > 0) },
+  // Un plateau de saison ne passe jamais par la boutique : le drapeau campagne le tient
+  // hors de la rotation, quel que soit son prix.
+  { cle: "plateaux", quota: 2, articles: () => PLATEAUX.filter((a) => a.prix > 0 && !a.campagne) },
   { cle: "dosPieces", quota: 4, articles: () => DOS_CARTES.filter((a) => a.prix > 0) },
   { cle: "dosGemmes", quota: 2, articles: () => DOS_CARTES.filter((a) => a.prixGemmes > 0) },
   { cle: "bannieresBasses", quota: 2, articles: () => BANNIERES.filter((a) => a.source === "pieces" && a.prix <= 2000) },
@@ -20759,8 +20779,10 @@ export default function Emprise() {
                         joueur ne pourrait plus revenir a son plateau d origine.
                         Il n a pas de prix, donc il n entre dans aucune
                         selection et le chemin d achat le refuse deja -- on ne
-                        l affiche que pour pouvoir le rechoisir. */}
-                    {[...PLATEAUX.filter((p) => enRotation(p.cle)), ...PLATEAUX.filter((p) => !(p.prix > 0))].map((p) => {
+                        l affiche que pour pouvoir le rechoisir.
+                        Un plateau de saison ne passe jamais par la boutique : sans prix,
+                        il tomberait ici avec l offert -- le drapeau campagne l ecarte. */}
+                    {[...PLATEAUX.filter((p) => enRotation(p.cle)), ...PLATEAUX.filter((p) => !(p.prix > 0) && !p.campagne)].map((p) => {
                       const choisi = cosmetiques.plateau === p.cle;
                       const possede = possedeCosmetique(bourse, "plateau", p.cle);
                       return (
