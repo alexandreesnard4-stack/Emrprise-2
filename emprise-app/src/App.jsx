@@ -14331,7 +14331,10 @@ export default function Emprise() {
     } catch (e) {
       // L'invitation n'est pas partie : le document ne doit pas rester relevable.
       deposerAbandon(code, "blue", "abandon", null);
+      // Dans le panneau des amis ET dans la capsule : le defi part aussi de l'ecran
+      // « Affrontement en ligne », qui n'affiche pas avisAmis.
       setAvisAmis({ texte: "Le défi n'est pas parti. Réessayez.", bon: false });
+      setDefiAvis({ texte: "Le défi n'est pas parti", cle: Date.now() });
     }
     defiEnVolRef.current = false;
   }
@@ -15159,6 +15162,9 @@ export default function Emprise() {
   useEffect(() => { chargerQuetesDuMoment().then(setQuetes); }, []);
   const [pageQuetes, setPageQuetes] = useState(false);
   const [pageCampagne, setPageCampagne] = useState(false);
+  // Une surface qui prend tout l'ecran : la capsule d'attente s'efface derriere elle.
+  // Declaree ICI et pas plus haut : pageQuetes et pageCampagne naissent a cette ligne.
+  const calqueOuvert = !!activeModal || pageQuetes || pageCampagne;
   // A l'ouverture du Chemin, la vue se place sur le jalon du palier courant, comme la carte de chapitre.
   useEffect(() => {
     if (!pageCampagne) return;
@@ -17363,10 +17369,15 @@ export default function Emprise() {
     setConfluenceActive(false);
     setTestMode(false);
     setPickerChoice([]);
-    // Le panneau des amis, d'ou le defi est parti, se referme : la partie prend l'ecran,
-    // la capsule « X a releve le defi ! » se voit, et le panneau ne rouvre pas tout seul
-    // au retour au hub. Le receveur fait de meme dans releverDefi.
+    // Le panneau des amis, d'ou le defi est parti, se referme, et avec lui tout ce qui
+    // s'ouvre depuis lui : la partie prend l'ecran, la capsule « X a releve le defi ! »
+    // se voit, et rien ne rouvre tout seul au retour au hub. Ces trois surcouches vivent
+    // hors du bloc du hub : sans cela, elles resteraient posees SUR le choix des Ordres.
+    // Le receveur fait de meme dans releverDefi.
     setActiveModal(null);
+    setDefiConfig(null);
+    setProfilAdverse(null);
+    setJoueurMenu(null);
     venuDesAmisRef.current = true;
     setPhase("select-blue");
   }
@@ -20209,14 +20220,17 @@ export default function Emprise() {
 
       {/* La capsule de defi : un defi qui attend, ou la nouvelle de sa reponse.
           A la difference de la capsule de quete elle DURE et se TOUCHE : on
-          annule d'ici. L'attente se retire quand le panneau des amis est ouvert,
-          la ligne de l'ami y dit la meme chose ; l'avis (refus, silence,
-          acceptation), lui, s'y montre : la ligne ne le dit pas. Posee ICI, hors des blocs de
+          annule d'ici. L'attente dure, donc elle s'efface derriere toute surface
+          qui prend l'ecran -- panneau des amis (ou la ligne de l'ami dit la meme
+          chose), autres panneaux, pages des Quetes et de la Campagne : posee a la
+          racine, elle passerait DEVANT elles, le hub etant son propre calque.
+          L'avis (refus, silence, acceptation) ne dure que quatre secondes et se
+          montre partout : rien d'autre ne le dit. Posee ICI, hors des blocs de
           phase : elle couvre le hub et les phases de choix en ligne, pour que
           « X a releve le defi ! » se lise au moment ou l'on y entre. */}
-      {((defiEnvoye && defiEnvoye.code && activeModal !== "amis") || defiAvis) && (
+      {((defiEnvoye && defiEnvoye.code && !calqueOuvert) || defiAvis) && (
         <div className="capsule-defi" role="status">
-          {defiEnvoye && defiEnvoye.code && activeModal !== "amis" ? (
+          {defiEnvoye && defiEnvoye.code && !calqueOuvert ? (
             <>
               <span className="capsule-defi-texte">
                 Défi envoyé à <b>{nomAffiche(fiches[defiEnvoye.uid] && fiches[defiEnvoye.uid].pseudo)}</b> · en attente
