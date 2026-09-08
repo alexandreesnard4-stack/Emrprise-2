@@ -84,6 +84,7 @@ Réglages, rubrique Mon compte : la politique de confidentialité, les condition
 Réglages : un en-tête avec la croix de fermeture, qui reste visible si le panneau défile, et les entrées en trois groupes : Apprendre, Préférences, Mon compte.
 Réglages : le panneau se ferme aussi en le tirant vers le bas au doigt ; la croix reste, et un simple appui sur une bascule n'est jamais pris pour un tirage.
 L'attente des Ordres adverses en ligne montre les mêmes territoires que l'avant-partie : le bloc de l'adversaire avec des points d'interrogation sur ce qu'il n'a pas encore choisi, et le vôtre avec votre main.
+En ligne, le joueur est toujours Azur à l'écran et l'adversaire toujours Écarlate, quel que soit le camp que le serveur lui a donné : ses cartes sont bleues et en bas, son score à gauche en bleu. Le duel local garde ses deux couleurs, Azur et Écarlate.
 Avant-partie : chaque camp sur son territoire, avec un bandeau d'étendard portant médaillon de l'Ordre favori, pseudo, titre de style (avant le premier titre, la ligne dit que le style se dessine, pour soi comme pour l'adversaire en ligne), carte de niveau et trophées, la main et la Réserve posées dessous.
 Amis : code ami à six chiffres, demandes, présence en ligne, niveau des amis, profil d'un ami au clic sur son pseudo.
 La galerie des arènes teinte chaque page d'un halo aux couleurs de sa ligue, éteint tant qu'elle n'est pas conquise.

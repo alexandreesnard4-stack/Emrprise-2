@@ -15897,6 +15897,19 @@ export default function Emprise() {
     : (mode === "local" && !testMode && passageTelephone && phase === "play" ? turn : "blue");
   const campHaut = campBas === "red" ? "blue" : "red";
 
+  // Teinte d'un camp A L'ECRAN. En ligne, le joueur est TOUJOURS Azur : quand le
+  // serveur m'a donne Ecarlate, l'affichage echange les deux teintes, et rien
+  // d'autre. La logique (tour, tirage du premier, winner, document Firestore,
+  // trophees) garde blue/red : teinte() n'est appelee qu'au moment de fabriquer
+  // une classe CSS ou un mot a l'ecran, jamais dans une comparaison. En duel
+  // local, deux humains partagent l'ecran : Azur et Ecarlate y restent eux-memes.
+  const campsInverses = mode === "online" && onlineRole === "red";
+  const teinte = (camp) =>
+    campsInverses && (camp === "blue" || camp === "red") ? (camp === "blue" ? "red" : "blue") : camp;
+  // Les scores tels qu'ils s'affichent : Azur a gauche, toujours le mien en ligne.
+  const scoreAzur = campsInverses ? redScore : blueScore;
+  const scoreEcarlate = campsInverses ? blueScore : redScore;
+
   // ---------- Profil de joueur : quel camp est le mien, avec quels Ordres ----------
   // Contre un Echo je suis toujours Azur ; en ligne, le camp que le serveur m'a donne.
   // En duel local les deux camps sont humains : aucun profil ne peut leur etre attribue,
@@ -15951,8 +15964,9 @@ export default function Emprise() {
   // d en face -- l appelant le sait, la fonction non, d ou le drapeau.
   function labelCamp(camp, adverse = false) {
     const rouge = camp === "red";
+    const teinteRouge = teinte(camp) === "red";
     return (
-      <div className={`turn-label ${rouge ? "red-t" : "blue-t"} ${adverse ? "adverse" : ""} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
+      <div className={`turn-label ${teinteRouge ? "red-t" : "blue-t"} ${adverse ? "adverse" : ""} ${turn !== camp || gameOver ? "en-attente" : ""}`}>
         {/* En ligne, le nom d'en face OUVRE SON PROFIL : c'est le seul moment ou l'on
             croise ce joueur, et le seul endroit ou son nom se lit. Le notre reste un
             simple texte -- on a deja son propre profil au hub. */}
@@ -16164,7 +16178,7 @@ export default function Emprise() {
     if (main.length === 0 && reserveRestante(camp).length === 0) return null;
     return (
       <div className="main-et-reserve en-partie">
-        <div className={`hand-row camp-${camp} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
+        <div className={`hand-row camp-${teinte(camp)} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
         {pileDeReserve(reserveRestante(camp), false, camp === campBas ? camp : null, camp)}
@@ -19496,7 +19510,7 @@ export default function Emprise() {
                   <div key={card.id} className="fan-slot" style={fanSlotVars(i, group.cards.length, sens)}>
                     <Card
                       card={card}
-                      owner={owner}
+                      owner={teinte(owner)}
                       extraClass={`hand in-fan ${canDragCard(owner) ? "draggable" : ""} ${drag && drag.owner === owner && drag.idx === handIdx ? "dragging-source" : ""} ${owner === campAugure && hint && hint.cardIdx === handIdx ? "hint-source" : ""}`}
                       onPointerDown={canInteract ? (e) => startCardDrag(owner, handIdx, e) : undefined}
                       selected={!!(selected && selected.owner === owner && selected.idx === handIdx)}
@@ -22239,7 +22253,7 @@ export default function Emprise() {
                       className={`cell ${!cell ? "empty" : ""} ${!cell && !tut.resolved && i === TUTORIAL_STEPS[tut.stepIdx].requiredCell ? "tut-highlight" : ""}`}
                       role="button" tabIndex={0} onClick={() => tutorialCellClick(i)} onKeyDown={KEY_ACTIVATE(() => tutorialCellClick(i))}
                     >
-                      {cell && <Card card={cell} owner={cell.owner} events={tut.flashes[i] || []} />}
+                      {cell && <Card card={cell} owner={teinte(cell.owner)} events={tut.flashes[i] || []} />}
                     </div>
                   ))}
                   <FlechesPortee flashes={tut.flashes} />
@@ -23254,7 +23268,7 @@ export default function Emprise() {
                   <span className="vs-contre" aria-hidden="true">VS</span>
                   {territoireVs(monCamp, monCamp, pseudo || "Vous", fondMien,
                     apercu.map((card) => (
-                      <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                      <Card key={card.id} card={card} owner={teinte(monCamp)} extraClass="hand" />
                     )),
                     pileDeReserve(reserveDe(monCamp), true, null, monCamp))}
                 </div>
@@ -23288,9 +23302,9 @@ export default function Emprise() {
       {(phase === "select-blue" || phase === "select-red") && (
         <div className="order-picker">
           <button className="back-btn" onClick={goBack}>← Retour</button>
-          <h2 className={(mode === "online" ? onlineRole === "red" : phase === "select-red") ? "red-t" : ""}>
+          <h2 className={mode !== "online" && phase === "select-red" ? "red-t" : ""}>
             {mode === "online"
-              ? (onlineRole === "blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres")
+              ? "Choisissez vos 2 Ordres"
               : tourney.active
               ? `${TOURNEY_ROUNDS[tourney.round].label} · Choisissez vos 2 Ordres`
               : phase === "select-blue" ? "Azur : Choisissez vos 2 Ordres" : "Écarlate : Choisissez vos 2 Ordres"}
@@ -23583,7 +23597,7 @@ export default function Emprise() {
         return (
           <div className="order-picker">
             <button className="back-btn" onClick={goBack}>← Retour</button>
-            <h2 className={camp === "red" ? "red-t" : ""}>
+            <h2 className={teinte(camp) === "red" ? "red-t" : ""}>
               {mode === "local" ? (camp === "blue" ? "Azur : votre Réserve" : "Écarlate : votre Réserve") : "Votre Réserve"}
             </h2>
             {/* On dit a quoi elle sert AVANT de la faire choisir : sans cela le joueur
@@ -23632,7 +23646,7 @@ export default function Emprise() {
                           dos, comme on la verra en partie. Deux faces dos a dos, une seule
                           visible a la fois. */}
                       <div className="reserve-flip">
-                        <span className="reserve-face avant"><Card card={c} owner={camp} extraClass="hand" /></span>
+                        <span className="reserve-face avant"><Card card={c} owner={teinte(camp)} extraClass="hand" /></span>
                         <span className="reserve-face arriere" style={dosDeCarte(c, camp, true)} aria-hidden="true" />
                       </div>
                     </div>
@@ -23735,13 +23749,13 @@ export default function Emprise() {
                     <div className="territoires">
                       {territoireVs(campAdverse, monCamp, nomAdverse, fondAdverse,
                         apercuParOrdre(mainAdverse).map((card) => (
-                          <Card key={card.id} card={card} owner={campAdverse} extraClass="hand" concealed={card.ability === "scribe"} />
+                          <Card key={card.id} card={card} owner={teinte(campAdverse)} extraClass="hand" concealed={card.ability === "scribe"} />
                         )),
                         pileDeReserve(reserveDe(campAdverse), true, null, campAdverse))}
                       <span className="vs-contre" aria-hidden="true">VS</span>
                       {territoireVs(monCamp, monCamp, pseudo || "Vous", fondMien,
                         apercuParOrdre(maMain).map((card) => (
-                          <Card key={card.id} card={card} owner={monCamp} extraClass="hand" />
+                          <Card key={card.id} card={card} owner={teinte(monCamp)} extraClass="hand" />
                         )),
                         pileDeReserve(reserveDe(monCamp), true, null, monCamp))}
                     </div>
@@ -23831,8 +23845,8 @@ export default function Emprise() {
           {(() => {
             const totalPts = blueScore + redScore + blueHand.length + redHand.length;
             if (!totalPts) return null;
-            const pctAzur = (blueScore / totalPts) * 100;
-            const pctEcarlate = (redScore / totalPts) * 100;
+            const pctAzur = (scoreAzur / totalPts) * 100;
+            const pctEcarlate = (scoreEcarlate / totalPts) * 100;
             // Le halo dore ne s'allume QU'A LA FIN. En cours de partie, depasser le
             // trait n'a rien d'acquis : une carte reprise et on repasse dessous. L'annoncer
             // comme une victoire serait mentir au joueur. Pendant le jeu, le trait reste un
@@ -23842,15 +23856,15 @@ export default function Emprise() {
               <div
                 className={`bras-de-fer ${acquis ? "franchi" : ""}`}
                 role="img"
-                aria-label={`Azur ${blueScore}, Ecarlate ${redScore}, sur ${totalPts} points en jeu`}
+                aria-label={`Azur ${scoreAzur}, Ecarlate ${scoreEcarlate}, sur ${totalPts} points en jeu`}
               >
-                <span className={`bdf-num blue ${acquis === "blue" ? "acquis" : ""}`}>{blueScore}</span>
+                <span className={`bdf-num blue ${teinte(acquis) === "blue" ? "acquis" : ""}`}>{scoreAzur}</span>
                 <div className="bdf-piste">
                   <div className="bdf-cote bdf-azur" style={{ width: `${pctAzur}%` }} />
                   <div className="bdf-cote bdf-ecarlate" style={{ width: `${pctEcarlate}%` }} />
                   <span className="bdf-seuil" aria-hidden="true" />
                 </div>
-                <span className={`bdf-num red ${acquis === "red" ? "acquis" : ""}`}>{redScore}</span>
+                <span className={`bdf-num red ${teinte(acquis) === "red" ? "acquis" : ""}`}>{scoreEcarlate}</span>
               </div>
             );
           })()}
@@ -23965,7 +23979,7 @@ export default function Emprise() {
                   {displayCard && (
                     <Card
                       card={displayCard}
-                      owner={displayCard.owner}
+                      owner={teinte(displayCard.owner)}
                       events={displayEvents}
                       extraClass={`${isBeingPreviewed ? "previewing" : ""} ${dernierCoup === i ? "dernier-coup" : ""}`}
                       poisoned={!!(displayCard && (poisonedCells[i] || willBePoisoned))}
@@ -24088,7 +24102,7 @@ export default function Emprise() {
                 </div>
                 <div className="reserve-panel-cartes">
                   {reserveRestante(reserveOuverte).map((c) => (
-                    <Card key={c.id} card={c} owner={reserveOuverte} extraClass="hand" />
+                    <Card key={c.id} card={c} owner={teinte(reserveOuverte)} extraClass="hand" />
                   ))}
                 </div>
                 <button className="reset-btn" onClick={() => setReserveOuverte(null)}>Fermer</button>
@@ -24098,7 +24112,7 @@ export default function Emprise() {
 
           {drag && draggedCard && !liveDragPreviewBoard && (
             <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>
-              <Card card={draggedCard} owner={drag.owner} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
+              <Card card={draggedCard} owner={teinte(drag.owner)} extraClass="hand" concealed={draggedCard.ability === "scribe"} />
             </div>
           )}
 
@@ -24140,14 +24154,14 @@ export default function Emprise() {
                       ...redOrders.map((l) => ({ ...l, side: "red" })),
                     ]
                 ).map((l, i) => (
-                  <div key={i} className={`info-row ${l.side || ""}`}>
+                  <div key={i} className={`info-row ${teinte(l.side) || ""}`}>
                     {l.portrait ? (
                       <img className="info-thumb-sm" src={l.portrait} alt={l.name} />
                     ) : (
                       <span className="info-icon-sm">{l.icon}</span>
                     )}
                     <div className="info-row-text">
-                      <div className="info-row-name">{l.name}{l.side && <span className="info-row-side"> ({l.side === "blue" ? "Azur" : "Écarlate"})</span>}</div>
+                      <div className="info-row-name">{l.name}{l.side && <span className="info-row-side"> ({teinte(l.side) === "blue" ? "Azur" : "Écarlate"})</span>}</div>
                       <div className="info-row-desc">{l.desc}</div>
                     </div>
                   </div>
@@ -24185,11 +24199,11 @@ export default function Emprise() {
             </div>
             <div className="cer-recap" onClick={(e) => e.stopPropagation()}>
               <div className="cer-score">
-                <span className="cer-sb">{blueScore}</span><span className="cer-sep">·</span><span className="cer-sr">{redScore}</span>
+                <span className="cer-sb">{scoreAzur}</span><span className="cer-sep">·</span><span className="cer-sr">{scoreEcarlate}</span>
               </div>
               <div className="bdf-piste cer-piste">
-                <div className="bdf-cote bdf-azur" style={{ width: `${(blueScore / (blueScore + redScore)) * 100}%` }} />
-                <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
+                <div className="bdf-cote bdf-azur" style={{ width: `${(scoreAzur / (scoreAzur + scoreEcarlate)) * 100}%` }} />
+                <div className="bdf-cote bdf-ecarlate" style={{ width: `${(scoreEcarlate / (scoreAzur + scoreEcarlate)) * 100}%` }} />
                 <span className="bdf-seuil" aria-hidden="true" />
               </div>
               {bilanTrophees()}
@@ -24223,11 +24237,11 @@ export default function Emprise() {
           </div>
           <div className="defeat-recap" onClick={(e) => e.stopPropagation()}>
             <div className="cer-score">
-              <span className="cer-sb">{blueScore}</span><span className="cer-sep">·</span><span className="cer-sr">{redScore}</span>
+              <span className="cer-sb">{scoreAzur}</span><span className="cer-sep">·</span><span className="cer-sr">{scoreEcarlate}</span>
             </div>
             <div className="bdf-piste cer-piste">
-              <div className="bdf-cote bdf-azur" style={{ width: `${(blueScore / (blueScore + redScore)) * 100}%` }} />
-              <div className="bdf-cote bdf-ecarlate" style={{ width: `${(redScore / (blueScore + redScore)) * 100}%` }} />
+              <div className="bdf-cote bdf-azur" style={{ width: `${(scoreAzur / (scoreAzur + scoreEcarlate)) * 100}%` }} />
+              <div className="bdf-cote bdf-ecarlate" style={{ width: `${(scoreEcarlate / (scoreAzur + scoreEcarlate)) * 100}%` }} />
               <span className="bdf-seuil" aria-hidden="true" />
             </div>
             {bilanTrophees()}
