@@ -28,6 +28,7 @@ L'Écho joue avec son propre dos de cartes, différent de celui offert au dépar
 Quand la recherche d'un adversaire classé s'étire, l'écran propose de défier un Écho en attendant ; la recherche continue tant qu'on n'a pas accepté.
 Jouer avec un ami : l'écran montre votre liste d'amis, et un défi part chez celui que vous choisissez. Plus aucun code à saisir.
 Défis entre amis : Duel classique ou Confluence, avec ou sans Hérauts, bannière d'invitation au hub.
+Un défi lancé à un ami est une demande : le défieur reste libre dans le hub, une capsule en haut de l'écran dit que le défi attend et permet de l'annuler, la ligne de l'ami le dit aussi ; si l'ami relève, le défieur entre au choix de ses Ordres ; s'il décline, cela lui est dit ; sans réponse en dix minutes, le défi s'efface ; lancer une autre partie annule le défi en attente.
 Tournoi solo : huit Commandants contre l'Écho, difficulté croissante, un Ordre banni à chaque tour.
 Tournoi en ligne : huit joueurs par code partagé, arbre quarts, demies et finale.
 Reprise d'une partie solo interrompue.

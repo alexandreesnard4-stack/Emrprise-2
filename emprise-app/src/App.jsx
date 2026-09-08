@@ -7656,6 +7656,7 @@ const APP_STYLES = `
         }
         .amis-btn:hover { border-color: var(--gold); }
         .amis-btn.principal { color: #14111c; background: var(--gold-bright); border-color: var(--gold-bright); }
+        .amis-attente { font-size: 11px; font-style: italic; color: var(--muted); white-space: nowrap; }
         .amis-croix {
           flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
@@ -8157,6 +8158,30 @@ const APP_STYLES = `
         .capsule-quete-xp {
           font-family: 'Cinzel', serif; font-size: 10.5px; font-weight: 700;
           color: var(--gold-bright); flex: none; white-space: nowrap;
+        }
+        /* Quand la capsule de defi est la, la quete descend de 44 px. */
+        .capsule-quete.capsule-quete-basse { top: calc(52px + env(safe-area-inset-top, 0px)); }
+        /* La capsule de defi : elle dure tant que le defi attend, et se touche (pas de
+           pointer-events: none) : on annule d'ici. Pas d'animation de vie. */
+        .capsule-defi {
+          position: fixed; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 78;
+          transform: translate(-50%, 0);
+          display: flex; align-items: center; gap: 10px;
+          max-width: min(320px, calc(100vw - 80px)); box-sizing: border-box;
+          background: rgba(19,13,29,0.94);
+          border: 1px solid rgba(203,164,86,0.5); border-radius: 999px;
+          padding: 6px 8px 6px 14px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+        }
+        .capsule-defi-texte {
+          font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 12.5px;
+          color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+        }
+        .capsule-defi-texte b { color: var(--gold-bright); font-style: normal; }
+        .capsule-defi-annuler {
+          flex: none; width: 24px; height: 24px; border-radius: 50%;
+          background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.35);
+          color: var(--gold); font-size: 12px; line-height: 1; padding: 0;
         }
         /* Entree ~200 ms (10 % de 2,1 s), tenue ~1,6 s, sortie ~300 ms. */
         @keyframes capsule-vie {
@@ -13832,7 +13857,9 @@ export default function Emprise() {
   // doit etre vraie IMMEDIATEMENT, sans attendre un rendu.
   const suppressionEnMarcheRef = useRef(false);
   const [demandesEnvoyees, setDemandesEnvoyees] = useState({}); // uid -> true, le temps de la session
-  const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t, mode, herauts }
+  const [defiEnvoye, setDefiEnvoye] = useState(null);           // { uid, t, mode, herauts, code }
+  const [defiAvis, setDefiAvis] = useState(null); // { texte, cle } — 4 s dans la capsule
+  const defiEnVolRef = useRef(false);                           // un defi en cours d'envoi
   // La fenetre de composition d'un defi : a qui, dans quel mode, avec ou sans Herauts.
   const [defiConfig, setDefiConfig] = useState(null);           // { uid, nom, mode, herauts }
   // Les options de la partie EN COURS, relues du document a chaque instantane : une
@@ -14274,36 +14301,122 @@ export default function Emprise() {
     }
     copierCodeAmi();
   }
-  // Defier : on cree la partie comme pour « Jouer avec un ami », puis on depose le code
-  // chez l'ami. Une seule invitation par inviteur (le document porte son uid) : une
-  // nouvelle partie remplace la precedente.
+  // Un defi est une DEMANDE, comme une demande d'ami. La partie est creee a l'envoi
+  // (un document qui attend), mais on n'y entre qu'a l'acceptation : le defieur
+  // reste libre dans le hub, la capsule et la ligne de l'ami disent l'attente. Le
+  // refus se lit sur la disparition de l'invitation chez l'ami, et une autre partie
+  // lancee entre-temps annule le defi d'elle-meme. Un seul defi a la fois : un
+  // nouveau defi remplace celui qui attendait.
   async function defierAmi(uidAmi, options) {
-    // Le defi s'annonce AVANT la creation. L'ecran d'attente choisit sur ce seul indice
-    // entre « voici le code a partager » et « defi envoye a X » — et depuis qu'il
-    // s'affiche des la creation de la partie, au lieu d'apres le choix des Ordres, le
-    // poser seulement une fois l'invitation ecrite laissait passer une image du code.
-    // Un code que l'ami defie n'aura jamais a taper : le montrer, meme un instant, c'est
-    // lui demander de faire un travail qui ne le concerne pas.
+    // Un seul defi en vol : pendant la creation, defiEnvoye n'est pas encore pose et la
+    // ligne de chaque ami montre encore « Defier ». Sans ce verrou, deux defis partaient
+    // et le premier restait chez l'ami sans etre ni ecoute ni annulable.
+    if (defiEnVolRef.current) return;
+    defiEnVolRef.current = true;
     const opts = { mode: (options && options.mode) || "classique", herauts: !!(options && options.herauts) };
-    setDefiEnvoye({ uid: uidAmi, t: Date.now(), mode: opts.mode, herauts: opts.herauts });
-    const code = await creerPartieEnLigne(opts);
+    if (defiEnvoye && defiEnvoye.code) annulerDefiEnAttente("remplace");
+    const code = await creerDocumentPartie(opts);
     // Sans ce message, un echec de creation laissait le bouton « Defier » sans le moindre
     // effet visible : le joueur appuyait dans le vide.
     if (!code) {
-      setDefiEnvoye(null);
+      defiEnVolRef.current = false;
       setAvisAmis({ texte: "Impossible de créer la partie. Réessayez.", bon: false });
       return;
     }
-    setActiveModal(null);
     try {
       await setDoc(doc(db, "users", uidAmi, "invitations", myUid), { code, envoyeeLe: serverTimestamp() });
-      venuDesAmisRef.current = true;
+      // Pose APRES l'ecriture reussie : l'ecouteur demarre sur ce code et ne doit pas
+      // prendre une invitation pas encore ecrite pour un refus.
+      setDefiEnvoye({ uid: uidAmi, t: Date.now(), mode: opts.mode, herauts: opts.herauts, code });
     } catch (e) {
-      // L'invitation n'est pas partie : on retire l'annonce pour que l'ecran revienne au
-      // code, qui peut toujours etre envoye a la main.
-      setDefiEnvoye(null);
+      // L'invitation n'est pas partie : le document ne doit pas rester relevable.
+      deposerAbandon(code, "blue", "abandon", null);
+      setAvisAmis({ texte: "Le défi n'est pas parti. Réessayez.", bon: false });
     }
+    defiEnVolRef.current = false;
   }
+  // Retire un defi qui attend encore : l'invitation s'efface chez l'ami, le document de
+  // partie est marque abandonne (les regles interdisent de le supprimer), l'etat local
+  // se vide. Sans effet si rien n'attend. Appele par le bouton de la capsule, par le
+  // depart vers une autre partie, par un nouveau defi, et par l'expiration.
+  function annulerDefiEnAttente(motif) {
+    const d = defiEnvoye;
+    if (!d || !d.code || !myUid) return;
+    deleteDoc(doc(db, "users", d.uid, "invitations", myUid)).catch(() => {});
+    deposerAbandon(d.code, "blue", "abandon", null);
+    setDefiEnvoye(null);
+    const nom = nomAffiche(fiches[d.uid] && fiches[d.uid].pseudo);
+    if (motif === "refus") setDefiAvis({ texte: `${nom} a décliné le défi`, cle: Date.now() });
+    else if (motif === "silence") setDefiAvis({ texte: `${nom} n'a pas répondu`, cle: Date.now() });
+    else if (motif === "autre-partie") setDefiAvis({ texte: `Défi à ${nom} annulé`, cle: Date.now() });
+    // "annule" (le bouton) et "remplace" (un nouveau defi) : sans avis, le geste se voit.
+  }
+  // Un defi attend : deux oreilles et une montre.
+  // 1. Le document de partie : le siege Ecarlate se remplit -> l'ami a releve, on entre.
+  // 2. L'invitation chez l'ami : elle disparait -> refus, SAUF si le siege est pris
+  //    (releverDefi rejoint PUIS efface l'invitation : la lecture serveur du document
+  //    tranche entre les deux). Les instantanes venus du cache ne comptent pas.
+  // 3. Dix minutes : l'ami n'a pas repondu. Sa propre montre ne suffit pas, elle ne
+  //    tourne que s'il a le jeu ouvert.
+  useEffect(() => {
+    const d = defiEnvoye;
+    if (!d || !d.code || !myUid) return;
+    let vivant = true;
+    const refPartie = doc(db, "games", d.code);
+    const stopPartie = onSnapshot(refPartie, (snap) => {
+      if (!vivant || !snap.exists()) return;
+      const data = snap.data();
+      // Notre propre retrait (annulerDefiEnAttente : "blue", "abandon") ne nous apprend
+      // rien. Toute autre issue scellee -- l'ami a releve puis est parti, ou un forfait
+      // nous a ete compte avant que nous n'ayons vu son arrivee -- rend le defi mort :
+      // on le retire sans accuser personne.
+      if (data.abandonPar === "blue" && data.finMotif !== "forfait" && !data.gameOver) return;
+      if (data.abandonPar || data.gameOver) { vivant = false; annulerDefiEnAttente("autre-partie"); return; }
+      if (data.redUid) {
+        vivant = false;
+        const nom = nomAffiche(fiches[d.uid] && fiches[d.uid].pseudo);
+        setDefiAvis({ texte: `${nom} a relevé le défi !`, cle: Date.now() });
+        setDefiEnvoye(null);
+        entrerDansLaPartieDefiee(d.code);
+      }
+    });
+    const stopInvitation = onSnapshot(doc(db, "users", d.uid, "invitations", myUid), (snap) => {
+      if (!vivant || snap.exists() || snap.metadata.fromCache) return;
+      getDocFromServer(refPartie).then((p) => {
+        if (!vivant) return;
+        if (p.exists() && p.data().redUid) return; // c'est une acceptation, l'autre oreille s'en charge
+        vivant = false;
+        // L'ami dont le jeu est ouvert efface lui-meme l'invitation a l'expiration, un
+        // instant avant notre montre : passe la limite, c'est un silence, pas un refus.
+        annulerDefiEnAttente(Date.now() - d.t >= DEFI_PERIME_MS - 15000 ? "silence" : "refus");
+      }).catch(() => {});
+    });
+    const montre = setTimeout(() => {
+      if (!vivant) return;
+      vivant = false;
+      annulerDefiEnAttente("silence");
+    }, Math.max(0, DEFI_PERIME_MS - (Date.now() - d.t)));
+    return () => { vivant = false; stopPartie(); stopInvitation(); clearTimeout(montre); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defiEnvoye && defiEnvoye.code, myUid]);
+  // Une partie commence (Echo, Classe, Histoire, duel local, tutoriel, salle de tournoi)
+  // pendant qu'un defi attend : le defi s'annule de lui-meme. On ne joue qu'une partie a
+  // la fois, et l'ami ne doit pas relever une partie dont le defieur est deja ailleurs.
+  // La PHASE fait foi, pas le mode : le hub garde parfois un mode « bot » perime apres un
+  // chapitre d'Histoire, et la salle d'un tournoi en ligne ne pose aucun mode. Le defi ne
+  // survit que dans le hub et ses menus (amis, tournois, chapitres). Un defi accepte
+  // d'un autre passe par joinOnlineGame, qui retire le notre lui-meme.
+  const PHASES_DEFI_EN_ATTENTE = ["landing", "online-menu", "tourney-online-menu", "tourney-menu", "chapters"];
+  useEffect(() => {
+    if (defiEnvoye && defiEnvoye.code && !PHASES_DEFI_EN_ATTENTE.includes(phase)) annulerDefiEnAttente("autre-partie");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, phase]);
+  // L'avis de la capsule s'efface seul au bout de quatre secondes.
+  useEffect(() => {
+    if (!defiAvis) return;
+    const id = setTimeout(() => setDefiAvis(null), 4000);
+    return () => clearTimeout(id);
+  }, [defiAvis && defiAvis.cle]);
   async function releverDefi(inv) {
     if (!inv || !myUid) return;
     const ok = await joinOnlineGame(inv.code);
@@ -14434,7 +14547,14 @@ export default function Emprise() {
             )}
           </span>
         </button>
-        <button className="amis-btn principal" onClick={() => setDefiConfig({ uid: a.uid, nom, mode: "classique", herauts: false })}>Défier</button>
+        {defiEnvoye && defiEnvoye.uid === a.uid ? (
+          <>
+            <span className="amis-attente">En attente…</span>
+            <button className="amis-btn" onClick={() => annulerDefiEnAttente("annule")}>Annuler</button>
+          </>
+        ) : (
+          <button className="amis-btn principal" onClick={() => setDefiConfig({ uid: a.uid, nom, mode: "classique", herauts: false })}>Défier</button>
+        )}
         {!compact && (
           <button className="amis-croix" aria-label={`Plus d'actions pour ${nom}`} title="Plus" onClick={() => setJoueurMenu({ uid: a.uid, nom, contexte: "ami" })}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" /></svg>
@@ -16487,7 +16607,7 @@ export default function Emprise() {
     setFileAttente(false); setCodeCopie(false); dernierCoupDistantRef.current = null;
     setPartieClassee(false); setPartieClassique(false); setAreneTest(null); setTrophesPartie(null); setTitresPartie(null); setPseudosPartie(null);
     setRencontresPartie(0);
-    setAdversaireUid(null); setDefiEnvoye(null); setAmitieAvis("");
+    setAdversaireUid(null); annulerDefiEnAttente(); setAmitieAvis("");
     // Ce verrou empeche d'enregistrer deux fois la meme partie. Il est baisse par l'effet
     // de fin de partie quand gameOver retombe a faux — mais quitter une partie EN COURS
     // le leve alors que gameOver etait deja faux : l'effet ne se rejouait pas, le verrou
@@ -17158,12 +17278,14 @@ export default function Emprise() {
   }, [phase, tournoiOnlineId, tournoiData && tournoiData.status]);
 
   // 01/09 : createOnlineGame a disparu avec le bouton « Creer une partie ». Ce
-  // n etait qu une enveloppe -- setDefiEnvoye(null) puis creerPartieEnLigne --
+  // n etait qu une enveloppe -- setDefiEnvoye(null) puis creerDocumentPartie --
   // et son unique appelant etait ce bouton. Une fonction morte finit toujours
   // par etre rappelee par erreur.
   // Il ne reste donc qu un chemin de creation : « Defier un ami », qui depose
-  // l invitation chez lui au lieu de montrer un code.
-  async function creerPartieEnLigne(optionsDefi) {
+  // l invitation chez lui au lieu de montrer un code. Cette fonction ne fait
+  // que la transaction et rend le code : on n entre dans la partie qu a
+  // l acceptation (entrerDansLaPartieDefiee).
+  async function creerDocumentPartie(optionsDefi) {
     statsRecordedRef.current = false;
     if (!myUid) { setOnlineError("Connexion en cours, réessayez dans un instant."); return null; }
     setOnlineError("");
@@ -17224,18 +17346,29 @@ export default function Emprise() {
         }
       }
       if (!code) { setOnlineError("Impossible de trouver un code libre. Réessayez."); return null; }
-      setOnlineGameId(code);
-      setOnlineRole("blue");
-      setMode("online");
-      setConfluenceActive(false);
-      setTestMode(false);
-      setPickerChoice([]);
-      setPhase("online-waiting");
       return code;
     } catch (e) {
       setOnlineError("Impossible de créer la partie. Vérifiez la configuration Firebase.");
       return null;
     }
+  }
+
+  // Le siege d'en face vient d'etre pris : c'est MAINTENANT que le defieur entre dans
+  // la partie qu'il avait creee en envoyant son defi. Jusque-la, elle n'etait qu'un
+  // document qui attendait une reponse.
+  function entrerDansLaPartieDefiee(code) {
+    setOnlineGameId(code);
+    setOnlineRole("blue");
+    setMode("online");
+    setConfluenceActive(false);
+    setTestMode(false);
+    setPickerChoice([]);
+    // Le panneau des amis, d'ou le defi est parti, se referme : la partie prend l'ecran,
+    // la capsule « X a releve le defi ! » se voit, et le panneau ne rouvre pas tout seul
+    // au retour au hub. Le receveur fait de meme dans releverDefi.
+    setActiveModal(null);
+    venuDesAmisRef.current = true;
+    setPhase("select-blue");
   }
 
   // 01/09 : le champ de code a disparu de l ecran des amis, il ne reste donc
@@ -17249,7 +17382,9 @@ export default function Emprise() {
     const code = (typeof codeRecu === "string" ? codeRecu : "").trim().toUpperCase();
     if (!code) return false;
     setOnlineError("");
-    setDefiEnvoye(null);
+    // Accepter le defi de quelqu'un d'autre pendant que le mien attend le RETIRE chez
+    // l'ami, au lieu de seulement l'oublier chez moi.
+    annulerDefiEnAttente();
     try {
       // Lecture + prise de la place Rouge dans une seule transaction : avec un getDoc
       // suivi d'un updateDoc, deux joueurs qui rejoignent en même temps lisent tous les
@@ -19837,7 +19972,7 @@ export default function Emprise() {
   // elle bascule en face-a-face (VS, ma main, des ? sur l inconnu) des que MON choix
   // est fait (demande du Commandant, 01/09). Le message d etat sert de verrou : il
   // n est pose que lorsque je suis pret et que lui ne l est pas.
-  const attenteOrdresAdverses = phase === "online-waiting" && !fileAttente && !defiEnvoye
+  const attenteOrdresAdverses = phase === "online-waiting" && !fileAttente
     && !!onlineRole && onlineStatus === ATTENTE_ORDRES_ADVERSES;
 
   const minuteurOrdresActif = mode === "online" && phase === "select-blue" && !gameOver;
@@ -20069,6 +20204,28 @@ export default function Emprise() {
             <div className="adoubement-trait" aria-hidden="true" />
             <div className="adoubement-titre">Commandant</div>
           </div>
+        </div>
+      )}
+
+      {/* La capsule de defi : un defi qui attend, ou la nouvelle de sa reponse.
+          A la difference de la capsule de quete elle DURE et se TOUCHE : on
+          annule d'ici. L'attente se retire quand le panneau des amis est ouvert,
+          la ligne de l'ami y dit la meme chose ; l'avis (refus, silence,
+          acceptation), lui, s'y montre : la ligne ne le dit pas. Posee ICI, hors des blocs de
+          phase : elle couvre le hub et les phases de choix en ligne, pour que
+          « X a releve le defi ! » se lise au moment ou l'on y entre. */}
+      {((defiEnvoye && defiEnvoye.code && activeModal !== "amis") || defiAvis) && (
+        <div className="capsule-defi" role="status">
+          {defiEnvoye && defiEnvoye.code && activeModal !== "amis" ? (
+            <>
+              <span className="capsule-defi-texte">
+                Défi envoyé à <b>{nomAffiche(fiches[defiEnvoye.uid] && fiches[defiEnvoye.uid].pseudo)}</b> · en attente
+              </span>
+              <button className="capsule-defi-annuler" onClick={() => annulerDefiEnAttente("annule")} aria-label="Annuler le défi">✕</button>
+            </>
+          ) : (
+            <span className="capsule-defi-texte">{defiAvis.texte}</span>
+          )}
         </div>
       )}
 
@@ -23128,13 +23285,8 @@ export default function Emprise() {
 
       {phase === "online-waiting" && (
         <div className="order-picker">
-          {/* Ce retour ANNULE le defi : l'invitation est effacee chez l'ami. Le dire, sans
-              quoi l'on croit revenir en arriere sans rien defaire. */}
-          <button className="back-btn" onClick={goBack}>← {defiEnvoye ? "Annuler le défi" : "Retour"}</button>
-          {/* Le titre dit ou l'on est. Apres un defi envoye on n'est PAS en partie : on
-              attend une reponse qui peut ne jamais venir. L'appeler « Partie en ligne »
-              a fait croire trois fois de suite que le duel s'etait lance tout seul. */}
-          <h2>{fileAttente ? "Recherche d'un adversaire" : defiEnvoye ? "Défi envoyé" : "Partie en ligne"}</h2>
+          <button className="back-btn" onClick={goBack}>← Retour</button>
+          <h2>{fileAttente ? "Recherche d'un adversaire" : "Partie en ligne"}</h2>
           {/* Pendant la recherche, l'illustration porte tout : les textes d'Histoire et
               d'astuces s'incrustent en bas du portrait, sur un voile sombre. La consigne
               et la ligne d'etat ont ete retirees, le titre de l'ecran les disait deja. */}
@@ -23176,45 +23328,6 @@ export default function Emprise() {
                   >Défier un Écho en attendant</button>
                 </div>
               )}
-            </>
-          )}
-          {/* Ni en Classe, ni en tournoi : l'adversaire y est APPARIE, il n'a pas de code
-              a taper. Entre l'instant ou l'appariement aboutit et celui ou l'ecran des
-              Ordres s'ouvre, ce bloc avait le temps de montrer le code de la partie --
-              une fraction de seconde, mais assez pour le lire, et rien n'invite plus a
-              partager un duel classe que de voir son code s'afficher. */}
-          {/* 01/09 : le code de la partie ne s affiche plus du tout. Personne ne
-              peut plus en saisir un -- le champ a quitte l ecran des amis -- et
-              montrer un code que nul ne peut taper ne pouvait qu egarer. Il ne
-              reste ici que l etat du defi envoye. */}
-          {!fileAttente && !partieClassee && !tournoiOnlineId && onlineRole === "blue" && onlineGameId && defiEnvoye && (
-            <>
-              {(() => {
-                const f = fiches[defiEnvoye.uid];
-                const nom = nomAffiche(f && f.pseudo);
-                const absent = !f || !f.vuLe || maintenantServeur() - f.vuLe >= EN_LIGNE_MS;
-                const longtemps = Date.now() - defiEnvoye.t > DEFI_PERIME_MS;
-                // Pas de code ici : l'ami a recu le defi, il n'a rien a taper. L'afficher
-                // ne faisait qu'encombrer un ecran ou il n'y a rien a faire qu'attendre.
-                // L illustration plein ecran est un calque positionne (z 0 dans l isolation
-                // de .order-picker) : tout texte pose dessus doit remonter avec
-                // attente-sur-image, sinon il se peint dessous et n apparait jamais.
-                return (
-                  <>
-                    <div className="sub attente-sur-image">Défi envoyé à <b>{nom}</b></div>
-                    {/* Ce qu'on a compose : le defieur relit son propre choix. */}
-                    <div className="sub attente-sur-image" style={{ marginTop: 2, opacity: 0.8 }}>
-                      {defiEtiquette(defiEnvoye.mode || "classique", !!defiEnvoye.herauts)}
-                    </div>
-                    <div className="sub attente-sur-image" style={{ marginTop: 4 }}>
-                      {advPresent ? `${nom} a relevé le défi ! Il compose sa main...`
-                        : longtemps ? `${nom} n'a pas répondu.`
-                        : absent ? `${nom} n'est pas dans le jeu : il verra le défi à son retour.`
-                        : "En attente de sa réponse..."}
-                    </div>
-                  </>
-                );
-              })()}
             </>
           )}
           {/* Meme illustration plein ecran que la recherche d'adversaire : attendre qu'un
@@ -24003,7 +24116,7 @@ export default function Emprise() {
             {capsuleQuete ? `Quête accomplie : ${capsuleQuete.libelle}, plus ${capsuleQuete.xp} XP` : ""}
           </div>
           {capsuleQuete && (
-            <div key={capsuleQuete.cle} className="capsule-quete" aria-hidden="true">
+            <div key={capsuleQuete.cle} className={"capsule-quete" + (defiEnvoye && defiEnvoye.code ? " capsule-quete-basse" : "")} aria-hidden="true">
               <span className="capsule-quete-coche">✓</span>
               <span className="capsule-quete-nom">{capsuleQuete.libelle}</span>
               <span className="capsule-quete-xp">+{capsuleQuete.xp} XP</span>
