@@ -2602,6 +2602,9 @@ async function gagnerXp(montant, piecesExplicites = null) {
   const gain = Math.max(0, Math.floor(montant || 0));
   const avant = niveauDepuisXp(p.xpTotal);
   p.xpTotal = Math.min(1000000, p.xpTotal + gain);
+  // Le compteur de saison suit l XP ; il se remet a zero a la lecture quand la cle de saison a change.
+  p.campagneXp = Math.min(1000000, (p.campagneXp || 0) + gain);
+  p.campagneSaison = cleSaisonCampagne();
   const apres = niveauDepuisXp(p.xpTotal);
   let gemmesVersees = 0;
   for (let palier = p.dernierPalierVerse + 5; palier <= apres.niveauJoueur; palier += 5) {
@@ -3017,8 +3020,73 @@ function niveauDepuisXp(xpTotal) {
   return { niveauJoueur, xpDansNiveau: reste, xpPourSuivant };
 }
 
+// ---------- La Campagne (passe de saison) ----------
+// Une saison dure deux mois et compte 60 paliers. Le carburant est l'XP DEJA gagnee :
+// chaque point verse par gagnerXp avance aussi le compteur de saison. Aucun nouveau
+// systeme a compter, et un joueur au niveau 50 continue de progresser.
+// La cle de saison se CALCULE a partir de la date, elle ne se stocke pas : deux appareils
+// du meme joueur sont d'accord sans rien echanger, comme la rotation de la boutique.
+const CAMPAGNE_PALIERS = 60;
+const CAMPAGNE_XP_PAR_PALIER = 300;
+// Au-dela du dernier palier, la Campagne continue de rendre quelque chose : rien ne doit
+// s'arreter net quand on a tout pris.
+const CAMPAGNE_XP_AU_DELA = 400;
+const CAMPAGNE_PIECES_AU_DELA = 200;
+
+// La cle d'une saison : l'annee et le rang du bimestre, "2026-S5" pour septembre-octobre.
+// Changer de cle remet le compteur a zero, une seule fois, a la premiere lecture.
+function cleSaisonCampagne(d = new Date()) {
+  return d.getUTCFullYear() + "-S" + (Math.floor(d.getUTCMonth() / 2) + 1);
+}
+// Le premier jour de la saison suivante, en UTC : sert a dire les jours restants.
+function finSaisonCampagne(d = new Date()) {
+  const bimestre = Math.floor(d.getUTCMonth() / 2);
+  return Date.UTC(d.getUTCFullYear(), (bimestre + 1) * 2, 1);
+}
+function joursRestantsCampagne(d = new Date()) {
+  return Math.max(0, Math.ceil((finSaisonCampagne(d) - d.getTime()) / 86400000));
+}
+// Pure, sans etat, comme niveauDepuisXp : le palier ne se stocke jamais, il se recalcule.
+function palierCampagne(xp) {
+  const total = Math.max(0, Math.floor(xp || 0));
+  const brut = Math.floor(total / CAMPAGNE_XP_PAR_PALIER);
+  const palier = Math.min(CAMPAGNE_PALIERS, brut);
+  const dansLePalier = palier >= CAMPAGNE_PALIERS
+    ? (total - CAMPAGNE_PALIERS * CAMPAGNE_XP_PAR_PALIER) % CAMPAGNE_XP_AU_DELA
+    : total % CAMPAGNE_XP_PAR_PALIER;
+  const pourLeSuivant = palier >= CAMPAGNE_PALIERS ? CAMPAGNE_XP_AU_DELA : CAMPAGNE_XP_PAR_PALIER;
+  return { palier, dansLePalier, pourLeSuivant };
+}
+
+// Les huit objets exclusifs de la saison 1. Les autres paliers versent de la monnaie,
+// selon les deux fonctions au-dessous : aucune table de 60 lignes a maintenir.
+const CAMPAGNE_OBJETS = {
+  8:  { type: "banniere", nom: "Le Feu du Ban", image: "/bannieres/campagne-feu-du-ban.webp" },
+  16: { type: "dos", nom: "La Cire", image: "/dos/campagne-cire.webp" },
+  24: { type: "banniere", nom: "Le Sceau du Serment", image: "/bannieres/campagne-sceau.webp" },
+  30: { type: "plateau", nom: "La Table du Serment", cle: "table-serment" },
+  38: { type: "dos", nom: "L'Anneau", image: "/dos/campagne-anneau.webp" },
+  46: { type: "banniere", nom: "La Main du Serment", image: "/bannieres/campagne-main.webp" },
+  53: { type: "dos", nom: "Le Grand Sceau", image: "/dos/campagne-grand-sceau.webp" },
+  60: { type: "plateau", nom: "Le Ban", cle: "ban" },
+};
+// La voie du Serment : un objet aux huit paliers ci-dessus, des gemmes tous les cinq,
+// des pieces partout ailleurs, d'autant plus qu'on monte.
+function recompenseSerment(n) {
+  if (CAMPAGNE_OBJETS[n]) return CAMPAGNE_OBJETS[n];
+  if (n % 5 === 0) return { type: "gemmes", n: 25 };
+  return { type: "pieces", n: n < 20 ? 300 : n < 40 ? 450 : 600 };
+}
+// La voie libre : un palier sur trois, de la monnaie seulement. Assez pour que le joueur
+// gratuit sente qu'il gagne quelque chose, trop peu pour tuer la boutique.
+function recompenseLibre(n) {
+  if (n % 3 !== 0) return null;
+  if (n === CAMPAGNE_PALIERS) return { type: "gemmes", n: 100 };
+  return { type: "pieces", n: 150 };
+}
+
 // ---------- 2. Le stockage, meme mecanisme hybride que la bourse ----------
-const DEFAUT_PROGRESSION = { xpTotal: 0, dernierPalierVerse: 0 };
+const DEFAUT_PROGRESSION = { xpTotal: 0, dernierPalierVerse: 0, campagneXp: 0, campagneSaison: "" };
 let memoryProgression = null;
 
 async function readProgressionRaw() {
@@ -3050,14 +3118,21 @@ async function writeProgressionRaw(str) {
 // La lecture repare : totaux bornes, sauvegarde abimee ramenee aux valeurs par defaut.
 async function loadProgression() {
   const brut = await readProgressionRaw();
-  if (!brut) return { ...DEFAUT_PROGRESSION };
-  try {
-    const lu = JSON.parse(brut);
-    return {
-      xpTotal: Number.isFinite(lu.xpTotal) ? Math.max(0, Math.min(1000000, Math.floor(lu.xpTotal))) : 0,
-      dernierPalierVerse: Number.isFinite(lu.dernierPalierVerse) ? Math.max(0, Math.min(NIVEAU_MAX, Math.floor(lu.dernierPalierVerse))) : 0,
-    };
-  } catch (e) { return { ...DEFAUT_PROGRESSION }; }
+  let p = { ...DEFAUT_PROGRESSION };
+  if (brut) {
+    try {
+      const lu = JSON.parse(brut);
+      p = {
+        xpTotal: Number.isFinite(lu.xpTotal) ? Math.max(0, Math.min(1000000, Math.floor(lu.xpTotal))) : 0,
+        dernierPalierVerse: Number.isFinite(lu.dernierPalierVerse) ? Math.max(0, Math.min(NIVEAU_MAX, Math.floor(lu.dernierPalierVerse))) : 0,
+        campagneXp: Number.isFinite(lu.campagneXp) ? Math.max(0, Math.min(1000000, Math.floor(lu.campagneXp))) : 0,
+        campagneSaison: typeof lu.campagneSaison === "string" && lu.campagneSaison.length <= 16 ? lu.campagneSaison : "",
+      };
+    } catch (e) { p = { ...DEFAUT_PROGRESSION }; }
+  }
+  // Le compteur de saison suit l XP ; il se remet a zero a la lecture quand la cle de saison a change.
+  if (p.campagneSaison !== cleSaisonCampagne()) { p.campagneXp = 0; p.campagneSaison = cleSaisonCampagne(); }
+  return p;
 }
 
 // ---------- La bourse : gemmes et possessions (meme stockage hybride) ----------
@@ -8243,6 +8318,78 @@ const APP_STYLES = `
           width: 58px; height: 58px; flex: none; display: block; object-fit: contain;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
+        /* ---------- La Campagne : l'ecran du Chemin ---------- */
+        /* Meme calque plein ecran que la page des Quetes. Le trace serpente en SVG,
+           les paliers sont poses dessus en absolu ; les lots partent vers le centre de
+           l'ecran, celui du Serment colle au jalon. Geometrie mesuree a 390 et 375 px. */
+        .campagne-page {
+          padding-top: env(safe-area-inset-top, 0px);
+          position: fixed; inset: 0; z-index: 80;
+          background: var(--bg);
+          display: flex; flex-direction: column; overflow: hidden;
+        }
+        .campagne-entete { flex: none; padding: 10px 14px 8px; z-index: 5;
+          background: linear-gradient(180deg, rgba(30,26,41,0.98), rgba(20,17,28,0.98));
+          border-bottom: 1px solid rgba(203,164,86,0.22); }
+        .campagne-entete-haut { display: flex; align-items: center; gap: 10px; }
+        .campagne-titre { font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 0.12em;
+          text-transform: uppercase; color: var(--gold-bright); margin: 0; flex: 1; }
+        .campagne-jours { font-size: 11px; color: var(--muted); flex: none; }
+        .campagne-jauge-ligne { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+        .campagne-palier-num { font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700;
+          color: var(--gold-bright); flex: none; min-width: 26px; text-align: center; }
+        .campagne-palier-num.a-venir { color: var(--muted); }
+        .campagne-jauge { position: relative; flex: 1; height: 8px; border-radius: 999px;
+          background: rgba(0,0,0,0.55); border: 1px solid rgba(203,164,86,0.2); overflow: hidden; }
+        .campagne-jauge i { position: absolute; inset: 0 auto 0 0; border-radius: 999px;
+          background: linear-gradient(90deg, var(--combo), var(--gold-bright)); }
+        .campagne-jauge-txt { font-size: 10px; color: var(--muted); flex: none; }
+        .campagne-achat { margin-top: 9px; width: 100%; padding: 9px; border-radius: 10px;
+          background: linear-gradient(180deg, rgba(203,164,86,0.22), rgba(203,164,86,0.10));
+          border: 1px solid var(--gold); color: var(--gold-bright);
+          font-family: 'Cinzel', serif; font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+        .campagne-achat:disabled { opacity: 0.75; cursor: default; }
+        .campagne-bientot { text-align: center; font-size: 10px; color: var(--muted); margin-top: 4px; }
+        .campagne-legende { flex: none; display: flex; justify-content: center; gap: 16px; padding: 5px 0 6px;
+          background: rgba(20,17,28,0.92); border-bottom: 1px solid rgba(203,164,86,0.12); }
+        .campagne-legende span { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+          color: var(--muted); display: flex; align-items: center; gap: 5px; }
+        .campagne-puce { width: 11px; height: 11px; border-radius: 3px;
+          border: 1px solid rgba(203,164,86,0.3); background: rgba(30,26,41,0.9); }
+        .campagne-puce.serment { border-color: var(--gold-bright); background: rgba(203,164,86,0.16); }
+        .campagne-piste { flex: 1; overflow-y: auto; position: relative; }
+        .campagne-monde { position: relative; }
+        .campagne-trace { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        .camp-etape { position: absolute; transform: translate(-50%, -50%);
+          display: flex; align-items: center; gap: 7px; }
+        .camp-etape.vers-droite { flex-direction: row; }
+        .camp-etape.vers-gauche { flex-direction: row-reverse; }
+        .camp-jalon { width: 34px; height: 34px; border-radius: 50%; flex: none;
+          background: radial-gradient(circle at 50% 34%, rgba(203,164,86,0.14), rgba(8,6,12,0.95));
+          border: 1.5px solid rgba(203,164,86,0.38);
+          display: flex; align-items: center; justify-content: center; }
+        .camp-jalon span { font-family: 'Cinzel', serif; font-size: 12px; color: var(--muted); }
+        .camp-jalon.grand { width: 46px; height: 46px; border-color: rgba(232,200,119,0.75); }
+        .camp-jalon.grand span { font-size: 14px; }
+        .camp-etape.atteint .camp-jalon {
+          background: radial-gradient(circle at 50% 34%, rgba(203,164,86,0.42), rgba(58,42,14,0.95));
+          border-color: var(--gold-bright); }
+        .camp-etape.atteint .camp-jalon span { color: var(--gold-bright); }
+        .camp-etape.courant .camp-jalon { box-shadow: 0 0 0 3px rgba(203,164,86,0.22), 0 0 22px rgba(203,164,86,0.55); }
+        .camp-lots { display: flex; align-items: center; gap: 5px; }
+        .camp-etape.vers-gauche .camp-lots { flex-direction: row-reverse; }
+        .camp-lot { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px;
+          width: 50px; height: 34px; border-radius: 8px; box-sizing: border-box; overflow: hidden;
+          background: rgba(30,26,41,0.9); border: 1px solid rgba(203,164,86,0.22); }
+        .camp-lot b { font-family: 'Cinzel', serif; font-size: 11px; color: var(--bone); }
+        .camp-lot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .camp-lot.serment { border-color: rgba(203,164,86,0.55); box-shadow: inset 0 0 10px rgba(203,164,86,0.12); }
+        .camp-lot.grand { width: 76px; height: 76px; }
+        .camp-lot.atteint { border-color: var(--gold-bright); }
+        .camp-plateau { display: block; width: 76%; height: 58%; border-radius: 4px;
+          border: 1px solid rgba(203,164,86,0.35); }
+        .camp-cadenas { position: absolute; right: 2px; bottom: 1px; font-size: 9px; opacity: 0.85; }
+
         /* ---------- Niveaux de Commandant ---------- */
         /* La carte d'apparat du niveau : l'image definitive en fond, le nombre en
            TEXTE par-dessus -- jamais dans l'image. L'ombre portee du texte le garde
@@ -14891,6 +15038,13 @@ export default function Emprise() {
   const [quetes, setQuetes] = useState(null);
   useEffect(() => { chargerQuetesDuMoment().then(setQuetes); }, []);
   const [pageQuetes, setPageQuetes] = useState(false);
+  const [pageCampagne, setPageCampagne] = useState(false);
+  // A l'ouverture du Chemin, la vue se place sur le jalon du palier courant, comme la carte de chapitre.
+  useEffect(() => {
+    if (!pageCampagne) return;
+    const jalon = document.querySelector(".camp-etape.courant");
+    if (jalon) jalon.scrollIntoView({ block: "center" });
+  }, [pageCampagne]);
   const [quetesDernierePartie, setQuetesDernierePartie] = useState(null);
   const quetesReleveRef = useRef(nouveauReleveQuetes());
   // ---------- La capsule « Quete accomplie » en cours de partie ----------
@@ -20078,13 +20232,12 @@ export default function Emprise() {
                 <span className="chat-badge hub-pastille" aria-hidden="true">{quetes.nonVus}</span>
               )}
             </button>
-            {/* La Campagne, le passe de saison, qui n existe pas encore : ni paliers, ni XP
-                de saison, ni achat ici. Un coffre OUVERT, distinct du parchemin au-dessus ;
-                le panneau dit ce qu elle sera. */}
+            {/* La Campagne, le passe de saison : un coffre OUVERT, distinct du parchemin
+                au-dessus, qui ouvre l ecran du Chemin, en lecture seule pour l instant. */}
             {hubPage !== "ordres" && (
             <button
               className="hub-rouage"
-              onClick={() => setActiveModal("campagne")}
+              onClick={() => setPageCampagne(true)}
               title="La Campagne"
               aria-label="La Campagne"
             >
@@ -20229,6 +20382,115 @@ export default function Emprise() {
             </div>
           )}
 
+          {/* La Campagne : l ecran du Chemin, en lecture seule. Il montre la saison, le
+              palier atteint, la jauge d XP et les 60 paliers sur un trace qui serpente.
+              Rien ne se reclame, rien ne s achete : le bouton du Serment reste inerte. */}
+          {pageCampagne && (() => {
+            const etat = palierCampagne(progression.campagneXp);
+            const jours = joursRestantsCampagne();
+            const pct = Math.round((etat.dansLePalier / etat.pourLeSuivant) * 100);
+            // La geometrie du Chemin, mesuree dans la maquette : rangee de monnaie 58 px,
+            // rangee d objet 104 px, 24 px en haut, 40 px en bas ; les centres serpentent
+            // sur une sinusoide d une periode de huit paliers.
+            const HAUT = 24, BAS = 40, RANG_MONNAIE = 58, RANG_OBJET = 104;
+            const jalons = [];
+            let y = HAUT;
+            for (let n = 1; n <= CAMPAGNE_PALIERS; n++) {
+              const objet = !!CAMPAGNE_OBJETS[n];
+              const h = objet ? RANG_OBJET : RANG_MONNAIE;
+              jalons.push({ n, objet, x: 50 + 21 * Math.sin((n / 8) * Math.PI * 2), y: y + h / 2 });
+              y += h;
+            }
+            const hauteur = y + BAS;
+            const trace = (liste) => liste.map((j, i) => {
+              if (i === 0) return "M " + j.x + " " + j.y;
+              const my = (liste[i - 1].y + j.y) / 2;
+              return "C " + liste[i - 1].x + " " + my + ", " + j.x + " " + my + ", " + j.x + " " + j.y;
+            }).join(" ");
+            const dalleNeutre = "linear-gradient(180deg, #2a2536 0%, #1a1624 100%)";
+            const lot = (r, voie, grand, atteint) => {
+              if (!r) return null;
+              const classes = "camp-lot " + voie + (grand ? " grand" : "") + (atteint ? " atteint" : "");
+              const cadenas = voie === "serment" && !atteint
+                ? <span className="camp-cadenas" aria-hidden="true">{"\uD83D\uDD12"}</span> : null;
+              if (r.type === "pieces" || r.type === "gemmes") {
+                return (
+                  <div className={classes} title={r.n + (r.type === "pieces" ? " pièces" : " gemmes")}>
+                    <span className={r.type === "pieces" ? "piece-icone" : "gemme-icone"} aria-hidden="true" />
+                    <b>{r.n}</b>
+                    {cadenas}
+                  </div>
+                );
+              }
+              if (r.type === "plateau") {
+                const plateau = PLATEAUX.find((p) => p.cle === r.cle);
+                return (
+                  <div className={classes} title={r.nom}>
+                    <span className="camp-plateau" style={{ background: plateau ? plateau.dalle : dalleNeutre }} />
+                    {cadenas}
+                  </div>
+                );
+              }
+              return (
+                <div className={classes} title={r.nom}>
+                  <img src={r.image} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  {cadenas}
+                </div>
+              );
+            };
+            return (
+              <div className="campagne-page" role="dialog" aria-modal="true" aria-label="La Campagne">
+                <header className="campagne-entete">
+                  <div className="campagne-entete-haut">
+                    <button className="quetes-retour" onClick={() => setPageCampagne(false)} aria-label="Retour au hub">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
+                    </button>
+                    <img className="hub-icone-campagne" src="/nav/campagne.webp" alt="" />
+                    <h2 className="campagne-titre">LA CAMPAGNE</h2>
+                    <span className="campagne-jours">{jours} {jours > 1 ? "jours" : "jour"}</span>
+                  </div>
+                  <div className="campagne-jauge-ligne">
+                    <span className="campagne-palier-num">{etat.palier}</span>
+                    <div className="campagne-jauge" role="progressbar" aria-valuemin="0" aria-valuemax={etat.pourLeSuivant} aria-valuenow={etat.dansLePalier}>
+                      <i style={{ width: pct + "%" }} />
+                    </div>
+                    <span className="campagne-jauge-txt">{etat.dansLePalier}/{etat.pourLeSuivant}</span>
+                    {etat.palier < CAMPAGNE_PALIERS && <span className="campagne-palier-num a-venir">{etat.palier + 1}</span>}
+                  </div>
+                  <button className="campagne-achat" disabled>Prendre Le Serment : 4,99 €</button>
+                  <div className="campagne-bientot">Bientôt</div>
+                </header>
+                <div className="campagne-legende">
+                  <span><i className="campagne-puce" /> Voie libre</span>
+                  <span><i className="campagne-puce serment" /> Le Serment</span>
+                </div>
+                <div className="campagne-piste">
+                  <div className="campagne-monde" style={{ height: hauteur + "px" }}>
+                    <svg className="campagne-trace" viewBox={"0 0 100 " + hauteur} preserveAspectRatio="none" aria-hidden="true">
+                      <path d={trace(jalons)} fill="none" stroke="rgba(203,164,86,0.16)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                      {etat.palier > 0 && (
+                        <path d={trace(jalons.slice(0, etat.palier))} fill="none" stroke="rgba(232,200,119,0.55)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                      )}
+                    </svg>
+                    {jalons.map((j) => {
+                      const atteint = j.n <= etat.palier;
+                      const classes = "camp-etape " + (j.x < 50 ? "vers-droite" : "vers-gauche")
+                        + (atteint ? " atteint" : "") + (j.n === etat.palier ? " courant" : "");
+                      return (
+                        <div key={j.n} className={classes} style={{ top: j.y + "px", left: j.x + "%" }}>
+                          <div className={"camp-jalon" + (j.objet ? " grand" : "")}><span>{j.n}</span></div>
+                          <div className="camp-lots">
+                            {lot(recompenseSerment(j.n), "serment", j.objet, atteint)}
+                            {lot(recompenseLibre(j.n), "libre", j.objet, atteint)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {/* ---------- Pages du hub ---------- */}
           <main
             className="hub-pages"
@@ -21282,29 +21544,6 @@ export default function Emprise() {
               </div>
             );
           })()}
-          {activeModal === "campagne" && (
-            <div className="info-overlay" onClick={() => setActiveModal(null)}>
-              <div className="info-panel rules-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="info-panel-title">La Campagne</div>
-                <div className="rules-section">
-                  <div className="rules-p">
-                    Une saison de deux mois, soixante paliers. Chaque point d'expérience gagné
-                    en partie ou en quête vous y fait monter, et chaque palier verse sa part.
-                  </div>
-                  <div className="rules-p">
-                    La voie libre est ouverte à tous. Le Serment, lui, ajoute des quêtes
-                    supplémentaires, des gemmes, des pièces, et huit pièces d'équipement
-                    qu'on ne trouvera jamais en boutique : trois bannières, trois dos de
-                    cartes et deux plateaux.
-                  </div>
-                  <div className="rules-p">
-                    Elle n'est pas encore ouverte. Elle le sera après le lancement du jeu.
-                  </div>
-                </div>
-                <button className="reset-btn" onClick={() => setActiveModal(null)}>Fermer</button>
-              </div>
-            </div>
-          )}
           {activeModal === "amis" && (
             <div className="info-overlay" onClick={() => setActiveModal(null)}>
               <div className="info-panel settings-panel profil-panel" onClick={(e) => e.stopPropagation()}>
