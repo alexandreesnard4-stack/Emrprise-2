@@ -29,9 +29,33 @@
   .encart p:last-child { margin-bottom:0; }
   footer { margin-top:36px; padding-top:18px; border-top:1px solid #3a3048;
            color:#8a7a9a; font-size:13px; text-align:center; }
+  /* La barre reste en haut quand on fait defiler : une page de six ecrans de long
+     sans sortie visible, c'est ce qui a piege le Commandant. Collante et non fixe :
+     elle pousse le contenu au lieu de le recouvrir, rien a compenser en dessous. */
+  .retour-barre {
+    position: sticky; top: 0; z-index: 10;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+    background: rgba(20, 17, 28, 0.96);
+    border-bottom: 1px solid rgba(203, 164, 86, 0.22);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .retour-lien {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'Cinzel', Georgia, serif; font-size: 13px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: #cba456; text-decoration: none;
+  }
+  .retour-lien svg { width: 18px; height: 18px; flex: none; }
+  .retour-lien:active { color: #e8c877; }
 </style>
 </head>
 <body>
+<header class="retour-barre">
+  <a class="retour-lien" href="/" id="retour-jeu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+    <span>Retour au jeu</span>
+  </a>
+</header>
 <div class="page">
 
 <h1>Conditions d'utilisation</h1>
@@ -91,5 +115,14 @@
 <footer>EMPRISE, édité par Alexandre Esnard. Contact : alexandreesnard4@gmail.com</footer>
 
 </div>
+<script>
+  // Le lien mene a l'accueil par defaut : c'est ce qui marche partout, meme sans
+  // JavaScript, meme si la page a ete ouverte a froid depuis un lien partage.
+  // Quand on VIENT du jeu, on prefere revenir en arriere : l'application se
+  // retrouve la ou on l'avait laissee, sans se recharger entierement.
+  document.getElementById("retour-jeu").addEventListener("click", function (e) {
+    if (document.referrer && history.length > 1) { e.preventDefault(); history.back(); }
+  });
+</script>
 </body>
 </html>
