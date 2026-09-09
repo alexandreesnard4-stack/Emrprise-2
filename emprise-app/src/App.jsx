@@ -23525,11 +23525,12 @@ export default function Emprise() {
         };
         // Combien de tours le joueur a-t-il deja franchis. L'arbre s'allume d'autant.
         const franchis = tourney.active ? tourney.round : 0;
-        // Le joueur porte le portrait des Dores. Les formes abstraites essayees avant
-        // (croix, ecu, octogone plein) ne racontaient rien : dans un arbre ou chaque
-        // adversaire montre un visage, une forme geometrique se lit comme une case vide.
-        // Le sceau reste serti d'or, ce qui distingue la plaque sans un mot.
-        const P = { you: { name: "Vous", you: true, key: "eveil" } };
+        // Le joueur porte SON medaillon (09/09), celui qu'il a equipe au profil. Avant, il
+        // empruntait le portrait des Dores : le meme gabarit que les sept adversaires, et un
+        // visage qui n'etait pas le sien. Les formes abstraites essayees encore avant (croix,
+        // ecu, octogone plein) ne racontaient rien. Le sceau reste serti d'or : c'est lui qui
+        // distingue sa plaque, pas son contenu.
+        const P = { you: { name: "Vous", you: true } };
         ["maudits", "poison", "devoreuse", "scribes", "mue", "percee", "guardian"].forEach((k, i) => {
           P["c" + (i + 1)] = { name: NOMS_TOURNOI[k], key: k };
         });
@@ -23549,9 +23550,11 @@ export default function Emprise() {
               style={{ left: x, top: y, width: CW, height: CH }}
             >
               <span className="tb-sceau">
-                {order
-                  ? <img src={order.portrait} alt="" className="tb-portrait" />
-                  : <span className="tb-blason" aria-hidden="true" />}
+                {p.you
+                  ? <img src={imageMedaillon(bourse.medaillonEquipe)} alt="" className="tb-portrait" />
+                  : order
+                    ? <img src={order.portrait} alt="" className="tb-portrait" />
+                    : <span className="tb-blason" aria-hidden="true" />}
               </span>
               <span className="tb-nom">{p.name}</span>
               {elimine && <span className="tb-balafre" aria-hidden="true" />}
