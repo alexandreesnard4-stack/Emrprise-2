@@ -8372,10 +8372,10 @@ const APP_STYLES = `
           width: 58px; height: 58px; flex: none; display: block; object-fit: contain;
           filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
         }
-        /* ---------- La Campagne : l'ecran du Chemin ---------- */
-        /* Meme calque plein ecran que la page des Quetes. Le trace serpente en SVG,
-           les paliers sont poses dessus en absolu ; les lots partent vers le centre de
-           l'ecran, celui du Serment colle au jalon. Geometrie mesuree a 390 et 375 px. */
+        /* ---------- La Campagne : l'ecran de la saison ---------- */
+        /* Meme calque plein ecran que la page des Quetes. La piste est une grille de
+           trois colonnes, un rang par palier : voie libre a gauche, numero au milieu,
+           Le Serment a droite. Geometrie mesuree a 390 et 375 px. */
         .campagne-page {
           padding-top: env(safe-area-inset-top, 0px);
           position: fixed; inset: 0; z-index: 80;
