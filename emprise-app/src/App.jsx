@@ -150,25 +150,33 @@ const EN_LIGNE_MS = 3 * 60 * 1000;         // vu il y a moins de trois minutes =
 //     AVANT que quoi que ce soit ne bascule. A changer avec elle, jamais seul.
 //   - RYTHME_POSE_JOUEUR_MS : entre MA pose et mes captures. C etait zero --
 //     la carte tombait et le plateau basculait dans la meme image, on ne
-//     lisait ni l une ni l autre. Quatre cents millisecondes pour voir la
-//     pose, puis ce qu elle provoque.
-const RYTHME_REFLEXION_ECHO_MS = 3200;
+//     lisait ni l une ni l autre. Le temps de voir la pose, puis ce qu elle
+//     provoque.
+// RELEVES LE 09/09 : le jeu se lisait trop vite. L Echo prend 4,2 s au lieu de 3,2
+// pour reflechir, ma respiration passe de 400 a 650 ms, et la Resonance de 2 a 2,8 s,
+// ce qui envoie l Onde a 3,2 s au lieu de 2,4. La pose de l Echo et le pivot de
+// capture, eux, n ont PAS bouge : ils sont cales sur des animations CSS.
+const RYTHME_REFLEXION_ECHO_MS = 4200;
 const RYTHME_POSE_ECHO_MS = 1610;
-const RYTHME_POSE_JOUEUR_MS = 400;
+const RYTHME_POSE_JOUEUR_MS = 650;
 // Le pivot de capture, en millisecondes : le miroir de --tour-duree, qui vit dans le
 // CSS. Les deux doivent dire la meme chose -- la file de presentation en ligne compte
 // ce pivot dans le temps qu un coup occupe l ecran. Une sonde le verifie.
 const PIVOT_CAPTURE_MS = 1000;
-// Le depart d une chaine d Onde (04/09) : 2 400 ms au lieu de 4 000. Le commentaire
-// d avant parlait d une Resonance de 3 s ; elle n en dure pas 3. Son element le plus long
-// est le flash des rangs, 2 s (l onde de choc en fait 1,8, le pivot 1). L Onde part donc
-// 400 ms apres la fin REELLE de la Resonance, le meme temps de respiration que la pose --
-// au lieu de 2 s de vide. Rien n est raccourci : la Resonance joue toujours ses cartes
-// ENSEMBLE, l Onde toujours une par une, 300 ms par maillon.
+// Le depart d une chaine d Onde (04/09, releve le 09/09) : l Onde part 400 ms apres la
+// fin REELLE de la Resonance, le meme temps de respiration que la pose. Son element le
+// plus long est le flash des rangs (l onde de choc en fait 1,8, le pivot 1) : c est lui
+// qui donne sa duree ressentie, et c est donc lui que RESONANCE_MS mesure. Rien n est
+// raccourci : la Resonance joue toujours ses cartes ENSEMBLE, l Onde toujours une par
+// une, 300 ms par maillon.
+// SA JUMELLE VIT DANS LE CSS : l animation resonance-rank-flash, dans APP_STYLES, doit
+// porter la MEME duree (2,8 s ici, donc 2.8s la-bas). Les changer separement est le
+// piege : la constante decide quand l Onde part, l animation decide ce que l oeil voit.
+// Les pourcentages du keyframes, eux, sont relatifs et s etirent tout seuls.
 // Une seule constante : delaiMaillon, qui cale le depart des fleches de Portee sur le
 // meme rythme, la lit aussi. Elle portait son propre 4000 en dur, et une fleche de chaine
 // serait partie 1,6 s apres le maillon qu elle illustre.
-const RESONANCE_MS = 2000;
+const RESONANCE_MS = 2800;
 const COMBO_BASE_DELAY = RESONANCE_MS + 400;
 // Les Maudits (04/09). MAUDIT_ATTENTE_MS : le sang ne monte qu une fois le pivot de
 // capture bien fini -- on lit la capture, PUIS la croissance, jamais les deux ensemble.
@@ -11484,7 +11492,8 @@ const APP_STYLES = `
         /* Rang affaibli par le poison (-1), chiffre en rouge, distinct du bonus vert */
         .rank.rank-poisoned { color: var(--malus); text-shadow: 0 0 6px rgba(225,91,82,0.95), 0 0 11px rgba(225,91,82,0.6); }
         /* Résonance : les 2 rangs égaux qui se sont touchés clignotent en blanc avec un léger zoom */
-        .rank.rank-resonance { animation: resonance-rank-flash 2s ease; }
+        /* 2,8 s : la MEME duree que RESONANCE_MS, qui decide quand l Onde part. */
+        .rank.rank-resonance { animation: resonance-rank-flash 2.8s ease; }
         /* Aperçu (pendant le survol/glisser, avant de relâcher) : reste visible tant qu'on
            survole, contrairement au clignotement ponctuel joué à la vraie capture. */
         .rank.rank-resonance-preview { color: #ffffff; text-shadow: 0 0 6px #fff, 0 0 14px var(--gold-bright); animation: resonance-preview-pulse 1.1s ease infinite; }
