@@ -17101,6 +17101,7 @@ export default function Emprise() {
     battementMatchEcho(m.cle); // je prends le match en main : le forfait recule
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setPoisonedCells(Array(CELLS).fill(false));
     setBlueHand([]); setRedHand([]);
     setBlueOrders([]); setRedOrders([]);
@@ -18406,6 +18407,11 @@ export default function Emprise() {
   function launchTourneyRound(roundIdx, banKey) {
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
+    // La ronde de Mort Subite et les Reserves appartiennent a la partie d avant.
+    // Seuls reset() et la revanche en ligne les remettaient a zero : partout ailleurs,
+    // une partie qui en suivait une autre repartait avec la ronde deja consommee, donc
+    // sans Mort Subite possible (09/09).
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setPoisonedCells(Array(CELLS).fill(false));
     setBlueHand([]); setRedHand([]);
     setBlueOrders([]); setRedOrders([]);
@@ -18451,6 +18457,7 @@ export default function Emprise() {
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setMode("bot");
     setConfluenceActive(false);
     setTestMode(false);
@@ -18475,6 +18482,13 @@ export default function Emprise() {
     }
     setRedOrders([botOrderA, botOrderB]);
     setRedHand(isFinalGame ? applyHeroToHand(makeHand(botOrderA, botOrderB), storyChapterKey) : makeHand(botOrderA, botOrderB));
+    // La Reserve suit la main, Herauts compris : en Mort Subite la carte posee doit
+    // avoir la capacite superieure qu'elle a en main (meme regle qu en ligne). Elle se
+    // compose d office en Histoire -- une carte par Ordre, la plus forte -- pour garder
+    // le chemin direct chapitre vers plateau, sans ecran de choix. Mains NEUVES : les
+    // objets de la Reserve ne doivent pas partager leurs ids avec ceux de la main.
+    setReserveBleue(reserveAutomatique(applyEarnedHeroesToHand(makeHand(chapterMeta.order, secondOrder), storyProgress.completedChapters)));
+    setReserveRouge(reserveAutomatique(isFinalGame ? applyHeroToHand(makeHand(botOrderA, botOrderB), storyChapterKey) : makeHand(botOrderA, botOrderB)));
 
     const premier = tirerPremierJoueur();
     setTurn(premier); setFirstPlayer(premier); setSelected(null); setFlashes({}); setBoardShakeBig(false); setGameOver(false);
@@ -18532,6 +18546,7 @@ export default function Emprise() {
     setMode("bot");
     setTestMode(false);
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setBlueOrders(AVAILABLE_ORDERS);
     setRedOrders(AVAILABLE_ORDERS);
     setPhase("select-difficulty");
@@ -18542,6 +18557,7 @@ export default function Emprise() {
     setMode("local");
     setTestMode(false);
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     setBlueOrders(AVAILABLE_ORDERS);
     setRedOrders(AVAILABLE_ORDERS);
     setDraft({ pool: [], pickedBy: {}, turn: "blue", timeLeft: DRAFT_SECONDS });
@@ -18566,6 +18582,7 @@ export default function Emprise() {
     setBoardSize(STANDARD_ROWS, STANDARD_COLS);
     setBoard(Array(CELLS).fill(null));
     setPoisonedCells(Array(CELLS).fill(false));
+    setReserveBleue([]); setReserveRouge([]); setReserveChoix([]); setMortSubiteRonde(0);
     const buildFullHand = () => [...AVAILABLE_ORDERS, ...ORDRES_A_L_ESSAI].map((o) => makeOrderQuad(o)[0]);
     // Aucun Héraut en bac à sable : on teste les capacités de base, telles que la plupart
     // des joueurs les rencontreront. Pour les réactiver, envelopper les deux appels dans
@@ -18594,6 +18611,10 @@ export default function Emprise() {
       const buildHand = () => next.map((k) => carteConfluence(ORDERS.find((l) => l.key === k)));
       setBlueHand(buildHand());
       setRedHand(buildHand());
+      // Les huit cartes viennent de huit Ordres differents : une par Ordre, la plus
+      // forte, revient a garder les deux plus fortes. buildHand rend des objets neufs.
+      setReserveBleue(reserveAutomatique(buildHand()));
+      setReserveRouge(reserveAutomatique(buildHand()));
       setDraft((d) => ({ ...d, pool: next, pickedBy: nextPickedBy }));
       if (mode !== "bot") { const premier = tirerPremierJoueur(); setTurn(premier); setFirstPlayer(premier); } // en mode bot, startMatch s'en charge après l'aperçu
       setPhase(mode === "bot" ? "preview" : "play");
@@ -18616,6 +18637,8 @@ export default function Emprise() {
     setDraft((d) => ({ ...d, pool }));
     setBlueHand(buildHand());
     setRedHand(buildHand());
+    setReserveBleue(reserveAutomatique(buildHand()));
+    setReserveRouge(reserveAutomatique(buildHand()));
     setPhase("play");
   }
 
