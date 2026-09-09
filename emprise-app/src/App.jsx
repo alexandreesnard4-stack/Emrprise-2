@@ -8471,9 +8471,27 @@ const APP_STYLES = `
         .camp-lot b { font-family: 'Cinzel', serif; font-size: 11px; color: var(--bone); }
         .camp-lot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .camp-lot.atteint { border-color: var(--gold-bright); }
-        .camp-plateau { display: block; width: 76%; height: 58%; border-radius: 4px;
-          border: 1px solid rgba(203,164,86,0.35); }
-        .camp-cadenas { position: absolute; right: 2px; bottom: 1px; font-size: 9px; opacity: 0.85; }
+        /* Le plateau du Chemin est un VRAI mini-plateau (09/09) : dalle et six cases,
+           les memes variables qu en partie et qu au rayon -- un rectangle de couleur
+           ne disait pas ce qu on gagnait. Les variables sont posees sur le lot par
+           variablesPlateau, elles descendent d elles-memes jusqu aux cases. */
+        .camp-plateau { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+          width: 66px; height: 42px; padding: 4px; box-sizing: border-box; border-radius: 5px;
+          background: var(--plateau-dalle); border: 1px solid var(--plateau-bord);
+          box-shadow: inset 0 1px 0 var(--plateau-lueur), inset 0 0 8px rgba(0,0,0,0.45); }
+        .camp-plateau-case { border-radius: 2px; background: var(--plateau-case);
+          border: 1px solid var(--plateau-case-bord); box-shadow: inset 0 1px 2px rgba(0,0,0,0.7); }
+        /* Le mini-plateau se cale en haut du lot : l etiquette du type occupe le bas. */
+        .camp-lot.grand.objet-plateau { align-items: flex-start; padding-top: 7px; }
+        /* L etiquette du type, au bas de chaque objet du Serment, sur un voile qui la
+           rend lisible sur une banniere ou un dos. Le mot, pas seulement l image :
+           un joueur doit savoir CE qu il gagne sans avoir a deviner. */
+        .camp-etiquette { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 0 2px;
+          font-family: 'Cinzel', serif; font-size: 8px; font-weight: 700; letter-spacing: 0.12em;
+          text-transform: uppercase; text-align: center; color: var(--gold-bright);
+          background: linear-gradient(180deg, rgba(8,6,12,0), rgba(8,6,12,0.88) 55%); pointer-events: none; }
+        .camp-cadenas { position: absolute; right: 2px; bottom: 1px; font-size: 9px; opacity: 0.85;
+          z-index: 2; }
 
         /* ---------- Niveaux de Commandant ---------- */
         /* La carte d'apparat du niveau : l'image definitive en fond, le nombre en
@@ -20753,7 +20771,7 @@ export default function Emprise() {
             const etat = palierCampagne(progression.campagneXp);
             const jours = joursRestantsCampagne();
             const pct = Math.round((etat.dansLePalier / etat.pourLeSuivant) * 100);
-            const dalleNeutre = "linear-gradient(180deg, #2a2536 0%, #1a1624 100%)";
+            const TYPES_OBJETS = { banniere: "Bannière", dos: "Dos de carte", plateau: "Plateau" };
             const lot = (r, voie, grand, atteint) => {
               // Une case vide et non rien : la grille a besoin de ses trois cellules,
               // sans quoi un palier sans lot libre decalerait son numero.
@@ -20771,10 +20789,12 @@ export default function Emprise() {
                 );
               }
               if (r.type === "plateau") {
-                const plateau = PLATEAUX.find((p) => p.cle === r.cle);
                 return (
-                  <div className={classes} title={r.nom}>
-                    <span className="camp-plateau" style={{ background: plateau ? plateau.dalle : dalleNeutre }} />
+                  <div className={classes + " objet-plateau"} style={variablesPlateau(r.cle)} title={r.nom}>
+                    <span className="camp-plateau" aria-hidden="true">
+                      {[0, 1, 2, 3, 4, 5].map((i) => <span key={i} className="camp-plateau-case" />)}
+                    </span>
+                    <span className="camp-etiquette">{TYPES_OBJETS.plateau}</span>
                     {cadenas}
                   </div>
                 );
@@ -20782,6 +20802,7 @@ export default function Emprise() {
               return (
                 <div className={classes} title={r.nom}>
                   <img src={r.image} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  <span className="camp-etiquette">{TYPES_OBJETS[r.type] || ""}</span>
                   {cadenas}
                 </div>
               );
