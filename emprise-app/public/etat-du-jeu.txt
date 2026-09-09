@@ -135,3 +135,4 @@ Une Résonance retourne toutes ses cartes en même temps ; l'Onde enchaîne just
 En aperçu, l'allumage des pastilles est réservé à la Résonance : un Gardien menacé montre la valeur qu'il défend, sans autre signal.
 La Mort Subite peut s'ouvrir dans tous les modes : contre l'Écho, en Histoire, en Confluence, en tournoi et en ligne.
 En Histoire et en Confluence, la Réserve se compose toute seule : la carte la plus forte de chaque Ordre, sans écran de choix.
+À égalité tenue jusqu'au bout, le Dernier Mot donne un point à celui qui n'a pas ouvert le duel : le score final n'est jamais égal.
