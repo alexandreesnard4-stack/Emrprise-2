@@ -10171,7 +10171,13 @@ const APP_STYLES = `
              le bouton Retour passerait sous l'heure. Dans un onglet ordinaire les deux
              valeurs valent zero et rien ne change. */
           padding-top: calc(8px + env(safe-area-inset-top, 0px));
-          padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+          /* La zone sure du BAS, elle, n est plus portee ici mais par la rangee de
+             fleches : son voile sombre est cale sur elle en inset negatif, donc il
+             s arretait ou s arretait la rangee. Le conteneur reservant 34 points de
+             plus, le fond d application -- orange sur Cendres -- se voyait sur 28
+             points sous la rangee. La zone sure passee en rembourrage de la rangee,
+             le voile grandit avec elle et atteint le bord de l ecran. */
+          padding-bottom: 4px;
         }
         .emprise-root.ecran-histoire .story-map-cadre,
         .emprise-root.ecran-histoire .sm-brasier { border-radius: 0; }
@@ -13233,7 +13239,7 @@ const APP_STYLES = `
         .story-map-nav {
           position: relative; z-index: 5;
           display: flex; align-items: center; justify-content: center; gap: 16px;
-          padding: 8px 0 10px;
+          padding: 8px 0 calc(10px + env(safe-area-inset-bottom, 0px));
         }
         .story-map-nav::before {
           content: ""; position: absolute; inset: -6px -14px -10px;
