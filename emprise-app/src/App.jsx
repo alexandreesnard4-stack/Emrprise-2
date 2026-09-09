@@ -17313,6 +17313,10 @@ export default function Emprise() {
     tournoiResultatRef.current = null;
     setPartieClassee(false); setPartieClassique(false);
     setOnlineGameId(m.gameId);
+    // L'eventail appartenait au match d'avant. Le camp change d'un tour a l'autre (le
+    // "b" d'un quart devient le "a" de sa demie) : sans cette remise a zero, il rouvrait
+    // tout seul au demarrage, du mauvais cote.
+    resetFanState();
     setOnlineRole(m.a === myUid ? "blue" : "red");
     setMode("online");
     setOnlineError("");
@@ -18276,6 +18280,9 @@ export default function Emprise() {
     setOnlineGameId(null); setOnlineRole(null);
     setBoard(Array(CELLS).fill(null)); setPoisonedCells(Array(CELLS).fill(false));
     setBlueHand([]); setRedHand([]);
+    // La ceremonie peut arriver eventail ouvert -- un abandon adverse ne repasse pas par
+    // placeCardAt, qui est ce qui le referme d'ordinaire.
+    resetFanState();
     setGameOver(false);
     setOnlineStatus(""); setOnlineError("");
     setPhase("tourney-online");
@@ -18396,6 +18403,9 @@ export default function Emprise() {
     setReserveOuverte(null);
     setGameOver(false);
     setPickerChoice([]);
+    // Meme raison qu'en tournoi, sur le chemin le plus frequent : la revanche INVERSE
+    // les camps, un eventail laisse ouvert y changeait donc de proprietaire.
+    resetFanState();
     setOnlineRole((r) => (r === "blue" ? "red" : "blue"));
     setOnlineGameId(code);
     setOnlineStatus("");
@@ -19921,6 +19931,14 @@ export default function Emprise() {
     // d'Azur occupant le meme rang — chaque camp numerote sa main a partir de zero.
     const campAugure = mode === "local" ? turn : "blue";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
+    // La meme garde qu'au toucher (voir toggleFan), mais AU RENDU. Elle manquait : le
+    // toucher etait garde, l'affichage ne l'etait pas. Un eventail reste ouvert d'un
+    // match a l'autre devenait celui de l'ADVERSAIRE des que les camps s'inversaient --
+    // revanche, tour de tournoi suivant -- et ses rangs restants se lisaient a
+    // decouvert, ce que la regle interdit precisement. Les remises a zero ajoutees le
+    // meme jour ferment chaque chemin connu ; celle-ci ferme les autres, y compris ceux
+    // qu'on n'a pas encore trouves. 09/09.
+    const eventailInterdit = mode === "online" && owner !== onlineRole;
     // Les Scribes cachent leurs rangs a l ADVERSAIRE. Au bac a sable il n y en a pas :
     // on y joue seul, des deux cotes, precisement pour tout voir — le voile n y montrait
     // que des « ? » illisibles.
@@ -19929,8 +19947,8 @@ export default function Emprise() {
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
-      const isOpen = fanOpen[owner] === group.ability;
-      const isClosing = !isOpen && fanClosing[owner] === group.ability;
+      const isOpen = !eventailInterdit && fanOpen[owner] === group.ability;
+      const isClosing = !isOpen && !eventailInterdit && fanClosing[owner] === group.ability;
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
       const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
