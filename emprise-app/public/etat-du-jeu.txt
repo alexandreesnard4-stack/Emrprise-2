@@ -117,6 +117,7 @@ Contre l'Écho, après un Augure affiché, l'Écho ne joue pas la case suggéré
 Quand des Abysses se renforcent, des tentacules surgissent derrière chacune, l'une après l'autre, et restent visibles le temps qu'on les voie.
 Quand un Maudit est capturé, le sang monte sur sa carte, s'y tient un instant, puis reflue, et rien d'autre, en même temps que son +1 s'inscrit sur ses rangs.
 Le Gardien lève un bouclier sur le côté attaqué ; avec son Héraut, aussi sur le côté qui frappe.
+Les piques des Piques jaillissent dans les quatre directions, y compris vers la gauche et la droite, et le bouclier du Gardien reste visible plus longtemps.
 Les animations ne jouent qu'une fois, sur un coup posé : tenir une carte au-dessus du plateau n'en lance ni n'en rejoue aucune.
 En ligne, les coups adverses s'animent l'un après l'autre à leur rythme normal ; en cas de gros retard, le plateau se met à jour d'un fondu, sans animation.
 Les cadres gravés du rayon Hérauts s'affichent entiers et détourés, sans plus aucun bloc noir aux angles ni le long des bords : la tenture passe derrière eux et les entoure partout, leur lueur (lave, mousse, foudre, runes) se fond dans le panneau, et la pierre intérieure reste pleine et sombre sous le portrait et le texte ; gemmes, pointes et coins visibles.

@@ -4858,7 +4858,9 @@ const Card = memo(function Card({ card, owner, events: evenementsRecus = AUCUN_E
           téléphone, la dentelure se comblait et se lisait comme une barre blanche pleine.
           Seules les piques haut/bas subsistent ; la poussée de la carte attaquante
           (.flash-percee-self) reste le retour visuel principal de la Percée. */}
-      {perceeEvent && (perceeEvent.dir === "top" || perceeEvent.dir === "bottom") && <span className={`percee-spikes spikes-from-${perceeEvent.dir}`} />}
+      {/* Le calque ne sortait que vers le haut et le bas, alors que le moteur perce
+          dans les QUATRE sens : une percee laterale sur deux ne montrait rien. */}
+      {perceeEvent && <span className={`percee-spikes spikes-from-${perceeEvent.dir}`} />}
       {boucliers.map((dir) => <BouclierGardien key={dir} dir={dir} delai={delaiCapture} />)}
       {hiddenFromFoe > 0 && (
         <span className="scribe-hidden-badge" title={`Cachée à l'adversaire, ${hiddenFromFoe} tour(s)`}>
@@ -11112,7 +11114,10 @@ const APP_STYLES = `
           position: absolute; width: 27px; height: 34px; pointer-events: none; z-index: 7;
           background-size: contain; background-repeat: no-repeat; background-position: center;
           opacity: 0; transform: translate(-50%, -50%) scale(0.7);
-          animation: bouclier-pop 0.85s ease; animation-delay: var(--bouclier-delai, 0ms); animation-fill-mode: both;
+          /* 1,4 s et non 0,85 : le bouclier durait a peine une demi-seconde a pleine
+             opacite (24 % a 76 % de la course), le reste etant du fondu. Les
+             pourcentages du keyframes ne bougent pas, ils s'etirent d'eux-memes. */
+          animation: bouclier-pop 1.4s ease; animation-delay: var(--bouclier-delai, 0ms); animation-fill-mode: both;
         }
         .bouclier-fx.bouclier-top { left: 50%; top: 0; }
         .bouclier-fx.bouclier-bottom { left: 50%; top: 100%; }
@@ -11342,6 +11347,28 @@ const APP_STYLES = `
           42%  { transform: scaleY(0.92); opacity: 1; }
           70%  { transform: scaleY(1); opacity: 0.85; }
           100% { transform: scaleY(0); opacity: 0; }
+        }
+        /* Les deux laterales : la bande devient haute au lieu d'etre large, les dents
+           se dessinent sur l'axe vertical et l'animation joue sur scaleX. Sans elles,
+           une percee vers la gauche ou vers la droite ne montrait rien du tout. */
+        .percee-spikes.spikes-from-left {
+          top: -2%; bottom: -2%; height: 104%; left: -15px; width: 16px;
+          transform-origin: right center; transform: scaleX(0); opacity: 0;
+          clip-path: polygon(100% 0%, 0% 7%, 100% 14%, 0% 21%, 100% 28%, 0% 36%, 100% 43%, 0% 50%, 100% 57%, 0% 64%, 100% 72%, 0% 79%, 100% 86%, 0% 93%, 100% 100%);
+          animation: spikes-pop-x 1s cubic-bezier(0.2, 0.9, 0.3, 1);
+        }
+        .percee-spikes.spikes-from-right {
+          top: -2%; bottom: -2%; height: 104%; left: 100%; width: 16px;
+          transform-origin: left center; transform: scaleX(0); opacity: 0;
+          clip-path: polygon(0% 0%, 100% 7%, 0% 14%, 100% 21%, 0% 28%, 100% 36%, 0% 43%, 100% 50%, 0% 57%, 100% 64%, 0% 72%, 100% 79%, 0% 86%, 100% 93%, 0% 100%);
+          animation: spikes-pop-x 1s cubic-bezier(0.2, 0.9, 0.3, 1);
+        }
+        @keyframes spikes-pop-x {
+          0%   { transform: scaleX(0); opacity: 0; }
+          22%  { transform: scaleX(1.2); opacity: 1; }
+          42%  { transform: scaleX(0.92); opacity: 1; }
+          70%  { transform: scaleX(1); opacity: 0.85; }
+          100% { transform: scaleX(0); opacity: 0; }
         }
 
 
