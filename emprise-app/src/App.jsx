@@ -23257,7 +23257,12 @@ export default function Emprise() {
           if (estEchoTournoi(uid)) return { nom: "Écho Vétéran", key: null, vous: false, echo: true, etendard: banniereDeDifficulte(TOURNOI_ECHO_DIFF) };
           const i = joueurs.indexOf(uid);
           if (i === -1 || !SIEGES_TOURNOI[i]) return null;
-          return { nom: uid === myUid ? "Vous" : SIEGES_TOURNOI[i].nom, key: SIEGES_TOURNOI[i].key, vous: uid === myUid };
+          // Le joueur porte SON medaillon, comme sur l'arbre du solo (09/09) : les deux
+          // arbres se lisent pareil. Les autres sieges gardent leur Ordre -- c'est ce qui
+          // les distingue les uns des autres, et leur medaillon n'est pas dans cet ecran.
+          return { nom: uid === myUid ? "Vous" : SIEGES_TOURNOI[i].nom,
+                   key: uid === myUid ? null : SIEGES_TOURNOI[i].key,
+                   vous: uid === myUid };
         };
         const vainqueurDe = (k) => (matches[k] && matches[k].vainqueur) || null;
         // Éliminé : son match à ce tour est décidé et il ne l'a pas gagné.
@@ -23276,11 +23281,13 @@ export default function Emprise() {
               style={{ left: x, top: y, width: CW, height: CH }}
             >
               <span className="tb-sceau">
-                {order
-                  ? <img src={order.portrait} alt="" className="tb-portrait" />
-                  : p && p.etendard
-                    ? <img src={p.etendard.image} alt="" className="tb-portrait tb-etendard" />
-                    : <span className="tb-blason" aria-hidden="true" />}
+                {p && p.vous
+                  ? <img src={imageMedaillon(bourse.medaillonEquipe)} alt="" className="tb-portrait" />
+                  : order
+                    ? <img src={order.portrait} alt="" className="tb-portrait" />
+                    : p && p.etendard
+                      ? <img src={p.etendard.image} alt="" className="tb-portrait tb-etendard" />
+                      : <span className="tb-blason" aria-hidden="true" />}
               </span>
               <span className="tb-nom">{p ? p.nom : "..."}</span>
               {elimine && <span className="tb-balafre" aria-hidden="true" />}
