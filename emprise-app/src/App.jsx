@@ -1032,19 +1032,20 @@ const TITRES_REPLI = {
 // Elles ne se detectent pas, ne comptent rien et n ouvrent aucun titre -- c est
 // un avis, pas une mecanique. Elles vivent ICI, a cote de COMBOS, et non dans
 // le rendu : la section du hub ne fait que les lire.
-// ---------- ZONE A TIRETS CADRATINS, la seule du jeu ----------
-// Le Commandant a leve le garde-fou POUR CES TEXTES (01/09) : la redaction des
-// Traites les emploie a dessein, comme une respiration de recit. Le reste du
-// jeu n en veut toujours aucun, et la batterie continue de le tenir partout
-// ailleurs -- la sonde exclut nommement ce tableau et la section des Traites,
-// jamais le fichier entier.
+// Plus aucun tiret cadratin ici non plus (09/09). Le Commandant avait leve le
+// garde-fou pour ces seuls textes le 01/09, puis l a etendu a TOUT le jeu des le
+// 02/09 : « enleve tous les tirets cadratins, je les vois encore dans les
+// tournois. » L exception n aura vecu qu un jour, et ce commentaire la promettait
+// encore. Les deux-points portent la meme consequence, sans la respiration de
+// recit. La regle est desormais sans exception : aucune chaine visible du jeu
+// n en contient, seuls les commentaires y ont droit.
 const COMBOS_RATES = [
   { paire: "Gardiens + Archers",
     texte: "le mur ne protège pas le 1 de l'Archer, et l'Archer n'offre aucune capture au Gardien." },
   { paire: "Pestiférés avec Héraut + Dorés",
-    texte: "le Héraut épargne votre camp — L'Or Corrompu s'éteint." },
+    texte: "le Héraut épargne votre camp : L'Or Corrompu s'éteint." },
   { paire: "Dorés face aux Gardiens",
-    texte: "l'Éveil échange contre le rang défendu, bouclier compris — le Gardien vend cher sa peau au troc." },
+    texte: "l'Éveil échange contre le rang défendu, bouclier compris : le Gardien vend cher sa peau au troc." },
   { paire: "Abysse en ouverture solitaire",
     texte: "à 16 de total sans banc, elle nourrit la Marée Montante… de l'adversaire." },
 ];
