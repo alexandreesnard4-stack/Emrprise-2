@@ -133,3 +133,5 @@ Le rythme d'un tour a été ralenti : l'Écho prend le temps de réfléchir avan
 Le plateau reste immobile quand on pose une carte : seules la carte et ses effets bougent. Il ne tremble plus que sur une longue Onde et à la Défaite.
 Une Résonance retourne toutes ses cartes en même temps ; l'Onde enchaîne juste après, carte après carte, sans temps mort entre les deux.
 En aperçu, l'allumage des pastilles est réservé à la Résonance : un Gardien menacé montre la valeur qu'il défend, sans autre signal.
+La Mort Subite peut s'ouvrir dans tous les modes : contre l'Écho, en Histoire, en Confluence, en tournoi et en ligne.
+En Histoire et en Confluence, la Réserve se compose toute seule : la carte la plus forte de chaque Ordre, sans écran de choix.
