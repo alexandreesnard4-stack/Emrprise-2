@@ -3188,10 +3188,13 @@ const CAMPAGNE_OBJETS = {
   16: { type: "dos", nom: "La Cire", image: "/dos/campagne-cire.webp" },
   24: { type: "banniere", nom: "Le Sceau du Serment", image: "/bannieres/campagne-sceau.webp" },
   30: { type: "plateau", nom: "La Table du Serment", cle: "table-serment" },
-  38: { type: "dos", nom: "L'Anneau", image: "/dos/campagne-anneau.webp" },
+  // 09/09 : le plateau remonte du 60 au 38 et le dos descend au 60. Un plateau se voit
+  // a chaque partie -- il valait mieux qu il tombe avant la fin de saison qu au tout
+  // dernier palier, ou presque personne ne l atteint.
+  38: { type: "plateau", nom: "Le Ban", cle: "ban" },
   46: { type: "banniere", nom: "La Main du Serment", image: "/bannieres/campagne-main.webp" },
   53: { type: "dos", nom: "Le Grand Sceau", image: "/dos/campagne-grand-sceau.webp" },
-  60: { type: "plateau", nom: "Le Ban", cle: "ban" },
+  60: { type: "dos", nom: "L'Anneau", image: "/dos/campagne-anneau.webp" },
 };
 // La voie du Serment : un objet aux huit paliers ci-dessus, des gemmes tous les cinq,
 // des pieces partout ailleurs, d'autant plus qu'on monte.
