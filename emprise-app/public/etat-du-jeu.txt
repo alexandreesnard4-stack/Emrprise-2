@@ -144,3 +144,4 @@ Sur la voie du Serment, le plateau Le Ban se gagne au palier 38 et le dos L'Anne
 Sur l'arbre du tournoi solo, votre plaque porte le médaillon que vous avez équipé, dans son sceau bordé d'or.
 Sur la page Ordres, le bandeau du haut n'a plus que deux rangées : la grille des Ordres remonte d'autant.
 La coupe des tournois ne porte plus de carré plus clair derrière elle.
+Sur l'arbre du tournoi en ligne aussi, votre plaque porte votre médaillon équipé ; les autres sièges gardent leur Ordre.
