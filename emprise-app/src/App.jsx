@@ -14943,11 +14943,19 @@ export default function Emprise() {
   // Vrai entre MA pose et sa resolution (RYTHME_POSE_JOUEUR_MS) : le verrou
   // qui empeche de poser deux fois la meme carte pendant ce temps-la.
   const poseEnAttenteRef = useRef(false);
+  // Le minuteur de resolution d'une pose, et le NUMERO du coup en cours. Les deux
+  // servent la meme chose : qu'un coup annule ne se resolve jamais apres coup.
+  // Le minuteur seul ne suffit pas -- entre le clearTimeout et l'execution deja
+  // engagee, il reste une fenetre. Le numero la ferme : resolveRest verifie qu'il
+  // travaille toujours sur SON coup avant de toucher au plateau.
+  const resolutionTimerRef = useRef(null);
+  const coupIdRef = useRef(0);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
   useEffect(() => {
     return () => {
       clearTimeout(flashTimerRef.current);
+      clearTimeout(resolutionTimerRef.current);
       clearTimeout(shakeBigTimerRef.current);
       clearTimeout(poisonTimerRef.current);
       clearTimeout(bannerTimerRef.current);
@@ -19276,6 +19284,9 @@ export default function Emprise() {
     const hand = owner === "blue" ? blueHand : redHand;
     const card = hand[cardIdx];
     if (!card) return;
+    // Le numero de CE coup. Sa resolution, differee, le verifiera avant de toucher au
+    // plateau : annuler pendant l'attente change le numero, et la resolution renonce.
+    const monCoup = ++coupIdRef.current;
 
     setHint(null);
     setSelected(null);
@@ -19477,7 +19488,10 @@ export default function Emprise() {
       // 3,5s de l'animation — voir card-land-bot dans le CSS).
       setBoard(newBoard);
       flashEvents([{ index: position, kind: placeKind }, ...revealEvents]);
-      setTimeout(resolveRest, RYTHME_POSE_ECHO_MS);
+      resolutionTimerRef.current = setTimeout(() => {
+        if (coupIdRef.current !== monCoup) return;
+        resolveRest();
+      }, RYTHME_POSE_ECHO_MS);
     } else {
       // Coup du joueur (01/09) : la pose d abord, les captures ensuite -- le
       // meme deux temps que l Echo, en plus court. C etait resolveRest() dans
@@ -19496,7 +19510,13 @@ export default function Emprise() {
       setBoard(newBoard);
       flashEvents([{ index: position, kind: placeKind }, ...revealEvents]);
       poseEnAttenteRef.current = true;
-      setTimeout(() => { poseEnAttenteRef.current = false; resolveRest(); }, RYTHME_POSE_JOUEUR_MS);
+      resolutionTimerRef.current = setTimeout(() => {
+        // Le verrou retombe d'abord, meme si le coup est annule : sinon plus rien
+        // ne serait jouable ensuite.
+        poseEnAttenteRef.current = false;
+        if (coupIdRef.current !== monCoup) return;
+        resolveRest();
+      }, RYTHME_POSE_JOUEUR_MS);
     }
   }
 
@@ -19511,6 +19531,14 @@ export default function Emprise() {
     if (gameOver) return;
     if (mode === "online") return; // pas d'annulation en ligne : désynchroniserait l'adversaire
     if (!testMode && !allowUndo) return; // "Repentir" désactivé pour cette partie (bac à sable libre)
+    // Le coup en cours de resolution ne doit pas retomber sur un plateau revenu en
+    // arriere : on l'invalide (le numero change) ET on coupe son minuteur. C'est le
+    // bug du 09/09 -- le tour semblait se rejouer tout seul une demi-seconde apres
+    // l'annulation, parce que les captures du coup annule s'appliquaient quand meme.
+    coupIdRef.current += 1;
+    clearTimeout(resolutionTimerRef.current);
+    clearTimeout(flashTimerRef.current);
+    poseEnAttenteRef.current = false;
     // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
     // du style du joueur, on la retire du profil plutot que de compter des combos essayes.
     combosRef.current.disqualifie = true;

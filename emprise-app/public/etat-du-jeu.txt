@@ -15,6 +15,7 @@ Réserve composée avant la partie : deux cartes gardées de côté, une par Ord
 Choix des deux Ordres avant le duel : à la main ou au dé, et le tirage du dé se confirme ou se relance avant de jouer.
 Minuteur de coup en partie classée et en ligne, avec coup automatique à expiration.
 Repentir (annuler son coup) et Augure (conseil du meilleur coup), en option contre l'Écho.
+Annuler un coup pendant que ses captures se résolvent ne le fait plus rejouer : le plateau revient en arrière et y reste, et on peut rejouer aussitôt.
 
 == Modes de jeu ==
 Contre un Écho : quatre niveaux de difficulté, de Novice à Seigneur de Guerre.
