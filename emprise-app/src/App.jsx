@@ -5008,6 +5008,11 @@ function groupHandByOrder(hand) {
   return groups;
 }
 
+// L etat "aucun eventail ouvert", pour les deux camps. Declaree au niveau module et non
+// dans le composant : la MEME reference a chaque fermeture dure, donc React s arrete la
+// quand rien n etait ouvert, au lieu de rendre a nouveau a chaque tap sur le plateau.
+const AUCUN_EVENTAIL = { blue: null, red: null };
+
 // Position d'une carte au sein de son éventail déployé : rotation + décalage horizontal
 // autour d'un pivot commun ancré sur la vignette, plus un léger arc (les cartes des
 // extrémités s'écartent un peu plus du pivot que celles du centre). "sens" inverse le
@@ -14916,13 +14921,17 @@ export default function Emprise() {
   const [dragHoverCell, setDragHoverCell] = useState(null); // case survolée pendant le glisser
   const [selected, setSelected] = useState(null); // { owner, idx } — carte sélectionnée par simple clic (alternative au glisser)
   const dragMovedRef = useRef(false); // distingue un simple clic (pas de déplacement) d'un vrai glisser
-  // Main en éventail : { owner, ability } de l'Ordre actuellement déployé, un seul à la
-  // fois. fanClosing garde le dernier Ordre refermé monté le temps de son animation de
-  // repli avant de le retirer pour de bon — même mécanique que justPoisoned/
-  // poisonTimerRef plus bas pour la bouffée de brume empoisonnée.
-  const [fanOpen, setFanOpen] = useState(null);
-  const [fanClosing, setFanClosing] = useState(null);
-  const fanCloseTimerRef = useRef(null);
+  // Main en eventail : un eventail PAR CAMP (09/09), { blue: ability | null, red:
+  // ability | null }. Ouvrir celui d en face ne referme plus le mien -- on compare les
+  // deux mains ouvertes, le plateau reste visible entre elles. En ligne, celui d en face
+  // ne s ouvre jamais (voir toggleFan). fanClosing a la meme forme et garde, par camp, le
+  // dernier Ordre referme monte le temps de son animation de repli avant de le retirer
+  // pour de bon -- meme mecanique que justPoisoned/poisonTimerRef plus bas pour la
+  // bouffee de brume empoisonnee. Un minuteur de repli par camp, sans quoi refermer un
+  // eventail couperait le repli de l autre en cours.
+  const [fanOpen, setFanOpen] = useState(AUCUN_EVENTAIL);
+  const [fanClosing, setFanClosing] = useState(AUCUN_EVENTAIL);
+  const fanCloseTimerRef = useRef({ blue: null, red: null });
   // Point et instant de la dernière saisie d'une carte DEPUIS un éventail ouvert.
   // Sert uniquement à neutraliser le "clic fantôme" décrit dans playCard.
   const fanGrabRef = useRef(null);
@@ -19375,7 +19384,7 @@ export default function Emprise() {
     // Filet de sécurité : le bot et le coup auto-joué du minuteur appellent placeCardAt
     // directement, sans passer par startCardDrag/playCard — sans ce filet, un éventail
     // resté ouvert côté joueur pourrait survivre à un coup qui vient pourtant d'être joué.
-    setFanOpen(null);
+    setFanOpen(AUCUN_EVENTAIL);
 
     // Instantané pris AVANT ce coup, pour pouvoir revenir en arrière plus tard.
     setHistory((h) => [...h, { owner, turn, board, blueHand, redHand, poisonedCells }]);
@@ -19653,7 +19662,7 @@ export default function Emprise() {
   function toggleHint() {
     if (!allowHint || gameOver || mode === "online") return;
     if (mode === "bot" && turn !== "blue") return; // contre l'Écho, l'augure ne sert que le joueur
-    if (hint) { setHint(null); setFanOpen(null); return; }
+    if (hint) { setHint(null); setFanOpen(AUCUN_EVENTAIL); return; }
     // En duel local, l'augure éclaire le joueur dont c'est le tour, quel que soit son camp.
     const joueur = mode === "local" ? turn : "blue";
     const adverse = joueur === "blue" ? "red" : "blue";
@@ -19669,15 +19678,16 @@ export default function Emprise() {
       // lui-même tapé la vignette de son Ordre. Sans effet si le groupe n'a qu'une
       // carte (déjà affichée directement, pas de vignette pour elle).
       const suggestedCard = mainJoueur[move.cardIdx];
-      if (suggestedCard) setFanOpen({ owner: joueur, ability: suggestedCard.ability });
+      // Sans refermer l'éventail d'en face : l'augure éclaire ma main, il n'a pas à
+      // ranger la comparaison que le joueur avait ouverte.
+      if (suggestedCard) setFanOpen((cur) => ({ ...cur, [joueur]: suggestedCard.ability }));
     }
   }
 
   // ---------- Main en éventail ----------
-  // Ouvre/ferme l'éventail d'un Ordre en main. Un seul éventail ouvert à la fois : en
-  // ouvrir un nouveau referme celui qui l'était déjà (avec une courte animation de
-  // repli), pour ne jamais encombrer un écran de mobile avec deux éventails en même
-  // temps. Toucher deux fois le même Ordre le referme sans en ouvrir d'autre.
+  // Ouvre/ferme l'éventail d'un Ordre en main. Un éventail par CAMP : en ouvrir un
+  // nouveau du même camp referme celui qui l'était (repli animé) ; celui d'en face reste
+  // tel quel, pour comparer les deux mains. Toucher deux fois le même Ordre le referme.
   function toggleFan(owner, ability) {
     // En ligne, l'éventail ADVERSE reste fermé : l'ouvrir révélerait les rotations
     // restantes de l'adversaire — ses rangs exacts encore en main. Le médaillon et son
@@ -19685,22 +19695,25 @@ export default function Emprise() {
     // contre l'Écho, comportement inchangé (l'appareil est partagé, rien à cacher).
     if (mode === "online" && owner !== onlineRole) return;
     setFanOpen((cur) => {
-      const isSame = cur && cur.owner === owner && cur.ability === ability;
-      if (cur) {
-        setFanClosing(cur);
-        clearTimeout(fanCloseTimerRef.current);
-        fanCloseTimerRef.current = setTimeout(() => setFanClosing(null), 260);
+      const actuel = cur[owner];
+      if (actuel) {
+        // L'Ordre qu'on referme (ou qu'on remplace) se replie avec son animation ;
+        // l'autre camp n'est pas touché.
+        setFanClosing((c) => ({ ...c, [owner]: actuel }));
+        clearTimeout(fanCloseTimerRef.current[owner]);
+        fanCloseTimerRef.current[owner] = setTimeout(() => setFanClosing((c) => ({ ...c, [owner]: null })), 260);
       }
-      return isSame ? null : { owner, ability };
+      return { ...cur, [owner]: actuel === ability ? null : ability };
     });
   }
   // Reset "dur", sans repli animé : pour les grands changements d'écran (nouvelle
   // partie, annulation...) où tout le reste de l'affichage saute déjà d'un coup —
   // animer le repli tout seul dans ce contexte ferait un effet bâclé.
   function resetFanState() {
-    clearTimeout(fanCloseTimerRef.current);
-    setFanOpen(null);
-    setFanClosing(null);
+    clearTimeout(fanCloseTimerRef.current.blue);
+    clearTimeout(fanCloseTimerRef.current.red);
+    setFanOpen(AUCUN_EVENTAIL);
+    setFanClosing(AUCUN_EVENTAIL);
   }
 
   // ---------- Glisser-déposer des cartes (souris + tactile via Pointer Events) ----------
@@ -19725,8 +19738,8 @@ export default function Emprise() {
     // après ce toucher n'aura plus de carte sous le doigt et retomberait sur la case du
     // plateau située dessous. playCard s'en sert pour ignorer ce clic-là. Voir le détail
     // du mécanisme dans playCard.
-    if (fanOpen) fanGrabRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
-    setFanOpen(null);
+    if (fanOpen.blue || fanOpen.red) fanGrabRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    setFanOpen(AUCUN_EVENTAIL);
     setDrag({ owner, idx, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY });
     setDragHoverCell(null);
   }
@@ -19758,8 +19771,8 @@ export default function Emprise() {
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
-      const isOpen = !!(fanOpen && fanOpen.owner === owner && fanOpen.ability === group.ability);
-      const isClosing = !isOpen && !!(fanClosing && fanClosing.owner === owner && fanClosing.ability === group.ability);
+      const isOpen = fanOpen[owner] === group.ability;
+      const isClosing = !isOpen && fanClosing[owner] === group.ability;
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
       const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
@@ -19812,7 +19825,7 @@ export default function Emprise() {
             <>
               {/* Fond invisible : capte un tap "à côté" pour refermer, sans jamais
                   assombrir le plateau (rien ne doit visuellement le masquer). */}
-              <div className="fan-backdrop" onClick={() => setFanOpen(null)} aria-hidden="true" />
+              <div className="fan-backdrop" onClick={() => setFanOpen(AUCUN_EVENTAIL)} aria-hidden="true" />
               <div className={`card-fan fan-${sens} ${isClosing ? "fan-closing" : ""}`}>
                 {group.cards.map(({ card, handIdx }, i) => (
                   <div key={card.id} className="fan-slot" style={fanSlotVars(i, group.cards.length, sens)}>
@@ -19857,7 +19870,7 @@ export default function Emprise() {
     // Un tap sur le plateau referme un éventail resté ouvert, même s'il n'aboutit à
     // aucune pose (aucune carte sélectionnée) — l'utilisateur "regardait" l'éventail,
     // taper à côté (sur le plateau) le referme, comme taper une seconde fois la vignette.
-    setFanOpen(null);
+    setFanOpen(AUCUN_EVENTAIL);
     if (plateauAffiche) return; // l affichage rattrape le coup adverse : on attend
     if (!selected || gameOver || board[position]) return;
     if (selected.owner !== turn) return;
