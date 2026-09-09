@@ -13883,10 +13883,12 @@ const APP_STYLES = `
           width: 100%; height: 100%; object-fit: cover; display: block;
           border-radius: 50%;
         }
-        /* Le joueur n'a pas de symbole : son sceau est simplement plein d'or, la ou les
-           autres portent un portrait. C'est la marque la plus simple possible, et la plus
-           lisible a 30 px. Un ecu, une croix ou tout autre dessin ne faisait qu'ajouter du
-           bruit dans un espace ou rien n'est lisible. */
+        /* Le joueur porte SON medaillon (09/09), celui qu'il a equipe au profil, dans les
+           deux arbres. Son sceau etait plein d'or et sans symbole jusque-la ; avant encore,
+           on y avait essaye un ecu, une croix, un octogone plein -- des formes abstraites
+           qui n'ajoutaient que du bruit a 30 px, a ne pas reessayer. Le medaillon, lui, est
+           deja un embleme dessine pour cette taille. Sa plaque reste reconnaissable par sa
+           bordure doree et par son sceau serti d'or, jamais par ce qu'il contient. */
         /* L Etendard d un Echo dans le sceau (03/09). L image est un bandeau
            3:1 : cadree au centre, elle ne montrait que du ciel. Le point de
            mire vise l embleme de l Etendard du Veteran, seule difficulte que
