@@ -3095,10 +3095,14 @@ const CAMPAGNE_OBJETS = {
 // Campagne n aurait rendu que 250 gemmes, loin des 600 promis. Soixante fois dix les
 // donne exactement, et le montant reste dans le style de la maison : les niveaux de
 // Commandant versent deja 50 gemmes tous les cinq niveaux.
+// Les pieces valent la MOITIE de ce qu elles valaient : 300/450/600 versait 18 900 pieces
+// par saison, sept bannieres, de quoi vider le catalogue en trois saisons. Divise par deux,
+// le Serment en rend 9 450, et l acheteur 12 300 avec la voie libre par-dessus. Le
+// doublement du premier au dernier palier reste : la progression se sent toujours.
 function recompenseSerment(n) {
   if (CAMPAGNE_OBJETS[n]) return CAMPAGNE_OBJETS[n];
   if (n % 5 === 0) return { type: "gemmes", n: 60 };
-  return { type: "pieces", n: n < 20 ? 300 : n < 40 ? 450 : 600 };
+  return { type: "pieces", n: n < 20 ? 150 : n < 40 ? 225 : 300 };
 }
 // La voie libre : un palier sur trois, de la monnaie seulement. Assez pour que le joueur
 // gratuit sente qu'il gagne quelque chose, trop peu pour tuer la boutique.
