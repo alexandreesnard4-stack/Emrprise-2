@@ -12689,6 +12689,11 @@ const APP_STYLES = `
           background: rgba(20,17,28,0.96); border: 1px solid rgba(203,164,86,0.35);
           border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.55); overflow: hidden;
         }
+        /* Le fond du panneau des messages : totalement transparent, il ne fait que
+           capter le toucher a cote. z-index 74, soit SOUS le panneau et SOUS le bouton
+           flottant (75 tous les deux) : le bouton reste touchable, et le refermer par
+           le bouton continue de marcher. Rien ne doit assombrir le plateau. */
+        .chat-voile { position: fixed; inset: 0; z-index: 74; background: transparent; }
         .chat-entete {
           display: flex; align-items: center; justify-content: space-between; gap: 8px;
           padding: 7px 10px; border-bottom: 1px solid rgba(203,164,86,0.2);
@@ -19221,13 +19226,17 @@ export default function Emprise() {
     if (ordreDetail) { setOrdreDetail(null); return true; }
     if (activeModal) { setActiveModal(null); return true; }
     if (ceremonieFin) { setCeremonieFin(null); setCerPose(false); return true; }
+    // Le panneau des messages passe AVANT la confirmation de sortie : il est ouvert
+    // par-dessus la partie, c'est donc lui que la pression Retour doit refermer. On
+    // ferme a la main plutot que d'appeler basculerChat, qui bascule et pourrait ouvrir.
+    if (chatOuvert) { setChatOuvert(false); chatOuvertRef.current = false; return true; }
     if (phase === "play") { setConfirmQuit(true); return true; }
     if (phase === "tutorial") { if (!tutObligatoire) skipTutorial(); return true; }
     if (phase !== "landing") { goBack(); return true; }
     return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
   };
   const retourACouvrir = !!(blocageAConfirmer || profilAdverse || reserveOuverte || signalement || joueurMenu || amiARetirer || confirmQuit
-    || infoAbility || ordreDetail || activeModal || ceremonieFin || phase !== "landing");
+    || infoAbility || ordreDetail || activeModal || ceremonieFin || chatOuvert || phase !== "landing");
   useEffect(() => {
     if (retourACouvrir && !(window.history.state && window.history.state.emprise)) {
       try { window.history.pushState({ emprise: true }, ""); } catch (e) { /* navigation privee capricieuse */ }
@@ -24558,6 +24567,10 @@ export default function Emprise() {
                 </svg>
                 {messagesDirects && chatNonLus > 0 && <span className="chat-badge">{chatNonLus > 9 ? "9+" : chatNonLus}</span>}
               </button>
+              {/* Toucher a cote referme, comme partout ailleurs dans le jeu. Sans lui, la
+                  carte « Messages coupes » n avait qu une seule porte -- remettre les
+                  messages -- et le plateau dessous restait intouchable. */}
+              {chatOuvert && <div className="chat-voile" onClick={basculerChat} aria-hidden="true" />}
               {chatOuvert && (
                 <div className="chat-panneau">
                   {messagesDirects ? (
