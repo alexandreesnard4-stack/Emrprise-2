@@ -13867,17 +13867,21 @@ const APP_STYLES = `
            souris si. Rien d autre ne change -- la plaque ne doit pas se distinguer des
            autres, l arbre n est pas un menu. */
         .tb-ouvrable { cursor: pointer; }
-        /* --- l'avatar, serti dans un sceau octogonal --- */
+        /* --- l'avatar, serti dans un sceau ROND (09/09) --- */
+        /* L'octogone rognait les medaillons, qui sont des emblemes ronds et cercles par
+           dessin. Le rond les montre entiers, et le sertissage d'or du joueur devient un
+           anneau. Ce qui distingue sa plaque n'a jamais ete la forme du sceau : c'est sa
+           bordure doree, son or et son halo. */
         .tb-sceau {
           position: relative; width: 30px; height: 30px; flex: none;
           display: flex; align-items: center; justify-content: center;
-          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+          border-radius: 50%;
           background: linear-gradient(160deg, #4a3f2e, #241d18);
           padding: 1.5px;
         }
         .tb-portrait {
           width: 100%; height: 100%; object-fit: cover; display: block;
-          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+          border-radius: 50%;
         }
         /* Le joueur n'a pas de symbole : son sceau est simplement plein d'or, la ou les
            autres portent un portrait. C'est la marque la plus simple possible, et la plus
@@ -13893,7 +13897,7 @@ const APP_STYLES = `
         .tb-blason {
           display: block; width: 100%; height: 100%;
           background: linear-gradient(160deg, #f2dda2 0%, #e8c877 45%, #b8944a 100%);
-          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+          border-radius: 50%;
         }
         /* Le sceau du joueur est serti dans l'or, celui des adversaires dans un bronze
            eteint : la difference se lit avant meme d'avoir cherche le mot "Vous". */
