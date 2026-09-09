@@ -142,3 +142,5 @@ Le tutoriel se joue d'office au premier lancement, juste après l'Adoubement et 
 Les pages Politique de confidentialité et Conditions d'utilisation ont un bouton « Retour au jeu » en haut, qui reste visible quand on fait défiler.
 Sur la voie du Serment, le plateau Le Ban se gagne au palier 38 et le dos L'Anneau au palier 60.
 Sur l'arbre du tournoi solo, votre plaque porte le médaillon que vous avez équipé, dans son sceau bordé d'or.
+Sur la page Ordres, le bandeau du haut n'a plus que deux rangées : la grille des Ordres remonte d'autant.
+La coupe des tournois ne porte plus de carré plus clair derrière elle.
