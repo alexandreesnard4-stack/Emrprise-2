@@ -20609,7 +20609,8 @@ export default function Emprise() {
               pilules jumelles dessous, puis le parchemin des quetes a gauche
               face a la grille reguliere des portes a droite. La Boutique ne
               garde que la premiere rangee (02/09) ; Jouer les a toutes, la
-              page Ordres retire seulement la grille des portes. */}
+              page Ordres n en garde que les deux premieres (09/09) : la rangee
+              du parchemin y tombe en entier, la salle capitulaire gagne la hauteur. */}
           <header className="hub-haut">
             {/* Rangee 1 -- la banniere (souple) puis les deux pilules du tresor
                 (fixes) : le tresor s'affiche sur TOUTES les pages du hub,
@@ -20745,18 +20746,18 @@ export default function Emprise() {
             )}
             {/* Rangee 3 -- le parchemin des quetes sur la marge gauche, et la
                 grille reguliere des portes (2 colonnes) sur la marge droite ;
-                la page Ordres garde le parchemin et laisse respirer le reste,
-                la Boutique demonte la rangee entiere (02/09). Les etats --
-                quetes non vues, amis en attente -- ne bougent pas : seul
-                l affichage se retire, les pastilles reviennent intactes. */}
-            {hubPage !== "boutique" && (
+                la Boutique et la page Ordres demontent la rangee entiere -- sur
+                Ordres, elle n avait plus que le parchemin, seul sur sa ligne
+                (09/09). Les etats -- quetes non vues, amis en attente -- ne
+                bougent pas : seul l affichage se retire, les pastilles
+                reviennent intactes. */}
+            {hubPage !== "boutique" && hubPage !== "ordres" && (
             <div className="hub-portes">
             {/* La marge gauche est une colonne (07/09) : le parchemin des quetes, et
                 dessous le coffre de la Campagne -- demande du Commandant, sous les quetes
-                et non dans la grille de droite. Le coffre suit la meme regle d affichage
-                que la grille (absent sur la page Ordres) : la colonne garde ainsi sa
-                hauteur d avant sur cette page, dont la grille tient a 6 px pres sur un
-                iPhone SE. */}
+                et non dans la grille de droite. Depuis le 09/09 la rangee entiere saute
+                sur la page Ordres : le coffre et la grille n ont plus besoin de leur
+                garde propre, ils tombent avec elle. */}
             <span className="hub-gauche-rang">
             <button
               className="hub-rouage hub-quetes"
@@ -20773,7 +20774,6 @@ export default function Emprise() {
             </button>
             {/* La Campagne, le passe de saison : un coffre OUVERT, distinct du parchemin
                 au-dessus, qui ouvre l ecran du Chemin, en lecture seule pour l instant. */}
-            {hubPage !== "ordres" && (
             <button
               className="hub-rouage"
               onClick={() => setPageCampagne(true)}
@@ -20782,9 +20782,7 @@ export default function Emprise() {
             >
               <img className="hub-icone-campagne" src="/nav/campagne.webp" alt="" />
             </button>
-            )}
             </span>
-            {hubPage !== "ordres" && (
             <span className="hub-haut-rang" key={"boutons-" + hubPage}>
             <button
               className="hub-rouage hub-horloge"
@@ -20821,7 +20819,6 @@ export default function Emprise() {
               )}
             </button>
             </span>
-            )}
             </div>
             )}
           </header>
