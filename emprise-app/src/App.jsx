@@ -13860,6 +13860,10 @@ const APP_STYLES = `
           box-shadow: inset 0 1px 0 rgba(255,240,205,0.09), inset 0 -2px 4px rgba(0,0,0,0.75), 0 3px 8px rgba(0,0,0,0.55);
           transition: filter .35s ease, border-color .35s ease;
         }
+        /* Une plaque qui ouvre un profil se touche : le doigt n en a pas besoin, la
+           souris si. Rien d autre ne change -- la plaque ne doit pas se distinguer des
+           autres, l arbre n est pas un menu. */
+        .tb-ouvrable { cursor: pointer; }
         /* --- l'avatar, serti dans un sceau octogonal --- */
         .tb-sceau {
           position: relative; width: 30px; height: 30px; flex: none;
@@ -23273,6 +23277,16 @@ export default function Emprise() {
                    key: uid === myUid ? null : SIEGES_TOURNOI[i].key,
                    vous: uid === myUid };
         };
+        // Toucher la plaque d'un joueur ouvre son profil, comme son nom l'ouvre deja en
+        // partie. On charge sa fiche AVANT d'ouvrir : le panneau affiche le nom qu'on lui
+        // passe, il lui faut donc le vrai pseudo et non l'alias du siege. Si la fiche
+        // n'arrive pas, nomAffiche rend « Commandant » et le panneau s'ouvre quand meme --
+        // mieux qu'un toucher sans effet.
+        async function ouvrirProfilDuSiege(uid) {
+          if (!uid || uid === myUid || estEchoTournoi(uid)) return;
+          await chargerFiches([uid], true);
+          setProfilAdverse({ uid, nom: nomAffiche((fichesRef.current[uid] || {}).pseudo) });
+        }
         const vainqueurDe = (k) => (matches[k] && matches[k].vainqueur) || null;
         // Éliminé : son match à ce tour est décidé et il ne l'a pas gagné.
         const elimineEn = (uid, cleMatch) => {
@@ -23284,10 +23298,20 @@ export default function Emprise() {
           const p = uid ? plaqueDe(uid) : null;
           const order = p && p.key ? ORDERS.find((o) => o.key === p.key) : null;
           const elimine = uid ? elimineEn(uid, cleMatch) : false;
+          // Seules les plaques des autres HUMAINS s'ouvrent : ni l'Echo (pas de profil),
+          // ni un siege vide, ni la sienne. Un joueur elimine reste ouvrable -- on doit
+          // pouvoir ajouter en ami celui qu'on vient de battre.
+          const ouvrable = !!(p && uid && uid !== myUid && !p.echo);
           return (
             <div
-              className={`tb-plaque ${p && p.vous ? "tb-vous" : ""} ${big ? "tb-grand" : ""} ${elimine ? "tb-elimine" : ""} ${!p ? "tb-attente" : ""}`}
+              className={`tb-plaque ${p && p.vous ? "tb-vous" : ""} ${big ? "tb-grand" : ""} ${elimine ? "tb-elimine" : ""} ${!p ? "tb-attente" : ""} ${ouvrable ? "tb-ouvrable" : ""}`}
               style={{ left: x, top: y, width: CW, height: CH }}
+              role={ouvrable ? "button" : undefined}
+              tabIndex={ouvrable ? 0 : undefined}
+              onClick={ouvrable ? () => ouvrirProfilDuSiege(uid) : undefined}
+              onKeyDown={ouvrable ? KEY_ACTIVATE(() => ouvrirProfilDuSiege(uid)) : undefined}
+              title={ouvrable ? "Voir son profil" : undefined}
+              aria-label={ouvrable ? `Voir le profil de ${p.nom}` : undefined}
             >
               <span className="tb-sceau">
                 {p && p.vous
