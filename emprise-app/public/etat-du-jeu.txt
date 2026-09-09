@@ -147,3 +147,4 @@ La coupe des tournois ne porte plus de carré plus clair derrière elle.
 Sur l'arbre du tournoi en ligne aussi, votre plaque porte votre médaillon équipé ; les autres sièges gardent leur Ordre.
 Le panneau des messages se referme en touchant à côté, comme les autres panneaux du jeu, et le bouton Retour du téléphone le referme avant de proposer de quitter la partie.
 Sur l'arbre du tournoi en ligne, toucher la plaque d'un autre joueur ouvre son profil.
+En boutique, l'aperçu d'un plateau rentre dans sa carte : il ne déborde plus sur la bordure.
