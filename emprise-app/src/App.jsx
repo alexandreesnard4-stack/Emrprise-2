@@ -21994,7 +21994,7 @@ export default function Emprise() {
                       <div className="combos-etat">
                         {nomTitre
                           ? `Votre style : ${nomTitre}`
-                          : `Votre style se dessine — ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
+                          : `Votre style se dessine : ${profil.parties} partie${profil.parties > 1 ? "s" : ""} comptée${profil.parties > 1 ? "s" : ""} / ${COMBOS_PARTIES_MIN}`}
                       </div>
                       <div className="combos-liste">
                         {COMBOS.map((combo) => {
@@ -22047,7 +22047,7 @@ export default function Emprise() {
                         aria-expanded={combosRatesOuvert}
                         onClick={() => setCombosRatesOuvert((v) => !v)}
                       >
-                        <span>Les mariages ratés — ce qu&apos;aucun traité ne recommande</span>
+                        <span>Les mariages ratés : ce qu&apos;aucun traité ne recommande</span>
                         <span className="combos-rates-chevron" aria-hidden="true">{combosRatesOuvert ? "▲" : "▼"}</span>
                       </button>
                       {combosRatesOuvert && (
@@ -22065,7 +22065,7 @@ export default function Emprise() {
                           texte, JSX y mange l espace et collait les mots. */}
                       <div className="combos-repli">
                         Aucun traité dominant après {COMBOS_PARTIES_MIN} parties ? Une paire d&apos;Ordres
-                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> — sinon,
+                        fidèle hors catalogue fait de vous <b>{TITRES_REPLI.alchimiste.nom}</b> ; sinon,
                         vous restez <b>{TITRES_REPLI.errant.nom}</b>.
                       </div>
                     </section>
