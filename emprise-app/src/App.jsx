@@ -8404,20 +8404,24 @@ const APP_STYLES = `
           font-family: 'Cinzel', serif; font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; }
         .campagne-achat:disabled { opacity: 0.75; cursor: default; }
         .campagne-bientot { text-align: center; font-size: 10px; color: var(--muted); margin-top: 4px; }
-        .campagne-legende { flex: none; display: flex; justify-content: center; gap: 16px; padding: 5px 0 6px;
-          background: rgba(20,17,28,0.92); border-bottom: 1px solid rgba(203,164,86,0.12); }
-        .campagne-legende span { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-          color: var(--muted); display: flex; align-items: center; gap: 5px; }
-        .campagne-puce { width: 11px; height: 11px; border-radius: 3px;
-          border: 1px solid rgba(203,164,86,0.3); background: rgba(30,26,41,0.9); }
-        .campagne-puce.serment { border-color: var(--gold-bright); background: rgba(203,164,86,0.16); }
-        .campagne-piste { flex: 1; overflow-y: auto; position: relative; }
-        .campagne-monde { position: relative; }
-        .campagne-trace { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-        .camp-etape { position: absolute; transform: translate(-50%, -50%);
-          display: flex; align-items: center; gap: 7px; }
-        .camp-etape.vers-droite { flex-direction: row; }
-        .camp-etape.vers-gauche { flex-direction: row-reverse; }
+        /* La piste, en deux colonnes FIXES (09/09). Le serpentin faisait changer les
+           deux voies de cote a chaque virage : on ne savait plus lequel des deux lots
+           on gagnerait en payant. Ici la voie libre est toujours a gauche, Le Serment
+           toujours a droite, et deux titres epingles le disent en haut. */
+        .campagne-tetes { flex: none; display: grid; grid-template-columns: 1fr 46px 1fr;
+          gap: 8px; align-items: center; padding: 6px 12px 7px;
+          background: rgba(20,17,28,0.96); border-bottom: 1px solid rgba(203,164,86,0.12); }
+        .campagne-tete { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.1em;
+          text-transform: uppercase; text-align: center; color: var(--muted); }
+        .campagne-tete.serment { color: var(--gold-bright); }
+        .campagne-piste { flex: 1; overflow-y: auto; padding: 6px 12px 24px; }
+        .camp-rang { position: relative; display: grid; grid-template-columns: 1fr 46px 1fr;
+          gap: 8px; align-items: center; padding: 4px 0; }
+        /* Le fil qui relie les jalons : un trait continu DERRIERE la colonne du milieu,
+           dore vif sur la portion parcourue. Il remplace le trace SVG. */
+        .camp-rang::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+          width: 2px; transform: translateX(-50%); background: rgba(203,164,86,0.16); }
+        .camp-rang.atteint::before { background: rgba(232,200,119,0.5); }
         .camp-jalon { width: 34px; height: 34px; border-radius: 50%; flex: none;
           background: radial-gradient(circle at 50% 34%, rgba(203,164,86,0.14), rgba(8,6,12,0.95));
           border: 1.5px solid rgba(203,164,86,0.38);
@@ -8425,20 +8429,24 @@ const APP_STYLES = `
         .camp-jalon span { font-family: 'Cinzel', serif; font-size: 12px; color: var(--muted); }
         .camp-jalon.grand { width: 46px; height: 46px; border-color: rgba(232,200,119,0.75); }
         .camp-jalon.grand span { font-size: 14px; }
-        .camp-etape.atteint .camp-jalon {
+        .camp-rang .camp-jalon { justify-self: center; position: relative; z-index: 1; }
+        .camp-rang.grand .camp-jalon { width: 42px; height: 42px; }
+        .camp-rang.atteint .camp-jalon {
           background: radial-gradient(circle at 50% 34%, rgba(203,164,86,0.42), rgba(58,42,14,0.95));
           border-color: var(--gold-bright); }
-        .camp-etape.atteint .camp-jalon span { color: var(--gold-bright); }
-        .camp-etape.courant .camp-jalon { box-shadow: 0 0 0 3px rgba(203,164,86,0.22), 0 0 22px rgba(203,164,86,0.55); }
-        .camp-lots { display: flex; align-items: center; gap: 5px; }
-        .camp-etape.vers-gauche .camp-lots { flex-direction: row-reverse; }
-        .camp-lot { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px;
-          width: 50px; height: 34px; border-radius: 8px; box-sizing: border-box; overflow: hidden;
+        .camp-rang.atteint .camp-jalon span { color: var(--gold-bright); }
+        .camp-rang.courant .camp-jalon { box-shadow: 0 0 0 3px rgba(203,164,86,0.22), 0 0 22px rgba(203,164,86,0.55); }
+        .camp-vide { height: 34px; }
+        .camp-lot { position: relative; display: flex; align-items: center; justify-content: center;
+          gap: 3px; height: 34px; width: 100%; max-width: 116px; border-radius: 8px;
+          box-sizing: border-box; overflow: hidden;
           background: rgba(30,26,41,0.9); border: 1px solid rgba(203,164,86,0.22); }
+        .camp-lot.libre { justify-self: end; }
+        .camp-lot.serment { justify-self: start; border-color: rgba(203,164,86,0.55);
+          box-shadow: inset 0 0 10px rgba(203,164,86,0.12); }
+        .camp-lot.grand { height: 72px; }
         .camp-lot b { font-family: 'Cinzel', serif; font-size: 11px; color: var(--bone); }
         .camp-lot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .camp-lot.serment { border-color: rgba(203,164,86,0.55); box-shadow: inset 0 0 10px rgba(203,164,86,0.12); }
-        .camp-lot.grand { width: 76px; height: 76px; }
         .camp-lot.atteint { border-color: var(--gold-bright); }
         .camp-plateau { display: block; width: 76%; height: 58%; border-radius: 4px;
           border: 1px solid rgba(203,164,86,0.35); }
@@ -15203,7 +15211,7 @@ export default function Emprise() {
   // A l'ouverture du Chemin, la vue se place sur le jalon du palier courant, comme la carte de chapitre.
   useEffect(() => {
     if (!pageCampagne) return;
-    const jalon = document.querySelector(".camp-etape.courant");
+    const jalon = document.querySelector(".camp-rang.courant");
     if (jalon) jalon.scrollIntoView({ block: "center" });
   }, [pageCampagne]);
   const [quetesDernierePartie, setQuetesDernierePartie] = useState(null);
@@ -20602,34 +20610,22 @@ export default function Emprise() {
             </div>
           )}
 
-          {/* La Campagne : l ecran du Chemin, en lecture seule. Il montre la saison, le
-              palier atteint, la jauge d XP et les 60 paliers sur un trace qui serpente.
-              Rien ne se reclame, rien ne s achete : le bouton du Serment reste inerte. */}
+          {/* La Campagne, en lecture seule. Il montre la saison, le palier atteint, la
+              jauge d XP, puis soixante rangs : la voie libre a gauche, Le Serment a
+              droite, le numero au milieu, et un trait vertical qui relie les jalons.
+              Le serpentin a ete abandonne le 09/09 : il faisait changer les deux voies
+              de cote a chaque virage, on ne savait plus lequel des deux lots on
+              gagnerait en payant. Rien ne se reclame, rien ne s achete : le bouton du
+              Serment reste inerte. */}
           {pageCampagne && (() => {
             const etat = palierCampagne(progression.campagneXp);
             const jours = joursRestantsCampagne();
             const pct = Math.round((etat.dansLePalier / etat.pourLeSuivant) * 100);
-            // La geometrie du Chemin, mesuree dans la maquette : rangee de monnaie 58 px,
-            // rangee d objet 104 px, 24 px en haut, 40 px en bas ; les centres serpentent
-            // sur une sinusoide d une periode de huit paliers.
-            const HAUT = 24, BAS = 40, RANG_MONNAIE = 58, RANG_OBJET = 104;
-            const jalons = [];
-            let y = HAUT;
-            for (let n = 1; n <= CAMPAGNE_PALIERS; n++) {
-              const objet = !!CAMPAGNE_OBJETS[n];
-              const h = objet ? RANG_OBJET : RANG_MONNAIE;
-              jalons.push({ n, objet, x: 50 + 21 * Math.sin((n / 8) * Math.PI * 2), y: y + h / 2 });
-              y += h;
-            }
-            const hauteur = y + BAS;
-            const trace = (liste) => liste.map((j, i) => {
-              if (i === 0) return "M " + j.x + " " + j.y;
-              const my = (liste[i - 1].y + j.y) / 2;
-              return "C " + liste[i - 1].x + " " + my + ", " + j.x + " " + my + ", " + j.x + " " + j.y;
-            }).join(" ");
             const dalleNeutre = "linear-gradient(180deg, #2a2536 0%, #1a1624 100%)";
             const lot = (r, voie, grand, atteint) => {
-              if (!r) return null;
+              // Une case vide et non rien : la grille a besoin de ses trois cellules,
+              // sans quoi un palier sans lot libre decalerait son numero.
+              if (!r) return <div className="camp-vide" />;
               const classes = "camp-lot " + voie + (grand ? " grand" : "") + (atteint ? " atteint" : "");
               const cadenas = voie === "serment" && !atteint
                 ? <span className="camp-cadenas" aria-hidden="true">{"\uD83D\uDD12"}</span> : null;
@@ -20680,33 +20676,25 @@ export default function Emprise() {
                   <button className="campagne-achat" disabled>Prendre Le Serment : 4,99 €</button>
                   <div className="campagne-bientot">Bientôt</div>
                 </header>
-                <div className="campagne-legende">
-                  <span><i className="campagne-puce" /> Voie libre</span>
-                  <span><i className="campagne-puce serment" /> Le Serment</span>
+                <div className="campagne-tetes" aria-hidden="true">
+                  <span className="campagne-tete">Voie libre</span>
+                  <span />
+                  <span className="campagne-tete serment">Le Serment</span>
                 </div>
                 <div className="campagne-piste">
-                  <div className="campagne-monde" style={{ height: hauteur + "px" }}>
-                    <svg className="campagne-trace" viewBox={"0 0 100 " + hauteur} preserveAspectRatio="none" aria-hidden="true">
-                      <path d={trace(jalons)} fill="none" stroke="rgba(203,164,86,0.16)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-                      {etat.palier > 0 && (
-                        <path d={trace(jalons.slice(0, etat.palier))} fill="none" stroke="rgba(232,200,119,0.55)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-                      )}
-                    </svg>
-                    {jalons.map((j) => {
-                      const atteint = j.n <= etat.palier;
-                      const classes = "camp-etape " + (j.x < 50 ? "vers-droite" : "vers-gauche")
-                        + (atteint ? " atteint" : "") + (j.n === etat.palier ? " courant" : "");
-                      return (
-                        <div key={j.n} className={classes} style={{ top: j.y + "px", left: j.x + "%" }}>
-                          <div className={"camp-jalon" + (j.objet ? " grand" : "")}><span>{j.n}</span></div>
-                          <div className="camp-lots">
-                            {lot(recompenseSerment(j.n), "serment", j.objet, atteint)}
-                            {lot(recompenseLibre(j.n), "libre", j.objet, atteint)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {Array.from({ length: CAMPAGNE_PALIERS }, (_, i) => i + 1).map((n) => {
+                    const objet = !!CAMPAGNE_OBJETS[n];
+                    const atteint = n <= etat.palier;
+                    const classes = "camp-rang" + (objet ? " grand" : "")
+                      + (atteint ? " atteint" : "") + (n === etat.palier ? " courant" : "");
+                    return (
+                      <div key={n} className={classes}>
+                        {lot(recompenseLibre(n), "libre", objet, atteint)}
+                        <div className={"camp-jalon" + (objet ? " grand" : "")}><span>{n}</span></div>
+                        {lot(recompenseSerment(n), "serment", objet, atteint)}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
