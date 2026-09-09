@@ -672,13 +672,18 @@ function tc(top, right, bottom, left, opts = {}) {
 const TUTORIAL_STEPS = [
   {
     kind: "info",
-    title: "Bienvenue dans EMPRISE",
-    text: "Apprenons les bases en quelques coups. Chaque carte a 4 rangs : haut, droite, bas, gauche. Pour capturer une carte adverse adjacente, votre rang doit être supérieur au rang opposé de l'adversaire.",
+    title: "Bienvenue, Commandant",
+    text: "EMPRISE se joue sur vingt cases. Chacun pose ses huit cartes à tour de rôle ; à la fin, le camp qui en compte le plus sur le plateau l'emporte. Une partie dure quelques minutes, et se décide souvent à un rang près.",
+  },
+  {
+    kind: "info",
+    title: "Les quatre rangs",
+    text: "Chaque carte porte quatre rangs : haut, droite, bas, gauche. Quand vous posez une carte contre une carte ennemie, on ne compare que les deux rangs qui se font face. Le vôtre doit être STRICTEMENT supérieur : à égalité, rien ne bouge.",
   },
   {
     kind: "play",
-    title: "Capture de base",
-    text: "Placez votre carte sur la case qui brille, à gauche de la carte ennemie. Votre rang droit (8) est supérieur au rang gauche adverse (2) : vous allez la capturer.",
+    title: "Votre première capture",
+    text: "La carte ennemie montre 2 sur son côté gauche. La vôtre montre 8 sur son côté droit. Posez-la sur la case qui brille.",
     requiredCell: 7,
     handCard: tc(3, 8, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -686,27 +691,51 @@ const TUTORIAL_STEPS = [
       b[8] = { ...tc(4, 4, 4, 2, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
       return b;
     })(),
-    after: "Bravo ! Votre rang droit (8) était supérieur au rang gauche adverse (2), donc vous l'avez capturée.",
+    after: "8 contre 2 : la carte passe sous votre bannière. Une carte capturée change de camp — elle ne quitte jamais le plateau.",
   },
   {
     kind: "play",
-    title: "Résonance et Onde",
-    text: "Si 2 de vos rangs ou plus répondent à ceux des cartes voisines, les vôtres comptent aussi, toutes les ennemies concernées sont capturées d'un coup : c'est la Résonance. Et si une carte ainsi capturée peut à son tour en capturer une autre, ça continue en chaîne : c'est une Onde. Placez votre carte pour voir les deux à l'œuvre.",
+    title: "La Résonance",
+    // Deux egalites EXACTES et rien d'autre sur le plateau : la Resonance capture les
+    // deux cartes, et aucune des deux ne peut enchainer -- l'Onde a son propre ecran
+    // juste apres. Melanger les deux, c'etait apprendre deux regles d'un coup.
+    text: "Ici, deux de vos rangs sont EXACTEMENT égaux à ceux qui leur font face. Seule, une égalité ne prend rien. Deux égalités en même temps, et les deux cartes tombent d'un coup : c'est la Résonance.",
     requiredCell: 7,
     handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
       const b = Array(CELLS).fill(null);
-      b[2] = { ...tc(4, 7, 5, 4, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
-      b[3] = { ...tc(3, 3, 3, 2, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
-      b[8] = { ...tc(3, 3, 3, 6, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
+      const cendres = ORDERS.find((l) => l.key === "cendres");
+      b[2] = { ...tc(4, 7, 5, 4, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
+      b[8] = { ...tc(3, 3, 3, 6, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
       return b;
     })(),
-    after: "Vous avez capturé 2 cartes d'un coup grâce à la Résonance (2 rangs identiques), puis une 3ème automatiquement grâce à l'Onde !",
+    after: "Deux cartes prises d'un seul geste. Retenez-le : ce qui ne capture pas tout seul peut capturer à deux.",
   },
   {
     kind: "play",
-    title: "Les capacités des Ordres",
-    text: "Chaque Ordre a une capacité unique. Voici Portée (Archers) : elle peut capturer une carte même si elle n'est pas juste à côté.",
+    title: "L'Onde",
+    text: "Une carte que vous venez de retourner peut à son tour en capturer une autre, et ainsi de suite. Reposez votre carte au même endroit, et regardez la chaîne partir.",
+    requiredCell: 7,
+    handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
+    board: (() => {
+      const b = Array(CELLS).fill(null);
+      const cendres = ORDERS.find((l) => l.key === "cendres");
+      b[2] = { ...tc(4, 7, 5, 4, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
+      b[3] = { ...tc(3, 3, 3, 2, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
+      b[8] = { ...tc(3, 3, 3, 6, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
+      return b;
+    })(),
+    after: "Deux cartes par Résonance, puis une troisième emportée par la chaîne : c'est l'Onde. Les plus belles parties se gagnent là.",
+  },
+  {
+    kind: "info",
+    title: "Les Ordres",
+    text: "Vos cartes appartiennent à des Ordres : Dorés, Cendres, Archers, Gardiens, Piques, Scribes… Chacun a sa capacité, et vous en choisissez deux avant chaque duel. En voici deux à l'œuvre — le bouton « i », en partie, vous les rappellera toutes.",
+  },
+  {
+    kind: "play",
+    title: "Les Archers : frapper de loin",
+    text: "Les Archers capturent en ligne droite, même sans toucher leur cible. La carte ennemie est deux cases plus loin : posez quand même.",
     requiredCell: 7,
     handCard: tc(3, 7, 3, 3, { name: "Archers", ability: "portee", icon: ORDERS.find((l) => l.key === "portee").icon, portrait: ORDERS.find((l) => l.key === "portee").portrait }),
     board: (() => {
@@ -714,24 +743,62 @@ const TUTORIAL_STEPS = [
       b[9] = { ...tc(3, 3, 3, 3, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
       return b;
     })(),
-    after: "Portée a capturé une carte à distance, sans qu'aucune carte adverse ne soit adjacente entre les deux !",
+    after: "La flèche a traversé la case vide. Aucune autre capacité ne fait cela.",
+  },
+  {
+    kind: "play",
+    title: "Les Gardiens : le Rempart",
+    // A droite un Gardien : defRank lui ajoute +1, son 5 se defend comme un 6, et le 6
+    // du joueur ne passe pas (il faut etre STRICTEMENT superieur). En bas une carte sans
+    // defense, qui tombe. Une seule pose, les deux lecons cote a cote. Attention :
+    // l'egalite a droite compte pour UNE seule concordance exacte, la Resonance en
+    // demande deux -- elle ne se declenche pas ici, et c'est ce qui rend l'exemple lisible.
+    text: "Un Gardien ajoute +1 au rang qu'on attaque, le temps du combat. À droite, votre 6 vise un 5 qui se défend comme un 6 : rien ne passera. En bas, une Cendres sans défense. Posez, et comparez.",
+    requiredCell: 7,
+    handCard: tc(3, 6, 5, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
+    board: (() => {
+      const b = Array(CELLS).fill(null);
+      const gardiens = ORDERS.find((l) => l.key === "guardian");
+      const cendres = ORDERS.find((l) => l.key === "cendres");
+      b[8] = { ...tc(3, 3, 3, 5, { name: "Gardiens", ability: "guardian", icon: gardiens.icon, portrait: gardiens.portrait }), owner: "red" };
+      b[12] = { ...tc(3, 3, 3, 3, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
+      return b;
+    })(),
+    after: "Le Gardien a tenu, la Cendres est tombée. Un rang qui ne gagne que d'un point ne suffit jamais contre un Rempart.",
+  },
+  {
+    kind: "info",
+    title: "L'avance du premier",
+    text: "Vingt cases, seize cartes posées : quatre cases restent vides à la fin. Celui qui ouvre le duel ne pose pas la dernière carte — un vrai désavantage. Il reçoit donc deux points d'avance au décompte. Et ces deux points rendent l'égalité parfaite possible.",
+  },
+  {
+    kind: "reserve",
+    title: "Votre Réserve",
+    // Le joueur CHOISIT, il ne lit pas. Les huit cartes sont les quatre orientations de
+    // ses deux Ordres, comme avant un vrai duel : les memes qu'il vient de voir jouer.
+    text: "Avant chaque duel, vous mettez deux cartes de côté : votre Réserve. UNE PAR ORDRE, jamais deux fois le même. Vous ne les jouerez peut-être jamais — ou elles décideront de tout. Choisissez-en deux.",
+    cartes: () => makeHand(ORDERS.find((l) => l.key === "portee"), ORDERS.find((l) => l.key === "guardian")),
+    after: "Elles se retournent : personne ne sait ce que vous gardez. Vous les retrouverez si le duel s'achève à égalité parfaite.",
   },
   {
     kind: "play",
     title: "La Mort Subite",
-    text: "Avant chaque duel, vous gardez 2 cartes de côté : votre Réserve. Ici, le duel vient de s'achever à égalité parfaite. Regardez le plateau, aucun camp ne l'emporte. La Mort Subite tranche : chaque camp pose une carte de sa Réserve sur une case restée vide. Posez la vôtre sur la case qui brille.",
+    text: "Le duel s'achève. Vous avez ouvert, donc deux points d'avance : huit cartes plus deux, dix. Dix à lui. Personne ne l'emporte. Alors chaque camp sort une carte de sa Réserve et la pose sur une case restée vide. Posez la vôtre.",
     requiredCell: 7,
     handCard: tc(1, 8, 1, 1, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
-      // Un damier plein : cases paires Ecarlate, impaires Azur -- neuf partout une fois
-      // les cases 7 et 12 laissees vides, l'egalite se VOIT. La cible en 8 est faible
-      // (2 partout) : capturee, elle ne rafle rien derriere elle.
+      // DIX Ecarlate, HUIT Azur, cases 7 et 12 laissees vides. Avec les deux points
+      // d'avance du joueur -- qui a ouvert -- le compte tombe a dix partout : c'est une
+      // egalite parfaite VRAIE, celle que la Mort Subite ouvre pour de bon. Un damier
+      // neuf contre neuf n'en serait pas une, l'avance du premier la trancherait, et
+      // l'ecran precedent viendrait de dire le contraire.
+      // La cible en 8 est faible (2 partout) : capturee, elle ne rafle rien derriere elle.
       const b = Array(CELLS).fill(null);
       const dores = ORDERS.find((l) => l.key === "eveil");
       const cendres = ORDERS.find((l) => l.key === "cendres");
       for (let i = 0; i < CELLS; i++) {
         if (i === 7 || i === 12) continue;
-        const rouge = i % 2 === 0;
+        const rouge = i % 2 === 0 || i === 19;
         const gabarit = i === 8 ? tc(2, 2, 2, 2, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait })
           : tc(3, 3, 3, 3, rouge
             ? { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }
@@ -740,12 +807,17 @@ const TUTORIAL_STEPS = [
       }
       return b;
     })(),
-    after: "Votre carte de Réserve a capturé sa voisine : l'égalité est rompue, le duel a son vainqueur ! Si l'égalité persistait, l'adversaire poserait à son tour, jusqu'à ce qu'un camp se dégage.",
+    after: "Votre carte de Réserve a capturé sa voisine : neuf cartes plus deux contre neuf, l'égalité est rompue. Deux rondes au plus, une carte de Réserve par ronde.",
   },
   {
     kind: "info",
-    title: "Vous êtes prêt !",
-    text: "C'est tout ce qu'il faut savoir pour commencer. Chaque Ordre a sa propre capacité, vous les découvrirez en jouant. Bonne chance, Commandant.",
+    title: "Le Dernier Mot",
+    text: "Et si l'égalité tient encore après les deux rondes ? Le Dernier Mot tranche : un point revient à celui qui n'a PAS ouvert le duel — c'est lui qui a subi les deux points d'avance de l'autre. Un duel d'EMPRISE ne s'achève jamais sur un nul.",
+  },
+  {
+    kind: "info",
+    title: "Vous êtes prêt",
+    text: "Dix Ordres vous attendent, chacun avec sa capacité : vous les découvrirez en jouant. Ce tutoriel reste disponible dans les Réglages, à tout moment. Bonne chance, Commandant.",
   },
 ];
 
@@ -1447,6 +1519,23 @@ function lirePseudo() {
 function ecrirePseudo(nom) {
   pseudoMemoire = nom;
   try { localStorage.setItem(CLE_PSEUDO, nom); } catch (e) { /* non persiste cette session */ }
+}
+
+// Le tutoriel n'est plus une curiosite des Reglages : il se joue d'office au premier
+// lancement, avant le choix de la banniere. Ce temoin dit qu'il a ete vu. Il vit en
+// LOCAL et non dans le document du joueur : les regles Firestore fixent la liste des
+// champs de /users (hasOnly), en ajouter un demanderait de publier des regles avant le
+// code pour un simple oui/non. Rejouer le tutoriel sur un nouveau telephone ne coute
+// rien a personne.
+const CLE_TUTORIEL = "emprise-tutoriel";
+let tutorielMemoire = false;
+function lireTutorielVu() {
+  try { if (localStorage.getItem(CLE_TUTORIEL) === "1") return true; } catch (e) { /* stockage bloque */ }
+  return tutorielMemoire;
+}
+function ecrireTutorielVu() {
+  tutorielMemoire = true;
+  try { localStorage.setItem(CLE_TUTORIEL, "1"); } catch (e) { /* non persiste cette session */ }
 }
 
 // ---------- Maitrise des Ordres ----------
@@ -15193,6 +15282,7 @@ export default function Emprise() {
     return () => { document.body.style.overflow = avant; };
   }, [infoAbility, activeModal]);
   const [pseudo, setPseudo] = useState(lirePseudo);
+  const [tutorielVu, setTutorielVu] = useState(lireTutorielVu);
   const [pseudoSaisi, setPseudoSaisi] = useState("");
   // Une fois le numero devoile, il reste. Sans ce verrou il disparaitrait des que le
   // joueur efface son nom pour se raviser, et se rejouerait a la frappe suivante :
@@ -15691,6 +15781,16 @@ export default function Emprise() {
   // vite pénible. La dépendance vide est volontaire — une version liée à `phase` se
   // relançait à un re-render et sautait l'étape 2 (le glissement du titre), repéré en
   // mesurant l'opacité image par image dans le navigateur.
+  // Le tutoriel s'impose UNE fois, entre l'Adoubement et le choix de la banniere : le
+  // joueur sait deja qui il est, il ne sait pas encore jouer, et la banniere n'a de sens
+  // qu'apres. Aucun joueur ne doit arriver sur un plateau sans avoir vu la Mort Subite.
+  // startTutorial est une fonction de composant, donc hissee : l'effet ne s'execute
+  // qu'apres le rendu, elle est en place.
+  useEffect(() => {
+    if (tutorielVu || !pseudo || adoubement || phase !== "landing") return;
+    startTutorial(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutorielVu, pseudo, adoubement, phase]);
   const [introEtape, setIntroEtape] = useState(0);
   useEffect(() => {
     if (reducedMotion) { setIntroEtape(3); return; } // animations réduites : accueil complet tout de suite
@@ -16094,7 +16194,18 @@ export default function Emprise() {
   // commençait toujours, ce +1 pouvait être écrit en dur ; depuis le tirage au sort, il
   // doit suivre le tirage, sinon Azur cumule l'avantage de position ET le bonus.
   const [firstPlayer, setFirstPlayer] = useState("blue");
-  const [tut, setTut] = useState({ stepIdx: 0, board: null, resolved: false, flashes: {} });
+  const [tut, setTut] = useState({ stepIdx: 0, board: null, resolved: false, flashes: {}, reserveChoix: [] });
+  // Vrai quand le tutoriel s'impose au premier lancement : aucun « Passer » ne s'affiche
+  // alors, et le bouton Retour du telephone ne peut pas en sortir. Depuis les Reglages,
+  // il vaut faux et le tutoriel se quitte quand on veut.
+  const [tutObligatoire, setTutObligatoire] = useState(false);
+  // Les huit cartes de l'etape Reserve, tirees UNE fois par etape : makeHand melange a
+  // chaque appel, sans ce memo les cartes se reordonnaient a chaque rendu, donc a chaque
+  // toucher.
+  const tutReserveCartes = useMemo(() => {
+    const etape = TUTORIAL_STEPS[tut.stepIdx];
+    return etape && etape.kind === "reserve" && etape.cartes ? etape.cartes() : [];
+  }, [tut.stepIdx]);
 
   const { blueCount, redCount, blueScore, redScore, dernierMot } = useMemo(() => {
     const bc = board.filter((b) => b && b.owner === "blue").length;
@@ -18413,12 +18524,19 @@ export default function Emprise() {
   function loadTutStep(i) {
     const step = TUTORIAL_STEPS[i];
     if (step.kind === "play") {
-      setTut((t) => ({ ...t, board: step.board.map((cell) => (cell ? { ...cell } : null)), resolved: false, flashes: {} }));
+      setTut((t) => ({ ...t, board: step.board.map((cell) => (cell ? { ...cell } : null)), resolved: false, flashes: {}, reserveChoix: [] }));
+    } else {
+      // Info et Reserve : le plateau de l'etape precedente ne doit pas trainer derriere,
+      // et la Reserve repart toujours vide.
+      setTut((t) => ({ ...t, board: null, resolved: false, flashes: {}, reserveChoix: [] }));
     }
   }
 
-  function startTutorial() {
-    setTut({ stepIdx: 0, board: null, resolved: false, flashes: {} });
+  // obligatoire : le premier lancement. Depuis les Reglages, on appelle startTutorial()
+  // sans argument et le tutoriel reste quittable.
+  function startTutorial(obligatoire = false) {
+    setTutObligatoire(!!obligatoire);
+    setTut({ stepIdx: 0, board: null, resolved: false, flashes: {}, reserveChoix: [] });
     loadTutStep(0);
     setPhase("tutorial");
   }
@@ -18435,15 +18553,37 @@ export default function Emprise() {
     setTut((t) => ({ ...t, board: resolved, flashes: map, resolved: true }));
   }
 
+  // La meme regle que l'ecran reel : deux cartes, jamais deux du meme Ordre. Des que la
+  // seconde est prise, l'etape est resolue et le texte passe a son « apres ».
+  function tutReserveClick(i) {
+    const etape = TUTORIAL_STEPS[tut.stepIdx];
+    if (!etape || etape.kind !== "reserve" || tut.resolved) return;
+    setTut((t) => {
+      const carte = tutReserveCartes[i];
+      if (!carte) return t;
+      if (t.reserveChoix.includes(i)) return { ...t, reserveChoix: t.reserveChoix.filter((x) => x !== i) };
+      if (t.reserveChoix.length >= RESERVE_TAILLE) return t;
+      if (t.reserveChoix.some((x) => tutReserveCartes[x] && tutReserveCartes[x].ability === carte.ability)) return t;
+      const choix = [...t.reserveChoix, i];
+      return { ...t, reserveChoix: choix, resolved: choix.length >= RESERVE_TAILLE };
+    });
+  }
+
+  function finirTutoriel() {
+    ecrireTutorielVu();
+    setTutorielVu(true);
+    setTutObligatoire(false);
+    setPhase("landing");
+  }
   function nextTutorialStep() {
     const next = tut.stepIdx + 1;
-    if (next >= TUTORIAL_STEPS.length) { setPhase("landing"); return; }
+    if (next >= TUTORIAL_STEPS.length) { finirTutoriel(); return; }
     setTut((t) => ({ ...t, stepIdx: next }));
     loadTutStep(next);
   }
-
   function skipTutorial() {
-    setPhase("landing");
+    if (tutObligatoire) return; // au premier lancement, il n'y a pas de sortie
+    finirTutoriel();
   }
 
   // 3 tours, difficulté croissante. On réutilise les mêmes clés que DIFFICULTIES.
@@ -19069,7 +19209,7 @@ export default function Emprise() {
     if (activeModal) { setActiveModal(null); return true; }
     if (ceremonieFin) { setCeremonieFin(null); setCerPose(false); return true; }
     if (phase === "play") { setConfirmQuit(true); return true; }
-    if (phase === "tutorial") { skipTutorial(); return true; }
+    if (phase === "tutorial") { if (!tutObligatoire) skipTutorial(); return true; }
     if (phase !== "landing") { goBack(); return true; }
     return false; // au hub, rien d'ouvert : la prochaine pression quitte le jeu
   };
@@ -22583,7 +22723,46 @@ export default function Emprise() {
               <button className="reset-btn" onClick={nextTutorialStep}>
                 {tut.stepIdx === 0 ? "Commencer" : tut.stepIdx === TUTORIAL_STEPS.length - 1 ? "Terminer" : "Continuer"}
               </button>
-              {tut.stepIdx === 0 && (
+              {!tutObligatoire && (
+                <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
+              )}
+            </>
+          ) : TUTORIAL_STEPS[tut.stepIdx].kind === "reserve" ? (
+            <>
+              <h2 className="blue-t">{TUTORIAL_STEPS[tut.stepIdx].title}</h2>
+              <div className="rules-p tut-text">
+                {tut.resolved ? TUTORIAL_STEPS[tut.stepIdx].after : TUTORIAL_STEPS[tut.stepIdx].text}
+              </div>
+              <div className="sub">{tut.reserveChoix.length}/{RESERVE_TAILLE} choisies</div>
+              <div className="reserve-grille">
+                {tutReserveCartes.map((c, i) => {
+                  const prise = tut.reserveChoix.includes(i);
+                  const ordresPris = tut.reserveChoix.map((x) => tutReserveCartes[x] && tutReserveCartes[x].ability);
+                  const eteinte = !prise && (tut.reserveChoix.length >= RESERVE_TAILLE || ordresPris.includes(c.ability));
+                  return (
+                    <div
+                      key={c.id}
+                      className={`reserve-case ${prise ? "prise" : ""} ${eteinte ? "grisee" : ""}`}
+                      role="button"
+                      tabIndex={eteinte ? -1 : 0}
+                      aria-pressed={prise}
+                      aria-disabled={eteinte}
+                      aria-label={`${c.name}, rangs ${c.top} ${c.right} ${c.bottom} ${c.left}${prise ? ", gardée en Réserve" : eteinte ? ", cet Ordre est déjà pris" : ""}`}
+                      onClick={eteinte ? undefined : () => tutReserveClick(i)}
+                      onKeyDown={eteinte ? undefined : KEY_ACTIVATE(() => tutReserveClick(i))}
+                    >
+                      <div className="reserve-flip">
+                        <span className="reserve-face avant"><Card card={c} owner="blue" extraClass="hand" /></span>
+                        <span className="reserve-face arriere" style={dosDeCarte(c, "blue", true)} aria-hidden="true" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {tut.resolved && (
+                <button className="reset-btn" onClick={nextTutorialStep}>Continuer</button>
+              )}
+              {!tutObligatoire && (
                 <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
               )}
             </>
@@ -22618,7 +22797,9 @@ export default function Emprise() {
               {tut.resolved && (
                 <button className="reset-btn" onClick={nextTutorialStep}>Continuer</button>
               )}
-              <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
+              {!tutObligatoire && (
+                <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
+              )}
             </>
           )}
         </div>
