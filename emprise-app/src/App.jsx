@@ -691,7 +691,7 @@ const TUTORIAL_STEPS = [
       b[8] = { ...tc(4, 4, 4, 2, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
       return b;
     })(),
-    after: "8 contre 2 : la carte passe sous votre bannière. Une carte capturée change de camp — elle ne quitte jamais le plateau.",
+    after: "8 contre 2 : la carte passe sous votre bannière. Une carte capturée change de camp : elle ne quitte jamais le plateau.",
   },
   {
     kind: "play",
@@ -730,7 +730,7 @@ const TUTORIAL_STEPS = [
   {
     kind: "info",
     title: "Les Ordres",
-    text: "Vos cartes appartiennent à des Ordres : Dorés, Cendres, Archers, Gardiens, Piques, Scribes… Chacun a sa capacité, et vous en choisissez deux avant chaque duel. En voici deux à l'œuvre — le bouton « i », en partie, vous les rappellera toutes.",
+    text: "Vos cartes appartiennent à des Ordres : Dorés, Cendres, Archers, Gardiens, Piques, Scribes… Chacun a sa capacité, et vous en choisissez deux avant chaque duel. En voici deux à l'œuvre ; le bouton « i », en partie, vous les rappellera toutes.",
   },
   {
     kind: "play",
@@ -769,14 +769,14 @@ const TUTORIAL_STEPS = [
   {
     kind: "info",
     title: "L'avance du premier",
-    text: "Vingt cases, seize cartes posées : quatre cases restent vides à la fin. Celui qui ouvre le duel ne pose pas la dernière carte — un vrai désavantage. Il reçoit donc deux points d'avance au décompte. Et ces deux points rendent l'égalité parfaite possible.",
+    text: "Vingt cases, seize cartes posées : quatre cases restent vides à la fin. Celui qui ouvre le duel ne pose pas la dernière carte, un vrai désavantage. Il reçoit donc deux points d'avance au décompte. Et ces deux points rendent l'égalité parfaite possible.",
   },
   {
     kind: "reserve",
     title: "Votre Réserve",
     // Le joueur CHOISIT, il ne lit pas. Les huit cartes sont les quatre orientations de
     // ses deux Ordres, comme avant un vrai duel : les memes qu'il vient de voir jouer.
-    text: "Avant chaque duel, vous mettez deux cartes de côté : votre Réserve. UNE PAR ORDRE, jamais deux fois le même. Vous ne les jouerez peut-être jamais — ou elles décideront de tout. Choisissez-en deux.",
+    text: "Avant chaque duel, vous mettez deux cartes de côté : votre Réserve. UNE PAR ORDRE, jamais deux fois le même. Vous ne les jouerez peut-être jamais, ou elles décideront de tout. Choisissez-en deux.",
     cartes: () => makeHand(ORDERS.find((l) => l.key === "portee"), ORDERS.find((l) => l.key === "guardian")),
     after: "Elles se retournent : personne ne sait ce que vous gardez. Vous les retrouverez si le duel s'achève à égalité parfaite.",
   },
@@ -812,7 +812,7 @@ const TUTORIAL_STEPS = [
   {
     kind: "info",
     title: "Le Dernier Mot",
-    text: "Et si l'égalité tient encore après les deux rondes ? Le Dernier Mot tranche : un point revient à celui qui n'a PAS ouvert le duel — c'est lui qui a subi les deux points d'avance de l'autre. Un duel d'EMPRISE ne s'achève jamais sur un nul.",
+    text: "Et si l'égalité tient encore après les deux rondes ? Le Dernier Mot tranche : un point revient à celui qui n'a PAS ouvert le duel : c'est lui qui a subi les deux points d'avance de l'autre. Un duel d'EMPRISE ne s'achève jamais sur un nul.",
   },
   {
     kind: "info",
