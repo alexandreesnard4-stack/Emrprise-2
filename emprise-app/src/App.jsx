@@ -7366,9 +7366,12 @@ const APP_STYLES = `
         }
         /* L'apercu porte les memes variables que la dalle de jeu : trois colonnes, deux
            rangees, de quoi lire la pierre ET le creux d'une case. */
+        /* box-sizing : sans lui, width 100 % ne compte que le contenu, et les 6 px de
+           marge interieure plus la bordure debordaient de 14 px -- la dalle touchait le
+           bord de la carte et depassait de ses coins arrondis (vu le 09/09). */
         .boutique-apercu {
           display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
-          width: 100%; padding: 6px; border-radius: 9px;
+          width: 100%; box-sizing: border-box; padding: 6px; border-radius: 9px;
           background: var(--plateau-dalle);
           border: 1px solid var(--plateau-bord);
           box-shadow: inset 0 1px 0 var(--plateau-lueur), inset 0 0 14px rgba(0,0,0,0.45);
