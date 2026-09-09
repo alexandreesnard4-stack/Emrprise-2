@@ -35,6 +35,16 @@ node outils-equilibrage/mort-subite.cjs 5000 intermediaire 2
 La règle candidate : +2 points à celui qui commence, égalité parfaite réglée en
 Mort Subite (chaque camp tire une carte et la joue sur les cases restées vides).
 
+```bash
+node outils-equilibrage/egalite-persistante.cjs 6000 intermediaire
+```
+L'égalité qui TIENT après les deux rondes de Mort Subite (mesure du 09/09 : 16,8 % des
+parties ouvrent la Mort Subite, 41 % d'entre elles vont en ronde 2, 15,6 % restent
+égales — 1 partie sur 37), et la neutralité des départages candidats : force des
+cartes 98 % au second, captures 100 % au second, Réserve la plus forte 58 % au second
+avec 15 % d'égalités. Seule la règle « victoire à celui qui n'a pas ouvert » tombe à
+49 % : c'est le Dernier Mot, rendu visible dans le score depuis le 09/09.
+
 `corrections.cjs` (9e carte, 7 cartes, +3) et `departage-captures.cjs` (départage
 au nombre de captures) sont les variantes **essayées et écartées** — gardées pour
 ne pas les réessayer un jour en croyant avoir eu une idée neuve.

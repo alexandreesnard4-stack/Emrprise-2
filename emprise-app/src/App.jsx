@@ -1552,6 +1552,14 @@ const VERSION_AFFICHEE = typeof __HORODATAGE_BUILD__ === "string" ? __HORODATAGE
 // elle se joue, au lieu d'etre donnee.
 const AVANCE_DU_PREMIER = 2;
 
+// Le DERNIER MOT (09/09). Deux rondes de Mort Subite peuvent laisser le compte egal
+// (1 partie sur 37, mesure dans outils-equilibrage/egalite-persistante.cjs). La regle
+// existait deja -- victoire a celui qui n a pas ouvert, la seule mesuree neutre --
+// mais l ecran affichait 11 . 11 sous VICTOIRE : un nul tranche en cachette. Ce point
+// la rend visible : il s ajoute au score du second, une fois la partie close, et
+// seulement si aucune fin forcee (abandon, forfait) n a deja designe le vainqueur.
+const POINT_DU_DERNIER_MOT = 1;
+
 // La force brute d'une carte, pour que l'Echo compose sa Reserve sans reflechir
 // longtemps : il garde ses deux cartes aux rangs les plus hauts.
 function forceDeCarte(c) { return (c.top || 0) + (c.right || 0) + (c.bottom || 0) + (c.left || 0); }
@@ -9974,6 +9982,9 @@ const APP_STYLES = `
           animation: cer-monte 0.65s cubic-bezier(0.2, 1, 0.3, 1) 1.75s both;
           display: flex; flex-direction: column; align-items: center; gap: 12px; }
         @keyframes cer-monte { to { opacity: 1; transform: translateY(0); } }
+        /* La phrase du Dernier Mot, au-dessus du score, dans les deux recapitulatifs. */
+        .cer-dernier-mot { font-size: 11.5px; line-height: 1.35; color: var(--muted); text-align: center;
+          margin: 0 0 8px; }
         .cer-score { font-family: 'Cinzel', serif; font-size: 30px; font-weight: 700;
           display: flex; gap: 12px; align-items: baseline; }
         .cer-sb { color: var(--blue-bright); } .cer-sr { color: var(--red-bright); }
@@ -16058,15 +16069,23 @@ export default function Emprise() {
   const [firstPlayer, setFirstPlayer] = useState("blue");
   const [tut, setTut] = useState({ stepIdx: 0, board: null, resolved: false, flashes: {} });
 
-  const { blueCount, redCount, blueScore, redScore } = useMemo(() => {
+  const { blueCount, redCount, blueScore, redScore, dernierMot } = useMemo(() => {
     const bc = board.filter((b) => b && b.owner === "blue").length;
     const rc = board.filter((b) => b && b.owner === "red").length;
+    const sb = bc + (firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0);
+    const sr = rc + (firstPlayer === "red" ? AVANCE_DU_PREMIER : 0);
+    // Le Dernier Mot ne tombe qu'a la cloture, sur un compte egal, et jamais par-dessus
+    // une fin forcee : l'abandon a deja son vainqueur, le score n'a plus rien a dire.
+    const finForcee = mode === "online" && !!vainqueurForce;
+    const dm = gameOver && !finForcee && sb === sr;
+    const second = firstPlayer === "blue" ? "red" : "blue";
     return {
       blueCount: bc, redCount: rc,
-      blueScore: bc + (firstPlayer === "blue" ? AVANCE_DU_PREMIER : 0),
-      redScore: rc + (firstPlayer === "red" ? AVANCE_DU_PREMIER : 0),
+      blueScore: sb + (dm && second === "blue" ? POINT_DU_DERNIER_MOT : 0),
+      redScore: sr + (dm && second === "red" ? POINT_DU_DERNIER_MOT : 0),
+      dernierMot: dm,
     };
-  }, [board, firstPlayer]);
+  }, [board, firstPlayer, gameOver, mode, vainqueurForce]);
   // L'avance va toujours a celui qui a commence, quel que soit son camp. Elle vaut deux
   // points, ce qui rend l'egalite parfaite possible — c'est le but : elle declenche la
   // Mort Subite, ou chaque camp pose une carte de sa Reserve sur les cases restees vides.
@@ -16076,6 +16095,7 @@ export default function Emprise() {
   // A egalite persistante — les deux Reserves epuisees sans se departager, cas rare — la
   // victoire revient a celui qui n'a PAS commence : c'est lui qui a subi les deux points
   // d'avance, ce serait les lui reprendre que de trancher autrement.
+  // Depuis le Dernier Mot (09/09), le score porte deja ce point : la garde ci-dessous n'est plus qu'un filet.
   const secondJoueur = firstPlayer === "blue" ? "red" : "blue";
   const winner = gameOver
     ? ((mode === "online" ? vainqueurForce : null)
@@ -16122,6 +16142,18 @@ export default function Emprise() {
   // Les scores tels qu'ils s'affichent : Azur a gauche, toujours le mien en ligne.
   const scoreAzur = campsInverses ? redScore : blueScore;
   const scoreEcarlate = campsInverses ? blueScore : redScore;
+
+  // Le sous-titre du Dernier Mot, du point de vue de celui qui regarde l'ecran. Court :
+  // les sous-titres de ceremonie sont en capitales espacees. La derniere branche (duel
+  // local, aucun camp n'est "le mien") nomme le camp, sans accent grave : cette mission
+  // n'en ajoute aucun dans le fichier.
+  function sousTitreDernierMot() {
+    const second = firstPlayer === "blue" ? "red" : "blue";
+    const aMoi = mode === "bot" ? second === "blue" : mode === "online" ? second === onlineRole : null;
+    if (aMoi === true) return "Le Dernier Mot vous revient";
+    if (aMoi === false) return mode === "bot" ? "Le Dernier Mot revient à l'Écho" : "Le Dernier Mot revient à l'adversaire";
+    return "Le Dernier Mot revient au camp " + (second === "blue" ? "Azur" : "Écarlate");
+  }
 
   // ---------- Profil de joueur : quel camp est le mien, avec quels Ordres ----------
   // Contre un Echo je suis toujours Azur ; en ligne, le camp que le serveur m'a donne.
@@ -22419,7 +22451,7 @@ export default function Emprise() {
 
                 <div className="rules-section">
                   <div className="rules-h">La Réserve et la Mort Subite</div>
-                  <div className="rules-p">Avant le duel, vous gardez deux cartes de côté, une par Ordre. Si le compte final tombe exactement à égalité, chaque Commandant en pose une sur une case restée vide et l&apos;on recompte : c&apos;est la Mort Subite, deux rondes au plus. Si l&apos;égalité tient encore, la victoire revient à celui qui n&apos;a pas commencé.</div>
+                  <div className="rules-p">Avant le duel, vous gardez deux cartes de côté, une par Ordre. Si le compte final tombe exactement à égalité, chaque Commandant en pose une sur une case restée vide et l&apos;on recompte : c&apos;est la Mort Subite, deux rondes au plus. Si l&apos;égalité tient encore, le Dernier Mot tranche : un point revient à celui qui n&apos;a pas commencé.</div>
                 </div>
 
                 <div className="rules-section">
@@ -24429,7 +24461,8 @@ export default function Emprise() {
             </div>
             <div className="cer-trait" aria-hidden="true" />
             <div className="cer-sous-titre">
-              {mode === "bot" ? "L'Écho est repoussé"
+              {dernierMot ? sousTitreDernierMot()
+                : mode === "bot" ? "L'Écho est repoussé"
                 : mode === "online"
                   ? (finMotif === "abandon" ? "L'adversaire a abandonné"
                     : finMotif === "forfait" ? "L'adversaire n'a plus donné signe de vie"
@@ -24437,6 +24470,9 @@ export default function Emprise() {
                   : `Le camp ${winner === "blue" ? "Azur" : "Écarlate"} l'emporte`}
             </div>
             <div className="cer-recap" onClick={(e) => e.stopPropagation()}>
+              {dernierMot && (
+                <div className="cer-dernier-mot">Égalité tenue jusqu'au bout : un point à celui qui n'a pas ouvert.</div>
+              )}
               <div className="cer-score">
                 <span className="cer-sb">{scoreAzur}</span><span className="cer-sep">·</span><span className="cer-sr">{scoreEcarlate}</span>
               </div>
@@ -24471,10 +24507,14 @@ export default function Emprise() {
             <h1 className="defeat-title" aria-label="Défaite">DÉFAITE</h1>
             <div className="defeat-divider" aria-hidden="true" />
             <p className="defeat-subtitle">
-              {mode === "bot" ? "L'Emprise vous a submergé" : "L'Emprise a submergé votre camp"}
+              {dernierMot ? sousTitreDernierMot()
+                : mode === "bot" ? "L'Emprise vous a submergé" : "L'Emprise a submergé votre camp"}
             </p>
           </div>
           <div className="defeat-recap" onClick={(e) => e.stopPropagation()}>
+            {dernierMot && (
+              <div className="cer-dernier-mot">Égalité tenue jusqu'au bout : un point à celui qui n'a pas ouvert.</div>
+            )}
             <div className="cer-score">
               <span className="cer-sb">{scoreAzur}</span><span className="cer-sep">·</span><span className="cer-sr">{scoreEcarlate}</span>
             </div>
