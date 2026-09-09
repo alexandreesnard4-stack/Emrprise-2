@@ -145,3 +145,4 @@ Sur l'arbre du tournoi solo, votre plaque porte le médaillon que vous avez équ
 Sur la page Ordres, le bandeau du haut n'a plus que deux rangées : la grille des Ordres remonte d'autant.
 La coupe des tournois ne porte plus de carré plus clair derrière elle.
 Sur l'arbre du tournoi en ligne aussi, votre plaque porte votre médaillon équipé ; les autres sièges gardent leur Ordre.
+Le panneau des messages se referme en touchant à côté, comme les autres panneaux du jeu, et le bouton Retour du téléphone le referme avant de proposer de quitter la partie.
