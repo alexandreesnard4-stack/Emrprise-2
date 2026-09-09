@@ -136,3 +136,4 @@ En aperçu, l'allumage des pastilles est réservé à la Résonance : un Gardien
 La Mort Subite peut s'ouvrir dans tous les modes : contre l'Écho, en Histoire, en Confluence, en tournoi et en ligne.
 En Histoire et en Confluence, la Réserve se compose toute seule : la carte la plus forte de chaque Ordre, sans écran de choix.
 À égalité tenue jusqu'au bout, le Dernier Mot donne un point à celui qui n'a pas ouvert le duel : le score final n'est jamais égal.
+Contre l'Écho et en duel local, votre éventail de cartes et celui d'en face peuvent rester ouverts en même temps, pour les comparer ; en ligne, celui de l'adversaire reste fermé.
