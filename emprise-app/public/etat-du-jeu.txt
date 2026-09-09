@@ -139,3 +139,4 @@ En Histoire et en Confluence, la Réserve se compose toute seule : la carte la p
 Contre l'Écho et en duel local, votre éventail de cartes et celui d'en face peuvent rester ouverts en même temps, pour les comparer ; en ligne, celui de l'adversaire reste fermé.
 Sur le Chemin de la Campagne, chaque lot du Serment dit ce qu'il est : le plateau se montre en miniature avec ses cases, et le type de l'objet s'écrit sous l'image (plateau, dos de carte, bannière).
 Le tutoriel se joue d'office au premier lancement, juste après l'Adoubement et avant le choix de la bannière : treize étapes, dont la Réserve qu'on compose soi-même, la Mort Subite et le Dernier Mot.
+Les pages Politique de confidentialité et Conditions d'utilisation ont un bouton « Retour au jeu » en haut, qui reste visible quand on fait défiler.
