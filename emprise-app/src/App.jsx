@@ -3090,9 +3090,14 @@ const CAMPAGNE_OBJETS = {
 };
 // La voie du Serment : un objet aux huit paliers ci-dessus, des gemmes tous les cinq,
 // des pieces partout ailleurs, d'autant plus qu'on monte.
+// Le versement de gemmes vaut 60 et non 25 : les paliers 30 et 60, multiples de cinq,
+// portent deja un objet, il ne reste donc que DIX versements sur la saison. A 25, la
+// Campagne n aurait rendu que 250 gemmes, loin des 600 promis. Soixante fois dix les
+// donne exactement, et le montant reste dans le style de la maison : les niveaux de
+// Commandant versent deja 50 gemmes tous les cinq niveaux.
 function recompenseSerment(n) {
   if (CAMPAGNE_OBJETS[n]) return CAMPAGNE_OBJETS[n];
-  if (n % 5 === 0) return { type: "gemmes", n: 25 };
+  if (n % 5 === 0) return { type: "gemmes", n: 60 };
   return { type: "pieces", n: n < 20 ? 300 : n < 40 ? 450 : 600 };
 }
 // La voie libre : un palier sur trois, de la monnaie seulement. Assez pour que le joueur
