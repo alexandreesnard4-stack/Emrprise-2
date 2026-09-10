@@ -1154,7 +1154,7 @@ service cloud.firestore {
       allow update: if connecte() && moi() == uid
         // adoubementVu : la cérémonie de première ouverture a eu lieu. Un simple témoin,
         // que seul son propriétaire écrit et qui ne sert qu'à ne pas la rejouer.
-        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties', 'niveau', 'medaillon', 'banniere'])
+        && request.resource.data.keys().hasOnly(['pseudo', 'codeAmi', 'creeLe', 'vuLe', 'derniereDemande', 'trophees', 'titre', 'adoubementVu', 'parties', 'victoires', 'combos', 'tournois', 'ordreFavori', 'combosParties', 'niveau', 'medaillon', 'banniere', 'parrain'])
         && pseudoValide(request.resource.data.pseudo)
         && profilPublicValide()
         // Le numero doit etre au nouveau format, SAUF s il n a pas bouge et qu il vient
@@ -1179,7 +1179,16 @@ service cloud.firestore {
         // fonction lit resource.data, et un document neuf n a aucun compteur a comparer.
         && compteursCoherents()
         // Le compteur anti-rafale ne s'efface pas en reecrivant le profil sans lui.
-        && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data);
+        && (!('derniereDemande' in resource.data) || 'derniereDemande' in request.resource.data)
+        // Le Chevalier de ce joueur (10/09) : ecrit UNE fois, jamais soi-meme, et il
+        // doit exister. Deja pose : il ne bouge plus. Absent de l ecriture : rien a dire.
+        && (!('parrain' in request.resource.data)
+            || ('parrain' in resource.data && request.resource.data.parrain == resource.data.parrain)
+            || (!('parrain' in resource.data)
+                && request.resource.data.parrain is string
+                && request.resource.data.parrain.size() <= 128
+                && request.resource.data.parrain != request.auth.uid
+                && exists(/databases/$(database)/documents/users/$(request.resource.data.parrain))));
 
       // Supprimer son compte (04/09) : le sien, et le sien seulement. Exige par Apple
       // et Google pour la publication. Il n y avait AUCUN allow delete ici, donc un
