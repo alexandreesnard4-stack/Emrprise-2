@@ -18034,6 +18034,16 @@ export default function Emprise() {
   // joueur en attente + requête). C'est aussi là que l'ELO se greffera le jour venu :
   // au lieu de prendre le premier venu, on filtrera sur une fourchette de score.
   const ATTENTE_PERIMEE_MS = 60000; // au-delà, l'inscription est considérée abandonnée
+  // Le battement de la file (10/09). La place d'attente meurt a 60 s et personne ne
+  // la rafraichissait : deux amis qui touchaient Classe a plus d'une minute d'ecart
+  // ne se rencontraient JAMAIS -- le second ne trouvait pas le premier, prenait sa
+  // place, et les deux attendaient dans le vide sans que l'ecran le dise. On rejoue
+  // donc la recherche toutes les 20 s tant qu'on attend : trois chances avant
+  // l'expiration. Et l'on rejoue la recherche ENTIERE, pas un simple rafraichissement
+  // de waitingAt : si l'autre a pris la place entre-temps, la regle refuserait mon
+  // ecriture (attenteAPrendre) et je resterais orphelin -- alors que la recherche
+  // complete, elle, l'apparie.
+  const RELANCE_FILE_MS = 20000;
   // Au bout de ce delai en file, l ecran PROPOSE de defier un Echo en
   // attendant : une offre, jamais un automatisme -- la recherche continue
   // tant que le bouton n est pas touche, et jamais un bot deguise en humain.
@@ -18064,11 +18074,64 @@ export default function Emprise() {
     venuDesAmisRef.current = false;
     setOnlineStatus("Recherche d'un adversaire...");
     setPhase("online-waiting");
+    // Une nouvelle recherche, un nouveau numero : une relance d'une recherche precedente,
+    // encore en vol sur un reseau lent, se reconnait perimee et ne touche plus a rien.
+    rechercheRef.current += 1;
+    // Le premier essai tient le verrou du battement : une transaction qui trainerait plus
+    // de 20 s ne doit pas voir partir une relance en parallele, qui reprendrait la place
+    // que ce premier essai vient peut-etre de quitter en appariant. Le verrou retient
+    // l'operation qui le tient : elle seule peut le rendre.
+    const essai = relancerFile(enClassique ? "classique" : "classe", true);
+    relanceEnVolRef.current = essai;
+    try {
+      await essai;
+    } catch (e) {
+      setFileAttente(false);
+      setOnlineStatus("");
+      setMode(null);
+      setOnlineError("Recherche impossible. Vérifiez votre connexion.");
+      // La recherche ne part que du bouton Classé : en cas d'échec on rend le joueur au
+      // hub, jamais à l'écran des codes d'ami où il n'a rien à faire.
+      setPhase("landing");
+    } finally {
+      if (relanceEnVolRef.current === essai) relanceEnVolRef.current = null;
+    }
+  }
+
+  // La transaction du salon, seule (10/09) : elle reprend ma place ou apparie celui qui
+  // attend. Elle ne refait pas la mise en scene de la recherche (plateau, ecran d'attente,
+  // message) -- chercherAdversaire s'en charge, le battement la rejoue -- et ne touche
+  // l'ecran que si elle apparie, comme le premier essai. La cle de file arrive en
+  // argument : au premier appel, fileCourante vient d'etre posee et l'etat React n'est
+  // pas encore relu.
+  // premierEssai : l'essai que le joueur vient de demander. Son echec remonte a
+  // chercherAdversaire (message et retour au hub) ; celui d'une relance est avale,
+  // la suivante reessaiera dans 20 s. Pas « premier » : la transaction declare deja
+  // ce nom pour le premier joueur, et le masquerait.
+  async function relancerFile(fileCle, premierEssai = false) {
+    const enClassique = fileCle === "classique";
+    if (!myUid) return;
+    // La recherche pour laquelle je joue : finie (Retour, entree en partie) ou remplacee
+    // par une autre, peut-etre dans l'autre file, et une relance n'a plus rien a y faire.
+    const jeton = rechercheRef.current;
+    const rechercheFinie = () => !fileAttenteRef.current || rechercheRef.current !== jeton;
     try {
       const lobbyRef = doc(db, "matchmaking", FILES_APPARIEMENT[enClassique ? "classique" : "classe"]);
       const apparie = await runTransaction(db, async (tx) => {
         const lobbySnap = await tx.get(lobbyRef);
         const lobby = lobbySnap.exists() ? lobbySnap.data() : {};
+        // Deux gardes propres a la RELANCE (le premier essai n'en a pas besoin). Sa
+        // recherche est finie ou remplacee : on ne reecrit rien, sinon on reprendrait une
+        // place quittee -- ou celle de l'autre file -- et le suivant serait apparie a un
+        // fantome. Et une annonce RECENTE qui m'est adressee : c'est l'ecouteur qui la
+        // prend. L'effacer ici, comme le premier essai efface une vieille annonce,
+        // renverrait en file celui qui vient d'etre apparie pendant que l'autre l'attend
+        // dans la partie. L'ecouteur accepte une annonce jusqu'a 60 s a son horloge, puis
+        // relit la partie avant d'y entrer : la garde tient donc un battement de plus.
+        // Au-dela, l'annonce est morte, elle s'efface comme avant et je reprends ma place.
+        if (!premierEssai && rechercheFinie()) return null;
+        if (!premierEssai && lobby.matchedUid === myUid && !!lobby.matchedAt
+            && (Date.now() - lobby.matchedAt) < ATTENTE_PERIMEE_MS + RELANCE_FILE_MS) return null;
         const attenteValide = !!lobby.waitingUid && lobby.waitingUid !== myUid
           && !!lobby.waitingAt && (Date.now() - lobby.waitingAt) < ATTENTE_PERIMEE_MS;
         if (!attenteValide) {
@@ -18155,6 +18218,15 @@ export default function Emprise() {
         return { code };
       });
       if (apparie) {
+        // Une relance qui apparie alors que sa recherche vient de finir (Retour, « Defier
+        // un Echo », une autre recherche, dans l'instant entre sa decision et son commit)
+        // ne change pas d'ecran : le joueur est deja ailleurs. La partie creee est aussitot
+        // annulee avant son debut, et l'autre revient au menu au lieu d'attendre un
+        // absent. Le premier essai, lui, entre toujours : le joueur vient de la demander.
+        if (!premierEssai && rechercheFinie()) {
+          deposerAbandon(apparie.code, "red", "abandon", null);
+          return;
+        }
         // L'appariement a eu lieu : la partie existe et l'adversaire y est deja annonce.
         // On reaffirme le mode, car un Retour appuye PENDANT la transaction l'a peut-etre
         // remis a null — on serait alors entre dans la partie sans que l'ecouteur, qui
@@ -18172,15 +18244,35 @@ export default function Emprise() {
         setPhase("select-blue");
       }
     } catch (e) {
-      setFileAttente(false);
-      setOnlineStatus("");
-      setMode(null);
-      setOnlineError("Recherche impossible. Vérifiez votre connexion.");
-      // La recherche ne part que du bouton Classé : en cas d'échec on rend le joueur au
-      // hub, jamais à l'écran des codes d'ami où il n'a rien à faire.
-      setPhase("landing");
+      if (premierEssai) throw e;
     }
   }
+
+  // Tant que j'attends, je rejoue la recherche : relancerFile reprend ma place, ou
+  // apparie celui qui l'a prise entre-temps et me fait alors entrer en partie.
+  // Le verrou evite deux transactions en vol si le reseau traine.
+  const relanceEnVolRef = useRef(null);
+  // fileAttente, lisible DANS la transaction d'une relance : la closure du battement
+  // garde l'etat du rendu qui l'a armee, et dirait toujours « en file ».
+  const fileAttenteRef = useRef(false);
+  fileAttenteRef.current = fileAttente;
+  // Le numero de la recherche en cours, que chercherAdversaire incremente.
+  const rechercheRef = useRef(0);
+  useEffect(() => {
+    // L'ecouteur du salon en erreur (onlineError, le seul qu'une recherche puisse poser) :
+    // plus personne n'entendrait les annonces. Le battement cesse alors d'entretenir la
+    // place, qui perime en 60 s comme avant lui, au lieu d'attirer un apparieur apres
+    // l'autre vers un joueur sourd.
+    if (!fileAttente || !myUid || onlineError) return;
+    const id = setInterval(() => {
+      if (relanceEnVolRef.current) return;
+      const relance = relancerFile(fileCourante);
+      relanceEnVolRef.current = relance;
+      relance.finally(() => { if (relanceEnVolRef.current === relance) relanceEnVolRef.current = null; });
+    }, RELANCE_FILE_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileAttente, myUid, fileCourante, onlineError]);
 
   // Quitter une partie en ligne EN COURS : c'est un abandon. Le document le signale à
   // l'adversaire, qui remporte la victoire (son écouteur affiche la cérémonie). En Classé,
