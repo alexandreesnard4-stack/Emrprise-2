@@ -152,3 +152,4 @@ Sur les deux arbres de tournoi, le sceau de chaque plaque est rond : les médail
 Pendant un tournoi solo, Retour demande confirmation avant d'abandonner : le tournoi ne disparaît plus d'une pression involontaire.
 En Confluence, l'avant-partie donne à chaque camp son vrai bandeau : médaillon, pseudo, style et niveau, comme dans les autres modes.
 Un joueur qui arrive par le lien d'un ami devient son Écuyer : il reçoit une bannière à la fin du tutoriel, et 300 pièces au premier duel entre eux ; son Chevalier gagne une bannière, un médaillon puis une seconde bannière en menant ses Écuyers au duel.
+La page Amis montre « Mes Écuyers » : combien vous en avez menés au duel, le prochain palier, et un bouton Inviter qui partage votre lien.
