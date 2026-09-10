@@ -3290,9 +3290,17 @@ async function loadProgression() {
 }
 
 // ---------- La bourse : gemmes et possessions (meme stockage hybride) ----------
-// Le solde d'essai. VERSE UNE FOIS, marque dans la sauvegarde, et affiche comme un essai
-// a l'ecran : le jour du lancement cette constante tombe a zero, personne ne garde de
-// gemmes gratuites, et le champ essaiVerse dit qui en avait recu.
+// La bourse de DEPART, versee UNE fois et marquee dans la sauvegarde (essaiVerse).
+// 100 gemmes (10/09, decision du Commandant) : l'entree d'un tournoi en ligne en
+// coute 20, donc cinq tournois pour gouter au mode. Ni plus, ni zero -- a zero, un
+// joueur neuf ne toucherait pas au tournoi avant le niveau 5, seul palier ou des
+// gemmes tombent (50 tous les 5 niveaux). Et 100 gemmes n'achetent RIEN en
+// boutique : le dos illustre le moins cher en vaut 150, la banniere de prestige 600.
+// C'est du carburant a tournois, pas une garde-robe offerte.
+// Le commentaire d'avant annoncait une chute a zero le jour du lancement : cette
+// decision-ci la remplace.
+const BOURSE_ESSAI = 100;
+
 // L'ancre du plan : 100 gemmes pour environ 1 euro. La mention dit ce que chaque palier
 // rend de plus par euro ; la plus grande porte « Meilleure offre ». Les paliers de
 // reserve (5900, 14000) existent dans le plan mais pas ici : pas au lancement.
@@ -4002,7 +4010,6 @@ function resteAvantRotation(maintenant) {
   return BOUTIQUE_REFERENCE + (jourAbsoluBoutique(t) + 1) * 86400000 - t;
 }
 
-const BOURSE_ESSAI = 1000;
 const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "", medaillonEquipe: MEDAILLON_REPLI, chevalier: "", primeEcuyerVersee: false, ecuyersMenes: [] };
 let memoryBourse = null;
 
