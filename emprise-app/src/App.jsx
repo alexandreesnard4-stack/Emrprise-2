@@ -19996,11 +19996,15 @@ export default function Emprise() {
   // nouveau du même camp referme celui qui l'était (repli animé) ; celui d'en face reste
   // tel quel, pour comparer les deux mains. Toucher deux fois le même Ordre le referme.
   function toggleFan(owner, ability) {
-    // En ligne, l'éventail ADVERSE reste fermé : l'ouvrir révélerait les rotations
-    // restantes de l'adversaire — ses rangs exacts encore en main. Le médaillon et son
-    // compteur suffisent à savoir combien de cartes il lui reste par Ordre. En local et
-    // contre l'Écho, comportement inchangé (l'appareil est partagé, rien à cacher).
-    if (mode === "online" && owner !== onlineRole) return;
+    // 10/09 : l'eventail ADVERSE s'ouvre desormais EN LIGNE AUSSI, sur tous les modes.
+    // La garde d'avant protegeait peu : les quatre cartes d'un Ordre sont les memes
+    // quatre rangs pivotes (makeOrderQuad), le medaillon dit quel Ordre l'adversaire
+    // tient, l'apercu d'avant-partie en montre une carte et le compteur dit combien il
+    // lui en reste. Restait la ROTATION encore en main, deductible de ce qui est pose.
+    // On remplacait donc un affichage par un travail de memoire -- au profit du seul
+    // joueur qui memorise. Les Scribes, eux, restent voiles (isConcealed) : c'est une
+    // regle de jeu, pas une pudeur d'affichage. Et l'on ne peut toujours pas JOUER les
+    // cartes d'en face : canDragCard s'en charge.
     setFanOpen((cur) => {
       const actuel = cur[owner];
       if (actuel) {
@@ -20070,15 +20074,9 @@ export default function Emprise() {
     // d'Azur occupant le meme rang — chaque camp numerote sa main a partir de zero.
     const campAugure = mode === "local" ? turn : "blue";
     const canInteract = !(mode === "bot" && owner === "red"); // le bot ne se laisse jamais toucher
-    // La meme garde qu'au toucher (voir toggleFan), mais AU RENDU. Elle manquait : le
-    // toucher etait garde, l'affichage ne l'etait pas. Un eventail reste ouvert d'un
-    // match a l'autre devenait celui de l'ADVERSAIRE des que les camps s'inversaient --
-    // revanche, tour de tournoi suivant -- et ses rangs restants se lisaient a
-    // decouvert, ce que la regle interdit precisement. Les remises a zero ajoutees le
-    // meme jour ferment chaque chemin connu ; celle-ci ferme les autres, y compris ceux
-    // qu'on n'a pas encore trouves. 09/09.
-    const eventailInterdit = mode === "online" && owner !== onlineRole;
-    // Les Scribes cachent leurs rangs a l ADVERSAIRE. Au bac a sable il n y en a pas :
+    // Les Scribes cachent leurs rangs a l ADVERSAIRE, et c'est le SEUL secret d'une
+    // main : depuis le 10/09 l'eventail d'en face s'ouvre partout, y compris en ligne.
+    // Au bac a sable il n y en a pas :
     // on y joue seul, des deux cotes, precisement pour tout voir — le voile n y montrait
     // que des « ? » illisibles.
     const isConcealed = (card) =>
@@ -20086,8 +20084,8 @@ export default function Emprise() {
       (mode === "bot" ? owner === "red" : mode === "online" ? onlineRole !== owner : turn !== owner);
 
     return groups.map((group) => {
-      const isOpen = !eventailInterdit && fanOpen[owner] === group.ability;
-      const isClosing = !isOpen && !eventailInterdit && fanClosing[owner] === group.ability;
+      const isOpen = fanOpen[owner] === group.ability;
+      const isClosing = !isOpen && fanClosing[owner] === group.ability;
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
       const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
