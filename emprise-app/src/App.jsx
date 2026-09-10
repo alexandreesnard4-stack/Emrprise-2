@@ -3692,10 +3692,12 @@ const BANNIERES = [
   { cle: "pieces-armada", nom: "L'Armada Noire", image: "/bannieres/pieces-armada.webp", source: "pieces", prix: 3000, focalY: 50 },
   { cle: "pieces-colosse", nom: "Le Colosse Endormi", image: "/bannieres/pieces-colosse.webp", source: "pieces", prix: 3000, focalY: 30 },
   // Le parrainage (10/09) : L'Ecuyer est offerte a l'invite a la fin de son
-  // tutoriel ; Le Chevalier et L'Ost se gagnent en menant ses Ecuyers au duel.
+  // tutoriel ; La Veillee d'Armes et L'Ost se gagnent en menant ses Ecuyers au duel.
+  // La cle reste "chevalier" : c'est le palier qu'elle nomme, pas le titre affiche
+  // (renomme le 10/09 -- "Le Chevalier" se confondait avec le role du parrain).
   // Aucune ne s'achete : la source ecuyer est inconnue de la boutique.
   { cle: "ecuyer", nom: "L'Écuyer", image: "/bannieres/ecuyer.webp", source: "ecuyer", focalY: 50 },
-  { cle: "chevalier", nom: "Le Chevalier", image: "/bannieres/chevalier.webp", source: "ecuyer", focalY: 50 },
+  { cle: "chevalier", nom: "La Veillée d'Armes", image: "/bannieres/chevalier.webp", source: "ecuyer", focalY: 50 },
   { cle: "ost", nom: "L'Ost", image: "/bannieres/ost.webp", source: "ecuyer", focalY: 50 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
