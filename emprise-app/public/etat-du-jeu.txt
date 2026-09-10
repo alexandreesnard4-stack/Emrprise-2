@@ -154,3 +154,4 @@ En Confluence, l'avant-partie donne à chaque camp son vrai bandeau : médaillon
 Un joueur qui arrive par le lien d'un ami devient son Écuyer : il reçoit une bannière à la fin du tutoriel, et 300 pièces au premier duel entre eux ; son Chevalier gagne une bannière, un médaillon puis une seconde bannière en menant ses Écuyers au duel.
 La page Amis montre « Mes Écuyers » : combien vous en avez menés au duel, le prochain palier, et un bouton Inviter qui partage votre lien.
 En ligne aussi, vous pouvez ouvrir l'éventail de l'adversaire pour comparer les deux mains ; les cartes des Scribes y restent voilées.
+Bourse de départ : chaque nouveau Commandant reçoit à son arrivée de quoi s'inscrire à cinq tournois en ligne ; elle n'achète rien en boutique.
