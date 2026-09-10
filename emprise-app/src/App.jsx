@@ -19182,12 +19182,22 @@ export default function Emprise() {
       if (tournoiOnlineId) { setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setPickerChoice([]); setPhase("tourney-online"); return; }
       abandonnerAvantDebut();
     } else if (phase === "select-blue") {
-      setPickerChoice([]);
       if (mode === "online") {
+        setPickerChoice([]);
         if (tournoiOnlineId) { setOnlineGameId(null); setOnlineRole(null); setOnlineStatus(""); setPhase("tourney-online"); return; }
         abandonnerAvantDebut();
-      } else if (tourney.active) { setTourney((t) => ({ ...t, active: false })); setPhase("landing"); }
-      else setPhase(mode === "bot" ? "select-assist" : "landing");
+      } else if (tourney.active) {
+        // Retour n'efface plus un tournoi en cours sans le demander (09/09) : trois tours
+        // gagnes disparaissaient sur un pouce qui effleure le bord de l'ecran. Le panneau
+        // confirmQuit dit deja « Abandonner le tournoi ? » quand tourney.active est vrai,
+        // et son bouton passe par reset, qui referme le tournoi proprement.
+        // setPickerChoice([]) a quitte le haut de la branche : vider la selection alors
+        // qu'on va peut-etre RESTER sur l'ecran effacerait le choix en cours pour rien.
+        setConfirmQuit(true);
+      } else {
+        setPickerChoice([]);
+        setPhase(mode === "bot" ? "select-assist" : "landing");
+      }
     } else if (phase === "select-reserve-blue") {
       setReserveChoix([]);
       setPickerChoice([]);
