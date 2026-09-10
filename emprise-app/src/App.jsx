@@ -7057,24 +7057,7 @@ const APP_STYLES = `
         /* L'etendard-etiquette (Confluence) : une bande large, le nom pose
            sur le voile gauche. L'avant-partie classique et l'attente en ligne
            vivent desormais dans les territoires. */
-        .vs-etendard {
-          position: relative; width: min(320px, 86vw); height: 58px;
-          margin: 0 auto; border-radius: 10px; overflow: hidden;
-          background-size: cover; background-position: center;
-          border: 1px solid rgba(255,255,255,0.14);
-          display: flex; align-items: center;
-        }
-        .vs-etendard::before {
-          content: ""; position: absolute; inset: 0;
-          background: linear-gradient(90deg, rgba(8,6,12,0.78), rgba(8,6,12,0.2) 55%, transparent);
-        }
-        .vs-etendard span {
-          position: relative; z-index: 1; padding-left: 12px;
-          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #f5efe2;
-          text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-        }
-        .vs-etendard.mienne span { color: var(--blue-bright); }
-        /* L'annonce de deblocage en fin de partie : fondu en opacity seule. */
+       /* L'annonce de deblocage en fin de partie : fondu en opacity seule. */
         .cer-banniere {
           font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; color: var(--gold-bright);
           animation: cer-xp-parait 0.5s ease-out 1s both;
@@ -24241,6 +24224,47 @@ export default function Emprise() {
             return true;
           });
         };
+        // Le bandeau d'un camp en Confluence (10/09) : la MEME forme que territoireVs
+        // -- medaillon, pseudo, style, niveau, poses sur la banniere -- mais sans le
+        // bloc .main-et-reserve, parce que la main est COMMUNE aux deux camps ici :
+        // elle est rendue une seule fois entre les deux bandeaux. Appeler territoireVs
+        // y aurait ajoute deux rangees de cartes vides.
+        // L'Echo n'a ni medaillon, ni style, ni niveau : il n'en a pas. Son bandeau
+        // ne porte que son Etendard de difficulte et son nom.
+        const bandeauConfluence = (fond, nom, mienne) => {
+          const titre = mienne ? titrePrincipal(stats) : null;
+          const niveau = mienne ? niveauDepuisXp(progression.xpTotal).niveauJoueur : null;
+          return (
+            <div className="territoires" style={mienne ? { marginTop: 12 } : undefined}>
+              <div className="camp-vs">
+                <div className="territoire" style={fond ? { backgroundImage: `url("${fond.image}")` } : undefined}>
+                  <div className="territoire-voile" aria-hidden="true" />
+                  <div className="territoire-tete">
+                    {mienne && (
+                      <span
+                        className="territoire-medaillon"
+                        style={{ backgroundImage: `url("${imageMedaillon(bourse.medaillonEquipe)}")` }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div className="territoire-identite">
+                      <span className="territoire-pseudo">{nom}<span className="lecteur-seul">{mienne ? " (votre camp)" : " (camp adverse)"}</span></span>
+                      {titre && <span className="territoire-titre">{titre}</span>}
+                      {mienne && !titre && <span className="territoire-titre en-devenir">Votre style se dessine</span>}
+                    </div>
+                    {niveau !== null && (
+                      <span className="territoire-paire">
+                        <span className="territoire-niveau" aria-label={`Niveau ${niveau}`}>
+                          <span className="territoire-niveau-nombre" aria-hidden="true">{niveau}</span>
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
         return (
           <div className="order-picker">
             {/* En ligne il n'y a nulle part ou revenir : la partie est deja ouverte chez
@@ -24248,13 +24272,13 @@ export default function Emprise() {
             {mode !== "online" && <button className="back-btn" onClick={goBack}>← Retour</button>}
             {isConfluence ? (
               <>
-                {/* L'Echo de la Confluence porte aussi l'Etendard de sa
-                    difficulte (la Confluence locale ne passe jamais par cet
-                    apercu : select-red va droit au jeu). */}
-                {botDifficulty && (
-                  <div className="vs-etendard" style={{ backgroundImage: `url("${banniereDeDifficulte(botDifficulty).image}")` }}>
-                    <span>{DIFFICULTIES.find((d) => d.key === botDifficulty)?.label}</span>
-                  </div>
+                {/* L'Echo de la Confluence porte son Etendard de difficulte, en grand
+                    bandeau comme partout ailleurs en avant-partie (la Confluence locale
+                    ne passe jamais par cet apercu : select-red va droit au jeu). */}
+                {botDifficulty && bandeauConfluence(
+                  banniereDeDifficulte(botDifficulty),
+                  DIFFICULTIES.find((d) => d.key === botDifficulty)?.label || "L'Écho",
+                  false
                 )}
                 <h2>Votre main</h2>
                 <div className="sub">
@@ -24265,15 +24289,13 @@ export default function Emprise() {
                     <Card key={card.id} card={card} owner="blue" extraClass="hand" />
                   ))}
                 </div>
-                {/* Ma banniere en bas, comme partout ailleurs en avant-partie. */}
-                {(() => {
-                  const mienne = banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI);
-                  return mienne && (
-                    <div className="vs-etendard mienne" style={{ backgroundImage: `url("${mienne.image}")`, marginTop: 12 }}>
-                      <span>{pseudo || "Vous"}</span>
-                    </div>
-                  );
-                })()}
+                {/* Mon bandeau en bas, comme partout ailleurs en avant-partie : ma
+                    banniere, mon medaillon, mon style et mon niveau. */}
+                {bandeauConfluence(
+                  banniereDeCle(bourse.banniereEquipee) || banniereDeCle(BANNIERE_REPLI),
+                  pseudo || "Vous",
+                  true
+                )}
               </>
             ) : (
               <>
