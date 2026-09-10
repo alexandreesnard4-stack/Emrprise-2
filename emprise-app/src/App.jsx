@@ -14547,7 +14547,7 @@ export default function Emprise() {
   // n'a rien a recopier. Ailleurs, on se rabat sur la copie.
   async function partagerCodeAmi() {
     if (!monCodeAmi) return;
-    const texte = `Rejoins-moi sur EMPRISE, mon identifiant : #${monCodeAmi}`;
+    const texte = `Rejoins-moi sur EMPRISE : tu recevras la bannière de l'Écuyer. Mon identifiant : #${monCodeAmi}`;
     if (navigator.share) {
       try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() + "?ami=" + encodeURIComponent(monCodeAmi) }); return; } catch (e) { /* annule : on copie */ }
     }
@@ -22263,6 +22263,46 @@ export default function Emprise() {
                 ) : (
                   <div className="amis-liste">{amisTries.map((a) => ligneAmi(a, false))}</div>
                 )}
+                {/* Mes Ecuyers (10/09) : la forme d'une ligne d'ami -- le sceau du
+                    dernier Ecuyer mene au duel (Le Premier Duel tant qu'il n'y en a
+                    pas), le compte sur cinq, le prochain palier en clair, une jauge
+                    de trois pixels, et Inviter qui partage mon lien. L'icone de
+                    section est celle de l'ajout en attendant le sceau de l'Ecuyer. */}
+                {(() => {
+                  const menes = bourse.ecuyersMenes || [];
+                  const dernier = menes.length ? menes[menes.length - 1] : null;
+                  const prochain = PALIERS_CHEVALIER.find((p) => p.ecuyers > menes.length);
+                  const lot = prochain
+                    ? (prochain.banniere ? banniereDeCle(prochain.banniere) : medaillonDeCle(prochain.medaillon))
+                    : null;
+                  return (
+                    <>
+                      <div className="amis-sous-titre avec-icone">
+                        <img src="/icones/ami-ajouter.webp" alt="" width="36" height="36" />
+                        Mes Écuyers
+                      </div>
+                      <div className="amis-ligne ecuyers-ligne">
+                        <img
+                          className="amis-avatar"
+                          src={imageMedaillon(dernier && fiches[dernier] ? fiches[dernier].medaillon : null)}
+                          alt="" aria-hidden="true" width="36" height="36"
+                        />
+                        <div className="amis-ligne-texte">
+                          <span className="amis-nom">
+                            <span className="amis-nom-texte">{menes.length} {menes.length > 1 ? "Écuyers" : "Écuyer"} sur {ECUYERS_MAX}</span>
+                          </span>
+                          <span className="amis-code">
+                            {prochain && lot ? `Prochain palier à ${prochain.ecuyers} : ${lot.nom}` : "Tous les paliers sont à vous"}
+                          </span>
+                          <div className="profil-fiche-jauge" style={{ marginTop: 5 }} aria-hidden="true">
+                            <span style={{ width: `${Math.round((menes.length / ECUYERS_MAX) * 100)}%` }} />
+                          </div>
+                        </div>
+                        <button className="amis-btn principal" onClick={partagerCodeAmi}>Inviter</button>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="amis-sous-titre avec-icone">
                   <img src="/icones/ami-ajouter.webp" alt="Ajouter un ami" width="36" height="36" />
                   Ajouter un ami
