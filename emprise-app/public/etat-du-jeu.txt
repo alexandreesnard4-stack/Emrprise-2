@@ -155,3 +155,4 @@ Un joueur qui arrive par le lien d'un ami devient son Écuyer : il reçoit une b
 La page Amis montre « Mes Écuyers » : combien vous en avez menés au duel, le prochain palier, et un bouton Inviter qui partage votre lien.
 En ligne aussi, vous pouvez ouvrir l'éventail de l'adversaire pour comparer les deux mains ; les cartes des Scribes y restent voilées.
 Bourse de départ : chaque nouveau Commandant reçoit à son arrivée de quoi s'inscrire à cinq tournois en ligne ; elle n'achète rien en boutique.
+Recherche d'adversaire (Classé et Partie classique) : votre place en file reste gardée tant que vous attendez, et deux joueurs qui lancent la recherche à plusieurs minutes d'écart se trouvent.
