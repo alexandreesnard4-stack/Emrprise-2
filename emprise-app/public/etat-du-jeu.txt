@@ -150,3 +150,4 @@ Sur l'arbre du tournoi en ligne, toucher la plaque d'un autre joueur ouvre son p
 En boutique, l'aperçu d'un plateau rentre dans sa carte : il ne déborde plus sur la bordure.
 Sur les deux arbres de tournoi, le sceau de chaque plaque est rond : les médaillons s'y voient entiers.
 Pendant un tournoi solo, Retour demande confirmation avant d'abandonner : le tournoi ne disparaît plus d'une pression involontaire.
+En Confluence, l'avant-partie donne à chaque camp son vrai bandeau : médaillon, pseudo, style et niveau, comme dans les autres modes.
