@@ -73,7 +73,7 @@ La Campagne se lit en deux colonnes : la voie libre à gauche, Le Serment à dro
 Sur le Chemin de la Campagne, les récompenses d'objet montrent leur illustration dès qu'elle existe : trois dos de cartes s'y voient à leurs paliers, cadenas posé tant que le palier n'est pas atteint. Ils ne se réclament pas encore et ne sont pas en boutique.
 Les deux plateaux de la Campagne se voient eux aussi sur le Chemin, à leurs paliers, avec leur vraie dalle ; ils ne figurent pas en boutique, ni dans la sélection du jour ni parmi les plateaux offerts.
 Les huit objets de la première saison de la Campagne ont désormais tous leur image sur le Chemin : trois bannières, trois dos de cartes et deux plateaux, chacun à son palier, cadenas posé tant qu'il n'est pas atteint.
-Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre avec compte à rebours, le titre et la grille tenus en haut de la page.
+Page Ordres : maîtrise par Ordre, fiche détaillée de chaque Ordre, trésor pièces et gemmes affiché, et le teaser d'un prochain Ordre encore scellé, le titre et la grille tenus en haut de la page.
 Page Boutique épurée : seuls la bannière du joueur et le trésor restent en haut, le catalogue occupe le reste de l'écran.
 Un auvent d'or et de tissu coiffe la Boutique et reste accroché en haut pendant que les rayons défilent dessous.
 La Boutique a son propre fond d'échoppe sombre, distinct du ciel du hub, immobile pendant que les rayons défilent.
