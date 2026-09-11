@@ -8422,6 +8422,20 @@ const APP_STYLES = `
           background: rgba(8,6,12,0.6); border: 1px solid rgba(203,164,86,0.35);
           color: var(--gold); font-size: 12px; line-height: 1; padding: 0;
         }
+        /* Sur le HUB seulement (11/09), la capsule descend dans le couloir vide entre
+           les deux colonnes d'icones : a 8 px du haut elle recouvrait le bandeau
+           d'identite, pseudo et carte de niveau compris. Mesure prise sur une capture
+           reelle en 390 px : colonne de gauche jusqu'a x 65, colonne de droite a partir
+           de x 330, et la bande y 128-166 (apres la zone sure) est vide des deux cotes.
+           La largeur est bridee plus court qu'en haut d'ecran pour qu'un pseudo long ne
+           vienne pas mordre les icones : le texte a deja son ellipse. Les quatre autres
+           ecrans qui portent cette capsule gardent le haut -- la meme hauteur y tombe
+           sur une ligne d'ami. Si une rangee d'icones s'ajoute au hub un jour, ce 128
+           est a remesurer. */
+        .capsule-defi.sous-les-icones {
+          top: calc(128px + env(safe-area-inset-top, 0px));
+          max-width: min(236px, calc(100vw - 154px));
+        }
         /* Entree ~200 ms (10 % de 2,1 s), tenue ~1,6 s, sortie ~300 ms. */
         @keyframes capsule-vie {
           0% { opacity: 0; transform: translate(-50%, -6px); }
@@ -20871,7 +20885,7 @@ export default function Emprise() {
           phase : elle couvre le hub et les phases de choix en ligne, pour que
           « X a releve le defi ! » se lise au moment ou l'on y entre. */}
       {((defiEnvoye && defiEnvoye.code && !calqueOuvert) || defiAvis) && (
-        <div className="capsule-defi" role="status">
+        <div className={`capsule-defi ${phase === "landing" ? "sous-les-icones" : ""}`} role="status">
           {defiEnvoye && defiEnvoye.code && !calqueOuvert ? (
             <>
               <span className="capsule-defi-texte">
