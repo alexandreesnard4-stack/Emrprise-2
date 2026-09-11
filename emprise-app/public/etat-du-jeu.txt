@@ -22,7 +22,7 @@ Contre un Écho : quatre niveaux de difficulté, de Novice à Seigneur de Guerre
 Mode Histoire : huit chapitres, un par Ordre, avec un combat final par chapitre.
 Duel local : deux joueurs sur le même appareil.
 Confluence : huit Ordres draftés, la même main pour les deux camps (contre l'Écho ou en local).
-Bac à sable : tous les Ordres en main pour essayer librement.
+Le panneau des modes de jeu ne propose plus le Bac à sable, réservé aux essais de développement.
 Partie classée en ligne : appariement automatique, trophées, ligues de Bronze à Légende, arène visuelle selon la ligue.
 Partie classique en ligne : appariement automatique dans sa propre file, avec les Hérauts, sans trophée ni ligue. Elle verse la moitié des pièces d'une classée.
 L'Écho joue avec son propre dos de cartes, différent de celui offert au départ.
