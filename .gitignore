@@ -7,3 +7,6 @@
 
 # Sources d'images du Commandant (lourdes, hors application)
 emprise-app/sources-images/
+
+# Prompts, planches et captures des missions (dossier de travail, hors application)
+Claude outputs/
