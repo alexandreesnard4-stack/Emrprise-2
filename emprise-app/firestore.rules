@@ -1375,6 +1375,29 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- Retours de beta ----------
+    // Un joueur ecrit un retour (bug, idee), que seul l editeur lit dans la console.
+    // Meme esprit que les signalements : creation seule, lecture interdite, champs
+    // bornes, auteur = soi. L identifiant est impose, moi_horodatage : un joueur ne
+    // peut ni ecraser ni viser le document d un autre.
+    match /retours/{id} {
+      allow read: if false;
+      allow create: if connecte()
+        && id.size() <= 64
+        && id.matches('^' + moi() + '_[0-9]+$')
+        && request.resource.data.keys().hasOnly(['de', 'pseudo', 'texte', 'ecran', 'version', 'navigateur', 'largeur', 'hauteur', 'date'])
+        && request.resource.data.de == moi()
+        && request.resource.data.pseudo is string && request.resource.data.pseudo.size() <= 28
+        && request.resource.data.texte is string
+        && request.resource.data.texte.size() >= 3 && request.resource.data.texte.size() <= 500
+        && request.resource.data.ecran is string && request.resource.data.ecran.size() <= 40
+        && request.resource.data.version is string && request.resource.data.version.size() <= 60
+        && request.resource.data.navigateur is string && request.resource.data.navigateur.size() <= 200
+        && request.resource.data.largeur is int && request.resource.data.hauteur is int
+        && request.resource.data.date == request.time;
+      allow update, delete: if false;
+    }
+
     // ---------- Index des codes amis ----------
     // /codesAmi/{code} = { uid }. Lecture « get » seulement : pour trouver quelqu'un il
     // faut connaître son numero, on ne peut pas lister. Un code ne se crée que pour soi,

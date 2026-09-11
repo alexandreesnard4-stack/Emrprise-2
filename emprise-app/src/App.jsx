@@ -6755,6 +6755,14 @@ const APP_STYLES = `
           color: var(--muted); text-align: center;
         }
         .beta-avis b { color: var(--gold-bright); font-weight: 600; }
+        /* La ligne de retour de l encart beta : un lien discret, en capitales dorees,
+           qui ouvre le panneau des retours. Vit et meurt avec EN_BETA. */
+        .beta-avis-retour {
+          display: block; margin: 7px auto 0; padding: 0; background: none; border: none;
+          font-family: 'Cinzel', serif; font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--gold-bright); cursor: pointer;
+          text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(203,164,86,0.5);
+        }
         /* La pastille BETA. Sur l'ovale du Classe elle mord au-dessus du bord ; dans le
            panneau des Modes la banniere coupe ce qui depasse (overflow: hidden), elle s'y
            range donc dans le coin. Deux positions, une seule apparence. */
@@ -13781,6 +13789,23 @@ const APP_STYLES = `
           color: var(--gold-bright); font-size: 15px; line-height: 1; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
         }
+        /* Le panneau des retours de beta. Le champ est a 16 px et pas moins : sous
+           16 px, Safari iOS zoome la page au moment ou l on touche un champ de texte,
+           et le panneau saute. */
+        .retour-panel { padding-top: 0; }
+        .retour-aide { font-family: 'Spectral', Georgia, serif; font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 0; text-align: center; }
+        .retour-texte {
+          width: 100%; box-sizing: border-box; min-height: 124px; resize: none;
+          font-family: 'Spectral', Georgia, serif; font-size: 16px; line-height: 1.45;
+          color: var(--bone); background: var(--bg); border: 1px solid rgba(203,164,86,0.35); border-radius: 10px; padding: 10px 12px;
+        }
+        .retour-texte:focus { outline: none; border-color: var(--gold); }
+        .retour-texte::placeholder { color: rgba(148,138,163,0.7); font-style: italic; }
+        .retour-pied { display: flex; align-items: center; justify-content: space-between; }
+        .retour-compte { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); }
+        .retour-erreur { text-align: center; font-family: 'Spectral', Georgia, serif; font-size: 12px; color: #d98a8a; margin: 0; }
+        .retour-merci { text-align: center; font-family: 'Spectral', Georgia, serif; font-size: 14px; line-height: 1.5; color: var(--bone); padding: 18px 6px 6px; }
+        .retour-merci b { display: block; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-bright); margin-bottom: 8px; }
         .settings-groupe {
           border: 1px solid rgba(203,164,86,0.22); border-radius: 12px;
           background: rgba(30,26,41,0.92); overflow: hidden;
@@ -14418,6 +14443,25 @@ export default function Emprise() {
       pseudoCible: (fichesRef.current[uidAutre] && fichesRef.current[uidAutre].pseudo) || "",
     });
     setSignalementEnvoye((v) => ({ ...v, [uidAutre]: true }));
+  }
+  // Un retour de beta : une trace ecrite une fois, que seul l editeur lit. Le jeu
+  // joint l ecran, la version et le navigateur, pour que « ca marche pas » devienne
+  // un bug qu on peut retrouver.
+  async function envoyerRetour(texte) {
+    if (!myUid) return false;
+    const t = String(texte || "").trim().slice(0, 500);
+    if (t.length < 3) return false;
+    await setDoc(doc(db, "retours", myUid + "_" + Date.now()), {
+      de: myUid,
+      pseudo: String(pseudo || "").slice(0, 28),
+      texte: t,
+      ecran: (String(phase || "") + (hubPage ? "/" + hubPage : "")).slice(0, 40),
+      version: String(VERSION_AFFICHEE).slice(0, 60),
+      navigateur: String(navigator.userAgent || "").slice(0, 200),
+      largeur: window.innerWidth, hauteur: window.innerHeight,
+      date: serverTimestamp(),
+    });
+    return true;
   }
   async function accepterDemande(uidAutre) {
     if (!myUid) return;
@@ -15796,6 +15840,8 @@ export default function Emprise() {
   // Hub d'accueil : page affichée ("boutique" | "jouer" | "ordres") et sens du dernier
   // changement d'onglet, pour orienter le glissement d'entrée de la page.
   const [hubPage, setHubPage] = useState("jouer");
+  const [retourTexte, setRetourTexte] = useState("");
+  const [retourEtat, setRetourEtat] = useState("saisie"); // saisie | envoi | merci | erreur
   // Le minuteur de la rotation (01/09). A la MINUTE, pas a la seconde : une
   // seconde de plus serait un rendu de plus pour rien. Il ne vit que sur la
   // page de la boutique et meurt avec elle. Pose ICI, apres hubPage : plus
@@ -21532,6 +21578,10 @@ export default function Emprise() {
                   <div className="beta-avis">
                     Version <b>bêta</b> · peu de joueurs pour l&apos;instant : le Classé et la Partie
                     classique trouvent rarement un adversaire. Défiez un ami, ou affrontez un Écho.
+                    <button type="button" className="beta-avis-retour"
+                            onClick={() => { setRetourTexte(""); setRetourEtat("saisie"); setActiveModal("retour"); }}>
+                      Un souci, une idée ? Dites-le-nous
+                    </button>
                   </div>
                 )}
                 {/* 01/09 : « Le multijoueur arrive prochainement » a ete retiree.
@@ -22855,6 +22905,38 @@ export default function Emprise() {
                     savoir si un telephone est a jour : si cette ligne manque ou differe de
                     celle de l'ordinateur, l'appareil sert une vieille copie. */}
                 <div className="settings-version">EMPRISE · version du {VERSION_AFFICHEE}</div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === "retour" && (
+            <div className="info-overlay" onClick={() => setActiveModal(null)}>
+              <div className="info-panel retour-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="settings-entete">
+                  <div className="info-panel-title">Un retour ?</div>
+                  <button className="settings-fermer" onClick={() => setActiveModal(null)} aria-label="Fermer">✕</button>
+                </div>
+                {retourEtat === "merci" ? (
+                  <div className="retour-merci"><b>Merci</b>C&apos;est noté. Chaque retour compte, et celui-là servira.</div>
+                ) : (
+                  <>
+                    <p className="retour-aide">Un bug, une idée, quelque chose de bizarre, même petit. L&apos;écran où vous étiez, la version du jeu et votre pseudo sont joints tout seuls.</p>
+                    <textarea className="retour-texte" placeholder="Qu'est-ce qui s'est passé ?" maxLength={500}
+                              value={retourTexte} onChange={(e) => setRetourTexte(e.target.value)} />
+                    {retourEtat === "erreur" && <p className="retour-erreur">Impossible d&apos;envoyer pour l&apos;instant. Réessayez dans un moment.</p>}
+                    <div className="retour-pied">
+                      <span className="retour-compte">{retourTexte.length} / 500</span>
+                      <button className="reset-btn" disabled={retourTexte.trim().length < 3 || retourEtat === "envoi"}
+                              onClick={async () => {
+                                setRetourEtat("envoi");
+                                try { const ok = await envoyerRetour(retourTexte); setRetourEtat(ok ? "merci" : "erreur"); }
+                                catch (e) { setRetourEtat("erreur"); }
+                              }}>
+                        {retourEtat === "envoi" ? "Envoi…" : "Envoyer"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
