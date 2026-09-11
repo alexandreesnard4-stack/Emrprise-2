@@ -19195,14 +19195,17 @@ export default function Emprise() {
   // L'ecriture unique : Ordres, main et Reserve ensemble. Meme try/catch que partout
   // ailleurs — updateDoc valide ses arguments de facon SYNCHRONE et leve avant de rendre
   // une promesse, une donnee invalide echapperait donc au .catch.
-  async function envoyerOrdresEtReserve(choisies) {
-    const ordres = onlineRole === "blue" ? blueOrders : redOrders;
-    if (!ordres || ordres.length !== 2 || !onlineGameId) return;
+  // Les Ordres et la main peuvent etre passes explicitement : la Confluence en ligne
+  // les calcule et envoie dans le MEME tour, quand setBlueOrders/setBlueHand n'ont pas
+  // encore pris effet. Sans argument, on lit l'etat comme avant.
+  async function envoyerOrdresEtReserve(choisies, ordresExplicites, mainExplicite) {
+    const ordres = ordresExplicites || (onlineRole === "blue" ? blueOrders : redOrders);
+    if (!ordres || ordres.length !== 2 || !onlineGameId) return false;
     // La main DEJA posee, jamais une nouvelle : makeHand rebat les quatre orientations a
     // chaque appel, et en refabriquer une ici envoyait a l'adversaire un ordre de cartes
     // different de celui que le joueur avait sous les yeux.
-    const hand = onlineRole === "blue" ? blueHand : redHand;
-    if (hand.length !== 8) return;
+    const hand = mainExplicite || (onlineRole === "blue" ? blueHand : redHand);
+    if (hand.length !== 8) return false;
     const moi = profilPublic();
     // La declaration anti-complices : combien de classees deja TERMINEES
     // aujourd hui contre CET adversaire, lue de MA sauvegarde locale. Meme
@@ -19251,12 +19254,14 @@ export default function Emprise() {
       // promesse ne se resolve. Le forcer ici renverrait le second joueur a l'ecran
       // d'attente alors que la partie a demarre.
       setPhase((p) => (p === "play" || p === "preview" ? p : "online-waiting"));
+      return true;
     } catch (e) {
       // L'ecran garde ses huit cartes et la selection du joueur : il n'a qu'a reappuyer.
       // L'echeance du minuteur, elle, a deja brule son verrou -- on le rouvre, sinon un
       // reseau coupe une seconde condamnait le joueur a ne plus jamais partir.
       reserveAutoRef.current = false;
       setOnlineError("Impossible d'enregistrer vos Ordres. Réessayez.");
+      return false;
     }
   }
 
@@ -20606,8 +20611,21 @@ export default function Emprise() {
     else { setRedOrders(ordres); setRedHand(main); }
     setPickerChoice([]);
     setReserveChoix([]);
-    setReserveSource(cartesPourReserve(ordres));
-    setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
+    setReserveSource([]);
+    // La Reserve ne se CHOISIT pas en Confluence (11/09). Le mode promet « la meme main
+    // pour les deux camps » : deux joueurs qui mettent de cote deux cartes differentes
+    // la brisent des la Mort Subite. Elle se compose donc d office, comme en Confluence
+    // solo et en Confluence a 2 -- et a partir de la MAIN COMMUNE, pas d un makeHand
+    // neuf : reserveAutomatique est deterministe, la meme main rend donc les deux memes
+    // cartes des deux cotes. On envoie dans la foulee, et l ecouteur mene a l apercu.
+    (async () => {
+      const parti = await envoyerOrdresEtReserve(reserveAutomatique(main), ordres, main);
+      if (!parti) {
+        // Envoi rate (reseau) : on rearme, et l effet repartira au prochain passage de
+        // l ecouteur. Sans ca, ordresTiresRef condamnait le joueur a une attente muette.
+        ordresTiresRef.current = null;
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, phase, partieDefi, onlineGameId, onlineRole]);
 
