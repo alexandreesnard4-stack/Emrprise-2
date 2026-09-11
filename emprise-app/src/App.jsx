@@ -3913,6 +3913,8 @@ function jourAbsoluBoutique(maintenant) {
 // boutique au vrai jour, sans avoir rien laisse derriere.
 const TEST_ROTATION = typeof window !== "undefined"
   && new URLSearchParams(window.location.search).get("test-rotation") === "1";
+// Le Bac à sable est un banc d'essai : il ne se montre qu'avec ?bac=1 dans l'adresse.
+const BAC_VISIBLE = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("bac") === "1";
 let decalageBoutique = 0;
 function decalerBoutique(jours) {
   if (!TEST_ROTATION) return 0;
@@ -15779,6 +15781,7 @@ export default function Emprise() {
     { famille: "multi", titre: "Jouer avec un ami", phrase: "À distance, en défiant un ami de votre liste", image: "/modes/ami.webp",
       lancer: () => { setOnlineError(""); venuDesAmisRef.current = false; setPhase("online-menu"); } },
     { famille: "entrainement", titre: "Bac à sable", phrase: "Les deux camps, tous les Ordres, sans minuteur", image: "/modes/bac.webp",
+      cache: !BAC_VISIBLE,
       lancer: () => chooseTestMode() },
   ];
   // L'avis du hub est rouge par defaut (c'est un message d'echec). Une victoire par
@@ -22585,7 +22588,7 @@ export default function Emprise() {
                 <div className="info-panel-title">Modes de jeu</div>
 
                 <div className="modes-onglets" role="tablist">
-                  {FAMILLES_MODES.map((f) => (
+                  {FAMILLES_MODES.filter((f) => f.cle !== "entrainement" || BAC_VISIBLE).map((f) => (
                     <button key={f.cle} role="tab" aria-selected={familleModes === f.cle}
                             className={`modes-onglet ${familleModes === f.cle ? "actif" : ""}`}
                             onClick={() => setFamilleModes(f.cle)}>
@@ -22597,7 +22600,7 @@ export default function Emprise() {
                 {/* La cle change avec l'onglet : React remonte la liste et rejoue l'entree
                     des bannieres, qui glissent l'une apres l'autre. */}
                 <div className="modes-bannieres" key={familleModes}>
-                  {MODES_DE_JEU.filter((m) => m.famille === familleModes).map((m, i) => {
+                  {MODES_DE_JEU.filter((m) => m.famille === familleModes && !m.cache).map((m, i) => {
                     return (
                       <button key={m.titre} className="mode-banniere" style={{ animationDelay: `${i * 60}ms` }}
                               onClick={() => { setActiveModal(null); m.lancer(); }}
