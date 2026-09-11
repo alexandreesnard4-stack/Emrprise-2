@@ -160,3 +160,4 @@ Les bannières L'Écuyer, La Veillée d'Armes et L'Ost s'achètent en pièces au
 L'écran Jouer annonce une version bêta : peu de joueurs pour l'instant, le Classé et la Partie classique trouvent rarement un adversaire, et une pastille BÊTA le rappelle sur ces deux modes, qui restent jouables.
 En défi Confluence entre amis, la Réserve se compose d'office, la même pour les deux camps : plus d'écran de choix, la partie passe directement au face-à-face.
 Le prochain Ordre, encore scellé, n'affiche plus de date de sortie ni de décompte : son heure viendra.
+L'encart bêta de l'écran Jouer ouvre un panneau « Un souci, une idée ? » : le joueur écrit ce qui a cloché, et le jeu joint l'écran, la version et son pseudo.
