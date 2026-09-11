@@ -312,6 +312,7 @@ const ORDER_STATUS = { AVAILABLE: "disponible", COMING_SOON: "prochainement" };
 //
 // Pas de fuseau écrit : la date est donc locale, et chacun voit minuit chez lui. C'est
 // voulu pour une sortie annoncée « le 26 », pas à une heure précise.
+// Sans emploi depuis le 11/09/2026 : le Geôlier n'a plus de date. Raccrocher releaseDate: NEXT_ORDER_RELEASE à son entrée le jour où la sortie est planifiée.
 const NEXT_ORDER_RELEASE = new Date("2026-09-26T00:00:00");
 
 // ---------- Acces anticipe ----------
@@ -354,7 +355,7 @@ const ORDERS = [
   // filtre CSS et le cadenas (les vieux commentaires qui disaient autre chose mentaient).
   // Le jour de la sortie : passer status à AVAILABLE, retirer essai et releaseDate,
   // remplacer name/icon/desc par nom/description ci-dessous.
-  { key: "geolier", ability: "geolier", name: "???", icon: "📦", portrait: "/portraits/geolier_verrou.jpg", ranks: [7, 5, 5, 3], status: ORDER_STATUS.COMING_SOON, releaseDate: NEXT_ORDER_RELEASE, essai: true, desc: "Prochain Ordre à rejoindre EMPRISE.",
+  { key: "geolier", ability: "geolier", name: "???", icon: "📦", portrait: "/portraits/geolier_verrou.jpg", ranks: [7, 5, 5, 3], status: ORDER_STATUS.COMING_SOON, essai: true, desc: "Prochain Ordre à rejoindre EMPRISE.",
     // ⚠️ TEXTE PROVISOIRE, à remplacer par le Commandant — rien ici n'est du lore
     // définitif. Ces trois champs ne s'affichent que dans la fenêtre d'accès anticipé.
     nom: "Geôliers",
