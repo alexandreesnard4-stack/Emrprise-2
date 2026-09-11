@@ -159,3 +159,4 @@ Sur le hub, la capsule d'un défi en attente descend entre les deux colonnes d'i
 Les bannières L'Écuyer, La Veillée d'Armes et L'Ost s'achètent en pièces au rayon Bannières, et le médaillon L'Éperon récompense un tournoi remporté.
 L'écran Jouer annonce une version bêta : peu de joueurs pour l'instant, le Classé et la Partie classique trouvent rarement un adversaire, et une pastille BÊTA le rappelle sur ces deux modes, qui restent jouables.
 En défi Confluence entre amis, la Réserve se compose d'office, la même pour les deux camps : plus d'écran de choix, la partie passe directement au face-à-face.
+Le prochain Ordre, encore scellé, n'affiche plus de date de sortie ni de décompte : son heure viendra.
