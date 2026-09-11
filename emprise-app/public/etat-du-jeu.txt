@@ -151,10 +151,9 @@ En boutique, l'aperçu d'un plateau rentre dans sa carte : il ne déborde plus s
 Sur les deux arbres de tournoi, le sceau de chaque plaque est rond : les médaillons s'y voient entiers.
 Pendant un tournoi solo, Retour demande confirmation avant d'abandonner : le tournoi ne disparaît plus d'une pression involontaire.
 En Confluence, l'avant-partie donne à chaque camp son vrai bandeau : médaillon, pseudo, style et niveau, comme dans les autres modes.
-Un joueur qui arrive par le lien d'un ami devient son Écuyer : il reçoit une bannière à la fin du tutoriel, et 300 pièces au premier duel entre eux ; son Chevalier gagne une bannière, un médaillon puis une seconde bannière en menant ses Écuyers au duel.
-La page Amis montre « Mes Écuyers » : combien vous en avez menés au duel, le prochain palier, et un bouton Inviter qui partage votre lien.
 En ligne aussi, vous pouvez ouvrir l'éventail de l'adversaire pour comparer les deux mains ; les cartes des Scribes y restent voilées.
 Bourse de départ : chaque nouveau Commandant reçoit à son arrivée de quoi s'inscrire à cinq tournois en ligne ; elle n'achète rien en boutique.
 Recherche d'adversaire (Classé et Partie classique) : votre place en file reste gardée tant que vous attendez, et deux joueurs qui lancent la recherche à plusieurs minutes d'écart se trouvent.
 À l'ouverture du jeu, tout ce qui se gagne pendant la phase d'essai repart à zéro (niveau, trophées, statistiques, quêtes, Flamme, Campagne, Histoire, pièces, gemmes et cosmétiques) ; le nom, le numéro d'ami et les amis restent, et le profil l'annonce sous la carte de niveau.
 Sur le hub, la capsule d'un défi en attente descend entre les deux colonnes d'icônes : le pseudo et la carte de niveau restent lisibles.
+Les bannières L'Écuyer, La Veillée d'Armes et L'Ost s'achètent en pièces au rayon Bannières, et le médaillon L'Éperon récompense un tournoi remporté.
