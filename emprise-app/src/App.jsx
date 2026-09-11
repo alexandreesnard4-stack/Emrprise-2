@@ -2096,6 +2096,13 @@ function getLeague(trophies) {
 // passer ce booléen à true réactive tout d'un coup, sans rien avoir à recoder.
 const HEROES_LEAGUES_ENABLED = false;
 
+// La bêta (11/09). Le jeu tourne, mais il n'a encore qu'une poignee de joueurs :
+// l'appariement du Classe et de la Partie classique aboutit donc rarement. On le DIT,
+// on ne bloque rien -- les deux modes restent jouables, et l'Echo prend le relais au
+// bout de 45 secondes. Le jour ou la beta finit, ce seul booleen retire l'encart ET
+// les deux pastilles : c'est pour ca qu'il existe.
+const EN_BETA = true;
+
 const HEROES = [
   { orderKey: "cendres", name: "Héraut des Cendres", unlockAt: 300, desc: "Attire jusqu'à 2 cartes alignées au lieu d'une" },
   { orderKey: "percee", name: "Héraut des Piques", unlockAt: 600, desc: "Transperce jusqu'à 3 cartes au lieu de 2" },
@@ -6734,6 +6741,28 @@ const APP_STYLES = `
           50%, 100% { background-position: -60% 0; }
         }
         .landing-subtitle { font-family: 'Spectral', Georgia, serif; font-style: italic; font-size: 13px; color: var(--muted); margin: 0 0 26px; }
+        /* L'encart de beta, sous le sous-titre de l'ecran Jouer. Il dit ce qui manque
+           ET quoi faire a la place : un joueur qui lance le Classe, attend dans le vide
+           et ferme l'onglet ne revient pas. */
+        .beta-avis {
+          width: 100%; max-width: 300px; margin: 10px auto 0; box-sizing: border-box;
+          padding: 8px 12px; border-radius: 12px;
+          background: rgba(19,13,29,0.62); border: 1px solid rgba(203,164,86,0.28);
+          font-family: 'Spectral', Georgia, serif; font-size: 11.5px; line-height: 1.45;
+          color: var(--muted); text-align: center;
+        }
+        .beta-avis b { color: var(--gold-bright); font-weight: 600; }
+        /* La pastille BETA. Sur l'ovale du Classe elle mord au-dessus du bord ; dans le
+           panneau des Modes la banniere coupe ce qui depasse (overflow: hidden), elle s'y
+           range donc dans le coin. Deux positions, une seule apparence. */
+        .beta-etiquette {
+          position: absolute; z-index: 2;
+          font-family: 'Cinzel', serif; font-size: 7.5px; font-weight: 700; letter-spacing: 0.2em;
+          padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+          background: #2a2138; border: 1px solid rgba(203,164,86,0.5); color: var(--gold-bright);
+        }
+        .hub-classe-ovale .beta-etiquette { top: -9px; left: 50%; transform: translateX(-50%); }
+        .mode-banniere .beta-etiquette { top: 8px; right: 10px; }
         .league-badge {
           font-family: 'Cinzel', serif; font-size: 12px; color: var(--gold-bright);
           border: 1px solid rgba(203,164,86,0.35); border-radius: 999px; padding: 5px 14px;
@@ -15738,6 +15767,7 @@ export default function Emprise() {
     // EN TETE de l onglet (01/09) : c est le seul mode APPARIE de la famille,
     // et l ordre du tableau est celui de l ecran -- il n y a pas de tri.
     { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/fonds/classique.webp",
+      beta: true,
       lancer: () => chercherAdversaire("classique") },
     { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", image: "/modes/local.webp",
       lancer: () => chooseMode("local") },
@@ -21476,6 +21506,12 @@ export default function Emprise() {
                     Commandant, 29/08) : le titre ne vit plus que sur l'ecran du
                     nom. Le sous-titre reste, seul. */}
                 <p className="landing-subtitle">Un duel de cartes stratégique</p>
+                {EN_BETA && (
+                  <div className="beta-avis">
+                    Version <b>bêta</b> · peu de joueurs pour l&apos;instant : le Classé et la Partie
+                    classique trouvent rarement un adversaire. Défiez un ami, ou affrontez un Écho.
+                  </div>
+                )}
                 {/* 01/09 : « Le multijoueur arrive prochainement » a ete retiree.
                     Elle n etait plus vraie : le Classe, la Partie classique et
                     le defi entre amis se jouent tous en ligne. */}
@@ -21556,7 +21592,10 @@ export default function Emprise() {
                     l'or appelle, le gris attend. Les deux appellent exactement ce qu'ils
                     appelaient avant. */}
                 <div className="hub-jouer-rang">
-                  <button className="hub-classe-ovale" onClick={chercherAdversaire}>Classé</button>
+                  <button className="hub-classe-ovale" onClick={chercherAdversaire}>
+                    {EN_BETA && <span className="beta-etiquette">BÊTA</span>}
+                    Classé
+                  </button>
                   {/* L'etiquette est posee EN ABSOLU sous la pastille : dans le flux, elle
                       aurait rallonge la colonne et decale le centre du cercle par rapport
                       a celui de l'ovale. */}
@@ -22545,6 +22584,7 @@ export default function Emprise() {
                               onClick={() => { setActiveModal(null); m.lancer(); }}
                               aria-label={`${m.titre} : ${m.phrase}`}>
                         <span className="mode-banniere-fond" style={{ backgroundImage: `url(${m.image})` }} aria-hidden="true" />
+                        {EN_BETA && m.beta && <span className="beta-etiquette">BÊTA</span>}
                         <span className="mode-banniere-texte">
                           <span className="mode-banniere-titre">{m.titre}</span>
                           <span className="mode-banniere-phrase">{m.phrase}</span>
