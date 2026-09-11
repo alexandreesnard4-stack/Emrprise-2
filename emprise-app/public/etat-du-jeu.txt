@@ -156,3 +156,4 @@ La page Amis montre « Mes Écuyers » : combien vous en avez menés au duel, le
 En ligne aussi, vous pouvez ouvrir l'éventail de l'adversaire pour comparer les deux mains ; les cartes des Scribes y restent voilées.
 Bourse de départ : chaque nouveau Commandant reçoit à son arrivée de quoi s'inscrire à cinq tournois en ligne ; elle n'achète rien en boutique.
 Recherche d'adversaire (Classé et Partie classique) : votre place en file reste gardée tant que vous attendez, et deux joueurs qui lancent la recherche à plusieurs minutes d'écart se trouvent.
+À l'ouverture du jeu, tout ce qui se gagne pendant la phase d'essai repart à zéro (niveau, trophées, statistiques, quêtes, Flamme, Campagne, Histoire, pièces, gemmes et cosmétiques) ; le nom, le numéro d'ami et les amis restent, et le profil l'annonce sous la carte de niveau.
