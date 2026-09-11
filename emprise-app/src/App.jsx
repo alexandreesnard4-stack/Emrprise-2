@@ -1539,24 +1539,6 @@ function ecrireTutorielVu() {
   try { localStorage.setItem(CLE_TUTORIEL, "1"); } catch (e) { /* non persiste cette session */ }
 }
 
-// ---------- Le Chevalier (10/09) ----------
-// Un lien ?ami= ouvert par un joueur NEUF -- tutoriel jamais vu -- fait de lui
-// l'Ecuyer de ce code. Le code attend ici jusqu'a la fin du tutoriel, ou
-// lierAuChevalier le consomme. Un joueur existant qui suit un lien n'y passe
-// pas : il reste un simple ami. Pose SOUS les aides du tutoriel et non pres
-// d'INTENTION_LIEN : CLE_TUTORIEL est une const, elle n'existe pas encore
-// a la ligne 72 (zone morte temporelle).
-const CLE_CHEVALIER = "emprise-chevalier";
-function lireChevalier() {
-  try { return localStorage.getItem(CLE_CHEVALIER) || ""; } catch (e) { return ""; }
-}
-function oublierChevalier() {
-  try { localStorage.removeItem(CLE_CHEVALIER); } catch (e) { /* stockage bloque */ }
-}
-if (INTENTION_LIEN && INTENTION_LIEN.type === "ami" && !lireTutorielVu()) {
-  try { localStorage.setItem(CLE_CHEVALIER, INTENTION_LIEN.code); } catch (e) { /* non persiste : pas d'Ecuyer, pas d'erreur */ }
-}
-
 // ---------- L'Epoque : la remise a zero de l'ouverture (11/09) ----------
 // Le profil annonce depuis toujours une « progression d'essai ». Cette mission tient
 // la promesse : le jour de l'ouverture, on incremente EPOQUE_ACTUELLE, et au premier
@@ -1578,7 +1560,6 @@ const CLEFS_GARDEES = new Set([
   "emprise-tutoriel",        // il l'a deja suivi : le lui réimposer serait une punition
   "emprise-reduced-motion",  // un reglage d'accessibilite ne se remet jamais a zero
   "emprise-demandes",        // le compteur anti-demarchage des demandes d'ami
-  "emprise-chevalier",       // le code d'un parrain en attente de liaison
   "emprise-messages-directs",// le reglage des messages directs, qui ne se gagne pas
   "emprise-partie-en-ligne", // marqueurs de reprise, ephemeres
   "emprise-tournoi-en-ligne",
@@ -2835,6 +2816,12 @@ async function recordTournoiGagne(tournoiId, prixGemmes = TOURNOI_ENJEU.prixVain
   stats.tournoisCredites = [...vus, tournoiId];
   stats.tournoisGagnes = (stats.tournoisGagnes || 0) + 1;
   await writeStatsRaw(JSON.stringify(stats));
+  // L'Eperon (11/09) : la marque du chevalier, pour un tournoi remporte. Il vit au
+  // meme verrou que le prix -- la garde des tournoisCredites a deja jure que ce
+  // tournoi n'avait jamais ete compte. possederMedaillon jure de son cote qu'on ne
+  // le donne jamais deux fois.
+  const sceau = await possederMedaillon("eperon", false);
+  if (sceau.ajoutee) stats.medaillonDebloque = "eperon";
   // L'enjeu s'accroche au MEME verrou : la garde ci-dessus a deja jure que ce
   // tournoi n'avait jamais ete compte -- elle jure donc pour le prix en gemmes
   // ET pour l'XP du vainqueur (les pieces suivent l'XP toutes seules). Depuis
@@ -3377,17 +3364,6 @@ const PACKS_GEMMES = [
 // pair (le point du premier joueur interdit l'egalite), 3,92 de moyenne, 33 %
 // des parties a 1 point. Les captures ne discriminent pas (10,4 contre 8,4),
 // elles ne paient donc rien.
-// Le parrainage (10/09). La prime de l'Ecuyer est la SEULE monnaie du systeme,
-// versee une fois : le Chevalier, lui, ne gagne que du cosmetique -- des comptes
-// anonymes s'auto-invitent en trente secondes, une banniere ne se revend pas.
-const PRIME_ECUYER = 300;
-const ECUYERS_MAX = 5;
-const PALIERS_CHEVALIER = [
-  { ecuyers: 1, banniere: "chevalier" },
-  { ecuyers: 3, medaillon: "eperon" },
-  { ecuyers: 5, banniere: "ost" },
-];
-
 const PIECES_PARTIES = {
   // La marge de victoire : chaque point d'ecart au score final paie, jusqu'a
   // un plafond -- au-dela, l'ecart en dit plus sur la faiblesse d'en face
@@ -3754,14 +3730,13 @@ const BANNIERES = [
   { cle: "pieces-citadelle", nom: "La Citadelle de l'Aube", image: "/bannieres/pieces-citadelle.webp", source: "pieces", prix: 2500, focalY: 35 },
   { cle: "pieces-armada", nom: "L'Armada Noire", image: "/bannieres/pieces-armada.webp", source: "pieces", prix: 3000, focalY: 50 },
   { cle: "pieces-colosse", nom: "Le Colosse Endormi", image: "/bannieres/pieces-colosse.webp", source: "pieces", prix: 3000, focalY: 30 },
-  // Le parrainage (10/09) : L'Ecuyer est offerte a l'invite a la fin de son
-  // tutoriel ; La Veillee d'Armes et L'Ost se gagnent en menant ses Ecuyers au duel.
-  // La cle reste "chevalier" : c'est le palier qu'elle nomme, pas le titre affiche
-  // (renomme le 10/09 -- "Le Chevalier" se confondait avec le role du parrain).
-  // Aucune ne s'achete : la source ecuyer est inconnue de la boutique.
-  { cle: "ecuyer", nom: "L'Écuyer", image: "/bannieres/ecuyer.webp", source: "ecuyer", focalY: 50 },
-  { cle: "chevalier", nom: "La Veillée d'Armes", image: "/bannieres/chevalier.webp", source: "ecuyer", focalY: 50 },
-  { cle: "ost", nom: "L'Ost", image: "/bannieres/ost.webp", source: "ecuyer", focalY: 50 },
+  // Trois bannieres nees d'un chantier abandonne (« Prendre un Ecuyer », retire le 11/09) :
+  // les images etaient bonnes et fidèles a la direction artistique, elles rejoignent
+  // donc le rayon. Prix cales sur le catalogue : 2000 pour les deux interieurs,
+  // 2500 pour le champ de lances, le plus spectaculaire des trois.
+  { cle: "ecuyer", nom: "L'Écuyer", image: "/bannieres/ecuyer.webp", source: "pieces", prix: 2000, focalY: 40 },
+  { cle: "chevalier", nom: "La Veillée d'Armes", image: "/bannieres/chevalier.webp", source: "pieces", prix: 2000, focalY: 75 },
+  { cle: "ost", nom: "L'Ost", image: "/bannieres/ost.webp", source: "pieces", prix: 2500, focalY: 45 },
 ];
 // La banniere de repli : celle d un adversaire dont la partie ne transporte
 // pas le choix. Depuis le 02/09, l appariement Classe le transporte
@@ -3821,7 +3796,7 @@ const MEDAILLONS = [
   { cle: "pantheon", nom: "Le Panthéon", image: "/medaillons/pantheon.webp", source: "succes",
     obtention: "Vaincre avec chacun des Ordres disponibles", compteur: "ordresVaincus" },
   { cle: "eperon", nom: "L'Éperon", image: "/medaillons/eperon.webp", source: "succes",
-    obtention: "Mener trois Écuyers au duel", compteur: "ecuyers", seuil: 3 },
+    obtention: "Remporter un tournoi" },
 ];
 const MEDAILLON_REPLI = "depart-duel";
 function medaillonDeCle(cle) { return MEDAILLONS.find((m) => m.cle === cle) || null; }
@@ -4065,7 +4040,7 @@ function resteAvantRotation(maintenant) {
   return BOUTIQUE_REFERENCE + (jourAbsoluBoutique(t) + 1) * 86400000 - t;
 }
 
-const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "", medaillonEquipe: MEDAILLON_REPLI, chevalier: "", primeEcuyerVersee: false, ecuyersMenes: [] };
+const DEFAUT_BOURSE = { gemmes: 0, pieces: 0, essaiVerse: false, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], banniereEquipee: "", medaillonEquipe: MEDAILLON_REPLI };
 let memoryBourse = null;
 
 async function readBourseRaw() {
@@ -4099,7 +4074,7 @@ async function writeBourseRaw(str) {
 // se verse ici, une seule fois -- au premier passage comme chez un joueur de la veille.
 async function loadBourse() {
   const brut = await readBourseRaw();
-  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [], ecuyersMenes: [] };
+  let b = { ...DEFAUT_BOURSE, possessions: { plateau: ["faille"], dos: ["blason"], bannieres: [], medaillons: [] }, accesAnticipe: [], misesTournoi: [] };
   if (brut) {
     try {
       const lu = JSON.parse(brut);
@@ -4117,13 +4092,6 @@ async function loadBourse() {
             .filter((m) => m && typeof m.id === "string" && m.id.length <= 12 && Number.isFinite(m.montant))
             .map((m) => ({ id: m.id, montant: Math.max(0, Math.min(1000, Math.floor(m.montant))) }))
             .slice(-16)
-        : [];
-      // Le parrainage (10/09) : l'uid de mon Chevalier, le temoin de ma prime,
-      // et les Ecuyers que j'ai menes au duel -- uniques, bornes a ECUYERS_MAX.
-      b.chevalier = typeof lu.chevalier === "string" && lu.chevalier.length <= 128 ? lu.chevalier : "";
-      b.primeEcuyerVersee = !!lu.primeEcuyerVersee;
-      b.ecuyersMenes = Array.isArray(lu.ecuyersMenes)
-        ? [...new Set(lu.ecuyersMenes.filter((u) => typeof u === "string" && u.length <= 128))].slice(0, ECUYERS_MAX)
         : [];
       for (const famille of Object.keys(FAMILLES_COSMETIQUES)) {
         const cat = FAMILLES_COSMETIQUES[famille].catalogue;
@@ -14292,7 +14260,6 @@ export default function Emprise() {
           trophees: Number.isFinite(d.trophees) ? Math.max(0, Math.floor(d.trophees)) : 0, titre,
           parties: entier(d.parties), victoires: entier(d.victoires), combos,
           ordreFavori, medaillon, banniere, combosParties: entier(d.combosParties), tournois: entier(d.tournois), niveau,
-          parrain: typeof d.parrain === "string" ? d.parrain : "",
           lu: Date.now() }];
       } catch (e) { return [u, { pseudo: "", codeAmi: "", vuLe: 0, trophees: 0, titre: "", combos: [], lu: Date.now() }]; }
     }));
@@ -14625,7 +14592,7 @@ export default function Emprise() {
   // n'a rien a recopier. Ailleurs, on se rabat sur la copie.
   async function partagerCodeAmi() {
     if (!monCodeAmi) return;
-    const texte = `Rejoins-moi sur EMPRISE : tu recevras la bannière de l'Écuyer. Mon identifiant : #${monCodeAmi}`;
+    const texte = `Rejoins-moi sur EMPRISE, mon identifiant : #${monCodeAmi}`;
     if (navigator.share) {
       try { await navigator.share({ title: "EMPRISE", text: texte, url: lienDuJeu() + "?ami=" + encodeURIComponent(monCodeAmi) }); return; } catch (e) { /* annule : on copie */ }
     }
@@ -15447,7 +15414,6 @@ export default function Emprise() {
   // plus bas, apres la declaration de gameOver).
   const [banniereAnnonce, setBanniereAnnonce] = useState(null);
   const [medaillonAnnonce, setMedaillonAnnonce] = useState(null); // l avatar fraichement gagne (03/09)
-  const [primeEcuyerAnnonce, setPrimeEcuyerAnnonce] = useState(false); // la prime du premier duel avec son Chevalier (10/09)
   // L'achat de banniere en cours (l'article du catalogue), et le panneau de
   // choix parmi les possedees ouvert depuis le profil.
   const [achatBanniere, setAchatBanniere] = useState(null);
@@ -15468,7 +15434,6 @@ export default function Emprise() {
     }
     if (md.compteur === "resonances") return `Résonances : ${Math.min(stats.resonancesTotal || 0, md.seuil)}/${md.seuil}`;
     if (md.compteur === "ondes") return `Ondes : ${Math.min(stats.ondesTotal || 0, md.seuil)}/${md.seuil}`;
-    if (md.compteur === "ecuyers") return `Écuyers menés au duel : ${Math.min((bourse.ecuyersMenes || []).length, md.seuil)}/${md.seuil}`;
     if (md.compteur === "ordresVaincus") {
       const dispo = ORDERS.filter((o) => isOrderAvailable(o));
       const faits = dispo.filter((o) => ((stats.orderWins || {})[o.key] || 0) > 0).length;
@@ -16311,7 +16276,6 @@ export default function Emprise() {
   // termine (qui l'affiche aussi) : la partie suivante la retire d'elle-meme.
   useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setBanniereAnnonce(null); }, [gameOver, storyChapterJustCompleted]);
   useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setMedaillonAnnonce(null); }, [gameOver, storyChapterJustCompleted]);
-  useEffect(() => { if (!gameOver && !storyChapterJustCompleted) setPrimeEcuyerAnnonce(false); }, [gameOver, storyChapterJustCompleted]);
   const [storyCeremonyDone, setStoryCeremonyDone] = useState(false); // la cérémonie de déblocage du Héraut a été vue (ou passée)
   const [tourneyBanPick, setTourneyBanPick] = useState(null); // clé d'Ordre sélectionné à bannir, avant confirmation
   // Premier clic : demande confirmation. Second clic (sur "Confirmer") : efface pour de bon.
@@ -16844,10 +16808,6 @@ export default function Emprise() {
           });
         } else {
           setQuetesDernierePartie(null);
-        }
-        // Le duel d'un Ecuyer se juge apres les quetes, sur la meme chaine.
-        if (partieAmicale && adversaireUid && !partieEcourtee && !suivi.disqualifie) {
-          quetesFaites = quetesFaites.then(() => duelEcuyer(adversaireUid));
         }
         // Mode Histoire : une victoire fait avancer la progression du chapitre.
         // ENCHAINE apres l'XP ET les quetes, jamais en parallele : completeChapter
@@ -18811,68 +18771,10 @@ export default function Emprise() {
     });
   }
 
-  // L'Ecuyer se lie a son Chevalier a la fin du tutoriel (10/09) : le code
-  // memorise a l'arrivee devient un uid par l'index codesAmi, le profil public
-  // recoit parrain (la regle l'ecrit une fois, jamais soi-meme), la banniere
-  // L'Ecuyer entre dans la collection. Le code est oublie AVANT tout appel
-  // reseau : un echec ne rejoue jamais la liaison, il la perd -- c'est voulu,
-  // mieux vaut un Ecuyer de moins qu'une boucle.
-  async function lierAuChevalier() {
-    const code = lireChevalier();
-    if (!code) return;
-    oublierChevalier();
-    if (!myUid) return;
-    try {
-      const idx = await getDoc(doc(db, "codesAmi", code));
-      const uid = idx.exists() ? String(idx.data().uid || "") : "";
-      if (!uid || uid === myUid) return;
-      const profil = await getDoc(doc(db, "users", uid));
-      if (!profil.exists()) return;
-      await updateDoc(doc(db, "users", myUid), { parrain: uid });
-      const b = await loadBourse();
-      b.chevalier = uid;
-      await writeBourseRaw(JSON.stringify(b));
-      const { bourse: b2 } = await possederBanniere("ecuyer", false);
-      setBourse(b2);
-    } catch (e) { /* reseau ou regle : pas d'Ecuyer cette fois, le jeu continue */ }
-  }
-
-  // Le duel qui compte (10/09) : un DEFI ENTRE AMIS joue au bout. Chaque camp
-  // regarde de son cote. L'Ecuyer : c'est mon Chevalier et ma prime n'est pas
-  // versee -> PRIME_ECUYER, une fois. Le Chevalier : la fiche d'en face me
-  // nomme parrain et je ne l'ai pas encore compte -> un Ecuyer de plus, et le
-  // palier qui tombe. Un duel entre amis ne verse rien d'autre (04/09) ; cette
-  // prime est l'exception, unique par compte, et elle exige deux appareils et
-  // une partie entiere.
-  async function duelEcuyer(uidAdverse) {
-    if (!uidAdverse || !myUid) return;
-    const b = await loadBourse();
-    if (b.chevalier && b.chevalier === uidAdverse && !b.primeEcuyerVersee) {
-      b.primeEcuyerVersee = true;
-      await writeBourseRaw(JSON.stringify(b));
-      await crediterPieces(PRIME_ECUYER);
-      setPrimeEcuyerAnnonce(true);
-    }
-    // La fiche est RELUE, jamais prise en cache : l'Ecuyer s'est peut-etre lie
-    // apres que sa fiche a ete chargee dans ma liste d'amis.
-    await chargerFiches([uidAdverse], true);
-    const f = fichesRef.current[uidAdverse];
-    if (f && f.parrain === myUid && !b.ecuyersMenes.includes(uidAdverse) && b.ecuyersMenes.length < ECUYERS_MAX) {
-      const b3 = await loadBourse(); // relu : crediterPieces a pu ecrire entre-temps
-      b3.ecuyersMenes = [...b3.ecuyersMenes, uidAdverse];
-      await writeBourseRaw(JSON.stringify(b3));
-      const palier = PALIERS_CHEVALIER.find((p) => p.ecuyers === b3.ecuyersMenes.length);
-      if (palier && palier.banniere) { await possederBanniere(palier.banniere, false); const bn = banniereDeCle(palier.banniere); if (bn) setBanniereAnnonce(bn.nom); }
-      if (palier && palier.medaillon) { await possederMedaillon(palier.medaillon, false); const md = medaillonDeCle(palier.medaillon); if (md) setMedaillonAnnonce(md.nom); }
-    }
-    rafraichirProgression();
-  }
-
   function finirTutoriel() {
     ecrireTutorielVu();
     setTutorielVu(true);
     setTutObligatoire(false);
-    lierAuChevalier();
     setPhase("landing");
   }
   function nextTutorialStep() {
@@ -19644,7 +19546,7 @@ export default function Emprise() {
   // La banniere fraichement debloquee (Etendard d'Histoire ou d'Echo), SOUS les
   // lignes existantes. Fondu en opacity seule, comme le reste de l'ecran.
   function bilanBanniereDePartie() {
-    if (!gameOver || (!banniereAnnonce && !medaillonAnnonce && !primeEcuyerAnnonce)) return null;
+    if (!gameOver || (!banniereAnnonce && !medaillonAnnonce)) return null;
     return (
       <>
         {banniereAnnonce && <div className="cer-banniere">Bannière débloquée : {banniereAnnonce}</div>}
@@ -19652,9 +19554,6 @@ export default function Emprise() {
             ligne, le meme fondu, sous la banniere quand les deux tombent
             ensemble -- ce qui n arrive qu une fois dans une vie de joueur. */}
         {medaillonAnnonce && <div className="cer-banniere">Médaillon débloqué : {medaillonAnnonce}</div>}
-        {/* La prime du premier duel avec son Chevalier (10/09) : la seule monnaie du
-            parrainage, et la seule qu'un defi entre amis verse jamais. */}
-        {primeEcuyerAnnonce && <div className="cer-banniere">Premier duel avec votre Chevalier : {PRIME_ECUYER} pièces</div>}
       </>
     );
   }
@@ -22431,46 +22330,6 @@ export default function Emprise() {
                 ) : (
                   <div className="amis-liste">{amisTries.map((a) => ligneAmi(a, false))}</div>
                 )}
-                {/* Mes Ecuyers (10/09) : la forme d'une ligne d'ami -- le sceau du
-                    dernier Ecuyer mene au duel (Le Premier Duel tant qu'il n'y en a
-                    pas), le compte sur cinq, le prochain palier en clair, une jauge
-                    de trois pixels, et Inviter qui partage mon lien. L'icone de
-                    section est celle de l'ajout en attendant le sceau de l'Ecuyer. */}
-                {(() => {
-                  const menes = bourse.ecuyersMenes || [];
-                  const dernier = menes.length ? menes[menes.length - 1] : null;
-                  const prochain = PALIERS_CHEVALIER.find((p) => p.ecuyers > menes.length);
-                  const lot = prochain
-                    ? (prochain.banniere ? banniereDeCle(prochain.banniere) : medaillonDeCle(prochain.medaillon))
-                    : null;
-                  return (
-                    <>
-                      <div className="amis-sous-titre avec-icone">
-                        <img src="/icones/ami-ajouter.webp" alt="" width="36" height="36" />
-                        Mes Écuyers
-                      </div>
-                      <div className="amis-ligne ecuyers-ligne">
-                        <img
-                          className="amis-avatar"
-                          src={imageMedaillon(dernier && fiches[dernier] ? fiches[dernier].medaillon : null)}
-                          alt="" aria-hidden="true" width="36" height="36"
-                        />
-                        <div className="amis-ligne-texte">
-                          <span className="amis-nom">
-                            <span className="amis-nom-texte">{menes.length} {menes.length > 1 ? "Écuyers" : "Écuyer"} sur {ECUYERS_MAX}</span>
-                          </span>
-                          <span className="amis-code">
-                            {prochain && lot ? `Prochain palier à ${prochain.ecuyers} : ${lot.nom}` : "Tous les paliers sont à vous"}
-                          </span>
-                          <div className="profil-fiche-jauge" style={{ marginTop: 5 }} aria-hidden="true">
-                            <span style={{ width: `${Math.round((menes.length / ECUYERS_MAX) * 100)}%` }} />
-                          </div>
-                        </div>
-                        <button className="amis-btn principal" onClick={partagerCodeAmi}>Inviter</button>
-                      </div>
-                    </>
-                  );
-                })()}
                 <div className="amis-sous-titre avec-icone">
                   <img src="/icones/ami-ajouter.webp" alt="Ajouter un ami" width="36" height="36" />
                   Ajouter un ami
