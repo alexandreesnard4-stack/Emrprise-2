@@ -157,3 +157,4 @@ Recherche d'adversaire (Classé et Partie classique) : votre place en file reste
 Le profil annonce, sous la carte de niveau, que la progression d'essai sera remise à zéro à l'ouverture du jeu.
 Sur le hub, la capsule d'un défi en attente descend entre les deux colonnes d'icônes : le pseudo et la carte de niveau restent lisibles.
 Les bannières L'Écuyer, La Veillée d'Armes et L'Ost s'achètent en pièces au rayon Bannières, et le médaillon L'Éperon récompense un tournoi remporté.
+L'écran Jouer annonce une version bêta : peu de joueurs pour l'instant, le Classé et la Partie classique trouvent rarement un adversaire, et une pastille BÊTA le rappelle sur ces deux modes, qui restent jouables.
