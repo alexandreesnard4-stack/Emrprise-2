@@ -1557,6 +1557,60 @@ if (INTENTION_LIEN && INTENTION_LIEN.type === "ami" && !lireTutorielVu()) {
   try { localStorage.setItem(CLE_CHEVALIER, INTENTION_LIEN.code); } catch (e) { /* non persiste : pas d'Ecuyer, pas d'erreur */ }
 }
 
+// ---------- L'Epoque : la remise a zero de l'ouverture (11/09) ----------
+// Le profil annonce depuis toujours une « progression d'essai ». Cette mission tient
+// la promesse : le jour de l'ouverture, on incremente EPOQUE_ACTUELLE, et au premier
+// chargement suivant chaque appareil est balaye UNE fois. Un marqueur de version et
+// non une date : aucune horloge, aucun fuseau, et le jour se choisit en deployant.
+// PERIMETRE : tout ce qui se GAGNE part -- XP, niveau, trophees, statistiques,
+// quetes, Flamme, Campagne, Histoire, bourse (pieces, gemmes, cosmetiques). Le joueur
+// redevient neuf et retouche ses 100 gemmes de depart. Ce qui reste vit ailleurs ou
+// ne se gagne pas : son nom, son numero et ses amis sont dans Firestore, et les
+// clefs ci-dessous sont des reglages ou des marqueurs de passage.
+// On garde une LISTE BLANCHE et l'on balaie le reste, jamais l'inverse : une clef
+// ajoutee demain sera donc effacee par defaut, ce qui est le bon sens du risque --
+// oublier d'effacer quelque chose qui se gagne serait pire qu'effacer un reglage.
+const EPOQUE_ACTUELLE = 1;          // 1 = phase d'essai. LE JOUR DE L'OUVERTURE : passer a 2.
+const CLE_EPOQUE = "emprise-epoque";
+const CLEFS_GARDEES = new Set([
+  CLE_EPOQUE,
+  "emprise-pseudo",          // son nom, qu'il vient de choisir
+  "emprise-tutoriel",        // il l'a deja suivi : le lui réimposer serait une punition
+  "emprise-reduced-motion",  // un reglage d'accessibilite ne se remet jamais a zero
+  "emprise-demandes",        // le compteur anti-demarchage des demandes d'ami
+  "emprise-chevalier",       // le code d'un parrain en attente de liaison
+  "emprise-messages-directs",// le reglage des messages directs, qui ne se gagne pas
+  "emprise-partie-en-ligne", // marqueurs de reprise, ephemeres
+  "emprise-tournoi-en-ligne",
+]);
+
+(() => {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const vue = localStorage.getItem(CLE_EPOQUE);
+    // Jamais marque = un appareil de la phase d'essai, donc de l'Epoque 1. Aujourd'hui
+    // on le marque SANS balayer : sans cela, la mise en place effacerait la progression
+    // de tout le monde, or le balayage doit attendre le jour ou EPOQUE_ACTUELLE change.
+    // Et le jour J, il est balaye comme les autres : le tenir pour neuf laisserait passer
+    // l'ouverture a la progression d'essai de tout joueur qui n'aurait pas rouvert le jeu
+    // entre cette mise en place et ce jour-la. Une marque deja posee ne redescend jamais :
+    // un deploiement annule puis refait ne balaie pas deux fois.
+    const epoqueVue = vue === null ? 1 : Number(vue);
+    if (epoqueVue >= EPOQUE_ACTUELLE) {
+      if (vue === null) localStorage.setItem(CLE_EPOQUE, String(EPOQUE_ACTUELLE));
+      return;
+    }
+    const aEffacer = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("emprise-") && !CLEFS_GARDEES.has(k)) aEffacer.push(k);
+    }
+    aEffacer.forEach((k) => localStorage.removeItem(k));
+    try { sessionStorage.removeItem("emprise-save"); } catch (e) { /* rien */ }
+    localStorage.setItem(CLE_EPOQUE, String(EPOQUE_ACTUELLE));
+  } catch (e) { /* stockage bloque : rien a balayer, le jeu s'ouvrira sur des valeurs neuves */ }
+})();
+
 // ---------- Maitrise des Ordres ----------
 // Un Ordre se maitrise en le jouant : 6 500 parties pour en faire le tour. La progression
 // se lit en pourcentage de ce total, et franchit sept rangs en chemin. Les paliers ne
@@ -3107,8 +3161,9 @@ async function avancerQuetes(releve) {
 }
 
 // ---------- Niveaux de Commandant ----------
-// Progression d'ESSAI avant la sortie : comme le solde d'essai de la bourse,
-// elle sera remise a zero au lancement.
+// Les niveaux de Commandant. La progression d'avant l'ouverture est une progression
+// d'ESSAI : elle est balayee le jour J par le marqueur d'Epoque (voir EPOQUE_ACTUELLE),
+// et la mention sous la carte de niveau le dit au joueur.
 const NIVEAU_MAX = 50;
 // XP demandee pour passer CHAQUE niveau de la tranche (du niveau 2 au 10 : 100
 // par niveau, etc.). Total pour le niveau 50 : environ 20 000 XP.
@@ -22057,7 +22112,7 @@ export default function Emprise() {
                             01/09) : la carte le dit deja, au chiffre comme au
                             lecteur d'ecran. */}
                         <div className="profil-xp-ligne">
-                          <span className="profil-xp-essai">progression d&apos;essai</span>
+                          <span className="profil-xp-essai">progression d&apos;essai, remise à zéro à l&apos;ouverture</span>
                         </div>
                         {nx.xpPourSuivant !== null ? (
                           <>
