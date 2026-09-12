@@ -165,3 +165,4 @@ Le prochain Ordre, encore scellé, n'affiche plus de date de sortie ni de décom
 L'encart bêta de l'écran Jouer ouvre un panneau « Un souci, une idée ? » : le joueur écrit ce qui a cloché, et le jeu joint l'écran, la version et son pseudo.
 L'écran de fin de partie classée annonce la variation de trophées réellement appliquée : à 0 trophée, une défaite n'en retire aucun et le badge affiche 0, et l'historique montre la même valeur.
 L'historique des dernières parties classées montre l'adversaire en tête de ligne, avec son médaillon ; toucher la ligne ouvre sa fiche, où l'on peut l'ajouter en ami, le signaler ou le bloquer. Les parties enregistrées avant cette version n'ont pas d'adversaire et le disent.
+En partie, toucher une seconde fois la carte sélectionnée la désélectionne, même quand il ne reste qu'un seul Ordre en main.
