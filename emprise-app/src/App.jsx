@@ -18901,7 +18901,7 @@ export default function Emprise() {
     loadTutStep(next);
   }
   function skipTutorial() {
-    if (tutObligatoire) return; // au premier lancement, il n'y a pas de sortie
+    if (tutObligatoire && tut.stepIdx < 3) return; // au premier lancement, pas de sortie avant la quatrieme etape
     finirTutoriel();
   }
 
@@ -23151,7 +23151,8 @@ export default function Emprise() {
               <button className="reset-btn" onClick={nextTutorialStep}>
                 {tut.stepIdx === 0 ? "Commencer" : tut.stepIdx === TUTORIAL_STEPS.length - 1 ? "Terminer" : "Continuer"}
               </button>
-              {!tutObligatoire && (
+              {/* Trois etapes obligatoires (poser une carte), puis on peut sortir -- decision du 12/09. */}
+              {(!tutObligatoire || tut.stepIdx >= 3) && (
                 <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
               )}
             </>
@@ -23190,7 +23191,7 @@ export default function Emprise() {
               {tut.resolved && (
                 <button className="reset-btn" onClick={nextTutorialStep}>Continuer</button>
               )}
-              {!tutObligatoire && (
+              {(!tutObligatoire || tut.stepIdx >= 3) && (
                 <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
               )}
             </>
@@ -23225,7 +23226,7 @@ export default function Emprise() {
               {tut.resolved && (
                 <button className="reset-btn" onClick={nextTutorialStep}>Continuer</button>
               )}
-              {!tutObligatoire && (
+              {(!tutObligatoire || tut.stepIdx >= 3) && (
                 <button className="landing-link" onClick={skipTutorial}>Passer le tutoriel</button>
               )}
             </>
