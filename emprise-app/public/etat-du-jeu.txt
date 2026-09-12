@@ -163,3 +163,4 @@ L'écran Jouer annonce une version bêta : peu de joueurs pour l'instant, le Cla
 En défi Confluence entre amis, la Réserve se compose d'office, la même pour les deux camps : plus d'écran de choix, la partie passe directement au face-à-face.
 Le prochain Ordre, encore scellé, n'affiche plus de date de sortie ni de décompte : son heure viendra.
 L'encart bêta de l'écran Jouer ouvre un panneau « Un souci, une idée ? » : le joueur écrit ce qui a cloché, et le jeu joint l'écran, la version et son pseudo.
+L'écran de fin de partie classée annonce la variation de trophées réellement appliquée : à 0 trophée, une défaite n'en retire aucun et le badge affiche 0, et l'historique montre la même valeur.
