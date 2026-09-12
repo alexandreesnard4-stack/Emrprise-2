@@ -171,3 +171,4 @@ En ligne, un coup posé juste avant que l'écran s'éteigne (téléphone contre 
 L'écran de fin de partie, victoire comme défaite, n'apparaît qu'une fois le dernier coup joué sous vos yeux, captures et chaînes comprises.
 L'icône de l'onglet du navigateur est le gantelet, la même que l'icône d'écran d'accueil.
 Relecture des textes du jeu : accents, accords et formulations corrigés dans les réglages, les astuces, les quêtes, la boutique et la page de confidentialité ; l'étape La Résonance du tutoriel nomme les côtés comparés.
+Page de confidentialité : le titre sur la durée de conservation est une vraie question, et la suppression du compte est annoncée au futur, l'effacement venant après.
