@@ -141,6 +141,7 @@ Sur le Chemin de la Campagne, chaque lot du Serment dit ce qu'il est : le platea
 Le tutoriel se joue d'office au premier lancement, juste après l'Adoubement et avant le choix de la bannière : treize étapes, dont la Réserve qu'on compose soi-même, la Mort Subite et le Dernier Mot.
 Les textes du tutoriel sont plus courts : des phrases simples, sans point-virgule ni deux-points, qui parlent du plateau sans le mesurer.
 Les pages Politique de confidentialité et Conditions d'utilisation ont un bouton « Retour au jeu » en haut, qui reste visible quand on fait défiler.
+Les pages Politique de confidentialité et Conditions d'utilisation donnent l'adresse de contact du jeu, contact@empriselejeu.fr.
 Sur la voie du Serment, le plateau Le Ban se gagne au palier 38 et le dos L'Anneau au palier 60.
 Sur l'arbre du tournoi solo, votre plaque porte le médaillon que vous avez équipé, dans son sceau bordé d'or.
 Sur la page Ordres, le bandeau du haut n'a plus que deux rangées : la grille des Ordres remonte d'autant.
