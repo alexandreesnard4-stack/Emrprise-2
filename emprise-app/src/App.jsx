@@ -15283,7 +15283,16 @@ export default function Emprise() {
       if (filePresentationRef.current.length || plateauAfficheRef.current) rattraperPresentation();
     };
     document.addEventListener("visibilitychange", surVisibilite);
-    return () => document.removeEventListener("visibilitychange", surVisibilite);
+    // La page se cache (ecran eteint, autre app, onglet) : une resolution en attente
+    // part maintenant. pagehide en plus de visibilitychange : Safari n envoie pas
+    // toujours le second au verrouillage.
+    const surMasquage = () => {
+      if (document.visibilityState === "hidden" && resolutionImmediateRef.current) resolutionImmediateRef.current();
+    };
+    const surPagehide = () => { if (resolutionImmediateRef.current) resolutionImmediateRef.current(); };
+    document.addEventListener("visibilitychange", surMasquage);
+    window.addEventListener("pagehide", surPagehide);
+    return () => { document.removeEventListener("visibilitychange", surVisibilite); document.removeEventListener("visibilitychange", surMasquage); window.removeEventListener("pagehide", surPagehide); };
   }, []);
   // Vrai entre MA pose et sa resolution (RYTHME_POSE_JOUEUR_MS) : le verrou
   // qui empeche de poser deux fois la meme carte pendant ce temps-la.
@@ -15295,12 +15304,20 @@ export default function Emprise() {
   // travaille toujours sur SON coup avant de toucher au plateau.
   const resolutionTimerRef = useRef(null);
   const coupIdRef = useRef(0);
+  // La resolution en attente, appelable de l exterieur (12/09). Sur iPhone, le
+  // telephone contre l oreille eteint l ecran et Safari gele les minuteurs : le coup,
+  // qui part 650 ms apres le toucher, ne partait qu au reveil de l ecran, et
+  // l adversaire le voyait dix secondes plus tard. Des que la page se cache, on
+  // resout tout de suite -- le delai n etait que visuel, personne ne regarde un ecran
+  // eteint. null quand rien n attend.
+  const resolutionImmediateRef = useRef(null);
   const shakeBigTimerRef = useRef(null);
   const poisonTimerRef = useRef(null);
   useEffect(() => {
     return () => {
       clearTimeout(flashTimerRef.current);
       clearTimeout(resolutionTimerRef.current);
+      resolutionImmediateRef.current = null;
       clearTimeout(shakeBigTimerRef.current);
       clearTimeout(poisonTimerRef.current);
       clearTimeout(bannerTimerRef.current);
@@ -20105,13 +20122,19 @@ export default function Emprise() {
       setBoard(newBoard);
       flashEvents([{ index: position, kind: placeKind }, ...revealEvents]);
       poseEnAttenteRef.current = true;
-      resolutionTimerRef.current = setTimeout(() => {
+      // Une seule fonction pour le minuteur ET pour le masquage de la page : elle
+      // s efface elle-meme, donc elle ne peut tourner qu une fois.
+      const resoudreMaintenant = () => {
+        clearTimeout(resolutionTimerRef.current);
+        resolutionImmediateRef.current = null;
         // Le verrou retombe d'abord, meme si le coup est annule : sinon plus rien
         // ne serait jouable ensuite.
         poseEnAttenteRef.current = false;
         if (coupIdRef.current !== monCoup) return;
         resolveRest();
-      }, RYTHME_POSE_JOUEUR_MS);
+      };
+      resolutionImmediateRef.current = resoudreMaintenant;
+      resolutionTimerRef.current = setTimeout(resoudreMaintenant, RYTHME_POSE_JOUEUR_MS);
     }
   }
 
@@ -20132,6 +20155,7 @@ export default function Emprise() {
     // l'annulation, parce que les captures du coup annule s'appliquaient quand meme.
     coupIdRef.current += 1;
     clearTimeout(resolutionTimerRef.current);
+    resolutionImmediateRef.current = null;
     clearTimeout(flashTimerRef.current);
     poseEnAttenteRef.current = false;
     // Un coup repris n'est plus un coup joue : la partie ne peut plus servir de mesure
