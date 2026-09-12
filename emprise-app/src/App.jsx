@@ -15215,6 +15215,10 @@ export default function Emprise() {
   const [dragHoverCell, setDragHoverCell] = useState(null); // case survolée pendant le glisser
   const [selected, setSelected] = useState(null); // { owner, idx } — carte sélectionnée par simple clic (alternative au glisser)
   const dragMovedRef = useRef(false); // distingue un simple clic (pas de déplacement) d'un vrai glisser
+  // La carte touchee etait-elle DEJA la carte selectionnee ? startCardDrag efface la
+  // selection des le toucher (pour le fantome de glisser) : au relachement, seul ce
+  // souvenir permet de distinguer « selectionner » de « deselectionner ».
+  const etaitSelectionneeRef = useRef(false);
   // Main en eventail : un eventail PAR CAMP (09/09), { blue: ability | null, red:
   // ability | null }. Ouvrir celui d en face ne referme plus le mien -- on compare les
   // deux mains ouvertes, le plateau reste visible entre elles. En ligne, celui d en face
@@ -20233,6 +20237,7 @@ export default function Emprise() {
     if (plateauAffiche) return; // l affichage rattrape le coup adverse : on attend
     e.preventDefault();
     dragMovedRef.current = false;
+    etaitSelectionneeRef.current = !!(selected && selected.owner === owner && selected.idx === idx);
     setSelected(null);
     // Fermeture instantanée, sans repli animé : l'attention est déjà sur CETTE carte
     // (fantôme de glisser ou sélection à venir), un repli animé des 3 autres ferait
@@ -20410,10 +20415,13 @@ export default function Emprise() {
       if (dragMovedRef.current) {
         // Vrai glisser : on pose directement là où le pointeur a été relâché.
         if (idx !== null && !board[idx]) placeCardAt(drag.owner, drag.idx, idx, true);
+        etaitSelectionneeRef.current = false;
       } else {
         // Aucun déplacement notable : c'était un simple clic → on sélectionne la carte
         // pour permettre la prévisualisation au survol, sans la poser tout de suite.
-        setSelected({ owner: drag.owner, idx: drag.idx });
+        // Un tap sur la carte deja selectionnee la relache ; sur une autre, la choisit.
+        setSelected(etaitSelectionneeRef.current ? null : { owner: drag.owner, idx: drag.idx });
+        etaitSelectionneeRef.current = false;
       }
       setDrag(null);
       setDragHoverCell(null);
