@@ -700,7 +700,7 @@ const TUTORIAL_STEPS = [
     // Deux egalites EXACTES et rien d'autre sur le plateau : la Resonance capture les
     // deux cartes, et aucune des deux ne peut enchainer -- l'Onde a son propre ecran
     // juste apres. Melanger les deux, c'etait apprendre deux regles d'un coup.
-    text: "Ici, deux de vos rangs sont EXACTEMENT égaux à ceux d'en face. Une égalité seule ne prend rien. Deux en même temps, et les deux cartes tombent d'un coup. C'est la Résonance.",
+    text: "Votre carte montre 5 en haut et 6 à droite. Au-dessus, une carte ennemie montre 5 en bas. À droite, une autre montre 6 à gauche. Une égalité seule ne prend rien. Deux égalités EXACTES en même temps, et les deux cartes tombent d'un coup. C'est la Résonance.",
     requiredCell: 7,
     handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -1886,7 +1886,7 @@ const DOS_CARTES = [
   { cle: "ecailles", nom: "Écailles", matiere: "L'armure d'une bête sans nom",
     prixGemmes: 200, image: "/dos/ecailles.webp",
     bord: "rgba(196,160,110,0.5)", anneau: "rgba(238,206,150,0.78)", socle: "#6e5426" },
-  { cle: "entrelacs", nom: "Entrelacs", matiere: "Un noeud que nul n'a défait",
+  { cle: "entrelacs", nom: "Entrelacs", matiere: "Un nœud que nul n'a défait",
     prixGemmes: 250, image: "/dos/entrelacs.webp",
     bord: "rgba(206,150,180,0.5)", anneau: "rgba(244,200,220,0.78)", socle: "#7a3a5c" },
   { cle: "vitrail", nom: "Vitrail", matiere: "Le verre plombé des chapelles",
@@ -2462,7 +2462,7 @@ const ASTUCES = [
   "Le poison affaiblit toute carte posée sur sa case, y compris les vôtres. Sauf pour un Doré, qu'un rang perdu rend meilleur à l'échange.",
   "Le voile des Scribes cache vos rangs quelques tours. L'adversaire doit deviner où frapper, et il devine mal.",
   "Les Cendres tirent une ennemie hors de sa position. Une carte bien placée ne l'est plus une fois traînée ailleurs.",
-  "La Piques transperce jusqu'à deux cartes alignées. Cherchez les files, pas les cases isolées.",
+  "La Pique transperce jusqu'à deux cartes alignées. Cherchez les files, pas les cases isolées.",
   "La mue des Chimères retourne l'axe d'une ennemie : son rang le plus fort peut se retrouver face au vide.",
 ];
 // Sept secondes par astuce. C'est court pour les plus longues : si le texte part avant
@@ -2871,7 +2871,7 @@ const QUETES_JOUR = [
   { cle: "captures20",  famille: "captures", libelle: "Nul ne s'échappe",     type: "captures",       objectif: 20, xp: 35 },
   { cle: "ondes3",      famille: "ondes",    libelle: "La cascade",                 type: "ondes",          objectif: 3,  xp: 30 },
   { cle: "grosseOnde",  famille: "ondes",    libelle: "Déferlante",           type: "ondeDe3",        objectif: 1,  xp: 30 },
-  { cle: "parties3",    famille: "jouer",    libelle: "Le Commandant à l'oeuvre", type: "partiesJouees", objectif: 3, xp: 20 },
+  { cle: "parties3",    famille: "jouer",    libelle: "Le Commandant à l'œuvre", type: "partiesJouees", objectif: 3, xp: 20 },
   { cle: "victoire1",   famille: "gagner",   libelle: "Triomphe",                   type: "victoires",      objectif: 1,  xp: 20 },
   { cle: "victoires2",  famille: "gagner",   libelle: "Double victoire",            type: "victoires",      objectif: 2,  xp: 30 },
   { cle: "ordres3",     famille: "ordres",   libelle: "L'appel des bannières", type: "ordresDistincts", objectif: 3, xp: 25 },
@@ -6419,7 +6419,7 @@ function SceauxTour({ timeLeft, max = TURN_SECONDS }) {
   const allumes = Math.ceil(fraction * NB_SCEAUX);
   const urgence = allumes === 1;
   return (
-    <div className={`sceaux-tour ${urgence ? "urgence" : ""}`} role="img" aria-label={`Temps restant : ${allumes} sceaux sur ${NB_SCEAUX}`}>
+    <div className={`sceaux-tour ${urgence ? "urgence" : ""}`} role="img" aria-label={`Temps restant : ${allumes} sceau${allumes > 1 ? "x" : ""} sur ${NB_SCEAUX}`}>
       {Array.from({ length: NB_SCEAUX }, (_, i) => (
         <span key={i} className={`sceau ${i < allumes ? "allume" : ""} ${urgence && i === 0 ? "dernier" : ""}`} />
       ))}
@@ -22958,7 +22958,7 @@ export default function Emprise() {
                   <div className="settings-row" role="button" tabIndex={0} onClick={toggleReducedMotion} onKeyDown={KEY_ACTIVATE(toggleReducedMotion)}>
                     <div className="settings-texte">
                       <div className="settings-nom">Animations réduites</div>
-                      <div className="settings-desc">Effets raccourcis, cérémonies sautées.</div>
+                      <div className="settings-desc">Effets raccourcis, cérémonies supprimées.</div>
                     </div>
                     <div className={`settings-bascule ${reducedMotion ? "on" : ""}`} aria-hidden="true"><span /></div>
                   </div>
@@ -24439,7 +24439,7 @@ export default function Emprise() {
                   )}
                   <div className="info">
                     <span className="name">{nomOrdreAffiche(order)}</span>
-                    <span className="desc">{comingSoon ? <CountdownLabel order={order} /> : taken ? `Choisie par ${pickedBy === "blue" ? "Azur" : "Écarlate"}` : order.desc}</span>
+                    <span className="desc">{comingSoon ? <CountdownLabel order={order} /> : taken ? `Choisi par ${pickedBy === "blue" ? "Azur" : "Écarlate"}` : order.desc}</span>
                   </div>
                   {comingSoon && <span className="coming-soon-badge">Bientôt disponible</span>}
                 </div>
@@ -24880,7 +24880,7 @@ export default function Emprise() {
               <div
                 className={`bras-de-fer ${acquis ? "franchi" : ""}`}
                 role="img"
-                aria-label={`Azur ${scoreAzur}, Ecarlate ${scoreEcarlate}, sur ${totalPts} points en jeu`}
+                aria-label={`Azur ${scoreAzur}, Écarlate ${scoreEcarlate}, sur ${totalPts} points en jeu`}
               >
                 <span className={`bdf-num blue ${teinte(acquis) === "blue" ? "acquis" : ""}`}>{scoreAzur}</span>
                 <div className="bdf-piste">
