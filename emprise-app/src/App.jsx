@@ -16953,7 +16953,12 @@ export default function Emprise() {
           trophees: trophyGainReel,
           motif: finMotif || null,
           adversaireUid: adversaireUid || null,
-          adversairePseudo: (adversaireUid && fichesRef.current[adversaireUid] && fichesRef.current[adversaireUid].pseudo) || "",
+          // L instantane du nom : la fiche si on l a (un ami), sinon le nom lu dans le
+          // document de la partie (pseudosPartie, deja passe par le filtre), qui vaut
+          // aussi pour un inconnu de la file dont aucune fiche n est chargee.
+          adversairePseudo: (adversaireUid && fichesRef.current[adversaireUid] && fichesRef.current[adversaireUid].pseudo)
+            || (pseudosPartie && pseudosPartie[onlineRole === "blue" ? "red" : "blue"])
+            || "",
         }));
       }
       // La progression d'Histoire vit desormais DANS la chaine de fin de partie
