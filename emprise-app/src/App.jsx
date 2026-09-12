@@ -10248,6 +10248,8 @@ const APP_STYLES = `
            au total, plus lent et plus lisible, a la demande du Commandant.) */
         .cer-trophees.gain { color: var(--gold-bright); border-color: rgba(203,164,86,0.5); background: rgba(203,164,86,0.1); }
         .cer-trophees.perte { color: var(--red-bright); border-color: rgba(224,101,90,0.5); background: rgba(224,101,90,0.1); }
+        /* A 0 trophee, une defaite ne retire rien : le badge reste, sobre, avec un 0. */
+        .cer-trophees.neutre { color: var(--muted); border-color: rgba(148,138,163,0.4); background: rgba(148,138,163,0.08); }
         @keyframes cer-trophees-entree {
           from { opacity: 0; transform: scale(0.6); }
           to   { opacity: 1; transform: scale(1); }
@@ -16787,6 +16789,12 @@ export default function Emprise() {
       const trophyGain = partieClassee && !partieDeclassee && onlineRole
         ? (winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE)
         : 0;
+      // Le plancher de recordGameStats, calcule ICI avec les trophees d avant la partie
+      // (stats n est mis a jour qu au retour de recordGameStats) : c est la valeur
+      // que l ecran de fin et l historique doivent montrer.
+      const tropheesAvant = stats.trophies || 0;
+      const trophyGainReel = Math.max(0, tropheesAvant + trophyGain) - tropheesAvant;
+      setBilanTropheesReel(partieClassee && !partieDeclassee && onlineRole ? trophyGainReel : null);
       // Combos de la partie : ceux reconnus coup par coup, plus le Rempart Vicie qui ne
       // se juge qu'au tableau final. Une partie disqualifiee (annulation) ne compte pas
       // du tout — ni ses combos ni son total.
@@ -16927,7 +16935,7 @@ export default function Emprise() {
           sb: blueScore, sr: redScore,
           vainqueur: winner,
           camp: onlineRole,
-          trophees: trophyGain,
+          trophees: trophyGainReel,
           motif: finMotif || null,
         }));
       }
@@ -16935,7 +16943,7 @@ export default function Emprise() {
       // ci-dessus (apres l'XP et les quetes) : les trois ecrivent la bourse, et
       // seule la file unique empeche les ecrasements lire-modifier-ecrire.
     }
-    if (!gameOver) statsRecordedRef.current = false;
+    if (!gameOver) { statsRecordedRef.current = false; setBilanTropheesReel(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
 
@@ -18461,9 +18469,12 @@ export default function Emprise() {
         // Une partie DECLASSEE abandonnee ne coute rien non plus (zero des
         // deux cotes), mais elle COMPTE une rencontre du jour, comme chez le
         // vainqueur : l uid adverse part en dernier argument.
+        const tropheesAvant = stats.trophies || 0;
+        const perteNominale = partieClassique || partieDeclassee ? 0 : TROPHEES_DEFAITE;
+        setBilanTropheesReel(partieClassee && !partieDeclassee && onlineRole ? Math.max(0, tropheesAvant + perteNominale) - tropheesAvant : null);
         recordGameStats(onlineRole === "blue" ? "red" : "blue", orderKeys,
           // La classique ne retire aucun trophee : elle n en donne pas non plus.
-          partieClassique || partieDeclassee ? 0 : TROPHEES_DEFAITE,
+          perteNominale,
           [], false, onlineRole, false, null, null, null, false, adversaireUid || null,
           null, partieClassique && !partieDeclassee).then((st) => { setStats(st); setXpDernierePartie(st.xpDePartie || null); });
         // Une partie abandonnee ne fait avancer aucune quete, et l ecran de fin
@@ -19527,6 +19538,11 @@ export default function Emprise() {
     return () => window.removeEventListener("popstate", surRetour);
   }, []);
 
+  // La variation REELLE de trophees de la partie qui vient de finir : le nominal
+  // (+30 / -15) borne par le plancher a 0. A 0 trophee, une defaite ne retire rien,
+  // et l ecran doit le dire. null tant qu aucune partie classee n est finie.
+  const [bilanTropheesReel, setBilanTropheesReel] = useState(null);
+
   // Le compte, pilote par le TEMPS et cale sur la CEREMONIE : la ceremonie de defaite
   // ne s'ouvre que 2,4 s apres la fin de partie, un compte parti a gameOver aurait deja
   // fini dans le noir. Chaque image affiche la valeur de l'instant ou elle est peinte :
@@ -19535,7 +19551,9 @@ export default function Emprise() {
   const [bilanAffiche, setBilanAffiche] = useState(0);
   useEffect(() => {
     if (!ceremonieFin || !partieClassee || partieDeclassee || !onlineRole) { setBilanAffiche(0); return; }
-    const cible = Math.abs(winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE);
+    if (bilanTropheesReel === null) { setBilanAffiche(0); return; }
+    const cible = Math.abs(bilanTropheesReel);
+    if (cible === 0) { setBilanAffiche(0); return; }
     // Le toucher qui saute la ceremonie saute AUSSI le compte : sans cela, le panneau
     // surgissait avec un badge vide pendant deux secondes et demie. Sauter, c est sauter.
     if (reducedMotion || cerPose) { setBilanAffiche(cible); return; }
@@ -19553,7 +19571,7 @@ export default function Emprise() {
     }, depart);
     return () => { clearTimeout(lancer); cancelAnimationFrame(image); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ceremonieFin, cerPose, partieClassee, partieDeclassee, onlineRole, winner, reducedMotion]);
+  }, [ceremonieFin, cerPose, partieClassee, partieDeclassee, onlineRole, winner, reducedMotion, bilanTropheesReel]);
 
   // L'XP de la partie qui vient de finir : le gain, le niveau franchi s'il y en a un,
   // les gemmes de palier s'il y en a. Rien de plus -- pas de nouvel ecran.
@@ -19648,15 +19666,16 @@ export default function Emprise() {
     // Une partie declassee n a AUCUNE ligne de trophees : rien n a bouge, et
     // afficher un faux plus ou moins ferait croire a un bug.
     if (partieDeclassee) return null;
-    const gain = winner === onlineRole ? TROPHEES_VICTOIRE : TROPHEES_DEFAITE;
+    const gain = bilanTropheesReel;
+    if (gain === null) return null;
     return (
-      <div className={`cer-trophees ${gain >= 0 ? "gain" : "perte"}`} aria-label={`${gain >= 0 ? "Gain" : "Perte"} de ${Math.abs(gain)} trophées`}>
+      <div className={`cer-trophees ${gain > 0 ? "gain" : gain < 0 ? "perte" : "neutre"}`} aria-label={gain > 0 ? "Gain de " + gain + " trophées" : gain < 0 ? "Perte de " + Math.abs(gain) + " trophées" : "Aucun trophée perdu"}>
         <img src="/nav/trophee.webp" alt="" />
         {/* Cache au lecteur d'ecran : il entendrait une volee de nombres. L'etiquette du
             badge, elle, annonce d'emblee la valeur finale. Avant le depart du compte, le
             nombre reste vide plutot que d'afficher un faux zero. */}
         <span className="cer-trophees-nombre" aria-hidden="true">
-          {bilanAffiche > 0 ? (gain >= 0 ? "+" : "−") + bilanAffiche : "\u00A0"}
+          {gain === 0 ? "0" : bilanAffiche > 0 ? (gain > 0 ? "+" : "−") + bilanAffiche : "\u00A0"}
         </span>
       </div>
     );
