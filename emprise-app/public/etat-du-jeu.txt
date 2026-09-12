@@ -167,3 +167,4 @@ L'écran de fin de partie classée annonce la variation de trophées réellement
 L'historique des dernières parties classées montre l'adversaire en tête de ligne, avec son médaillon ; toucher la ligne ouvre sa fiche, où l'on peut l'ajouter en ami, le signaler ou le bloquer. Les parties enregistrées avant cette version n'ont pas d'adversaire et le disent.
 En partie, toucher une seconde fois la carte sélectionnée la désélectionne, même quand il ne reste qu'un seul Ordre en main.
 Le tutoriel du premier lancement se laisse passer à partir de la quatrième étape : les trois premières, jusqu'à la première capture, restent obligatoires. Rejoué depuis les Réglages, il se passe dès la première étape.
+En ligne, un coup posé juste avant que l'écran s'éteigne (téléphone contre l'oreille, autre application) part immédiatement : l'adversaire n'attend plus le réveil de l'écran pour le voir.
