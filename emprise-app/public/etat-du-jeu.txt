@@ -169,3 +169,4 @@ En partie, toucher une seconde fois la carte sélectionnée la désélectionne, 
 Le tutoriel du premier lancement se laisse passer à partir de la quatrième étape : les trois premières, jusqu'à la première capture, restent obligatoires. Rejoué depuis les Réglages, il se passe dès la première étape.
 En ligne, un coup posé juste avant que l'écran s'éteigne (téléphone contre l'oreille, autre application) part immédiatement : l'adversaire n'attend plus le réveil de l'écran pour le voir.
 L'écran de fin de partie, victoire comme défaite, n'apparaît qu'une fois le dernier coup joué sous vos yeux, captures et chaînes comprises.
+L'icône de l'onglet du navigateur est le gantelet, la même que l'icône d'écran d'accueil.
