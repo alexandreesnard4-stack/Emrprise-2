@@ -2011,6 +2011,14 @@ async function copierTexte(texte) {
 // demande du Commandant, et long a dessein : meme si l'entree du panneau se decale d'une
 // seconde sur un appareil, l'essentiel du compte reste sous les yeux.
 const BILAN_COMPTE_MS = 2800;
+// L ouverture de la ceremonie de fin (12/09). Retour des testeurs : a 650 ms, la
+// Victoire tombait sur les captures du dernier coup. Les deux issues attendent le
+// meme plancher, et davantage si le dernier coup se joue encore -- chez celui qui
+// recoit, sa presentation peut n avoir pas commence ; chez celui qui joue, une
+// Resonance ou une Onde peut courir encore. Le plafond borne l horizon de menage
+// des chaines, qui est large expres.
+const CEREMONIE_PLANCHER_MS = 2400;
+const CEREMONIE_CHAINE_MAX_MS = 5000;
 // Le DEPART du compte, depuis l'ouverture de la ceremonie : il doit tomber APRES le
 // lever de rideau de la recap, invisible avant. Victoire : cer-monte finit a
 // 1,75 + 0,65 s. Defaite : buttonFadeUp finit a 1,5 + 0,6 s. Partir avant, c'est compter
@@ -16791,10 +16799,18 @@ export default function Emprise() {
     const victoireHumaine = mode === "bot" ? winner === "blue" : mode === "online" ? winner === onlineRole : true;
     // En duel local quelqu'un d'humain gagne toujours : jamais de ceremonie de Defaite.
     const issue = victoireHumaine ? "victoire" : "defaite";
-    // La Defaite attend 2,4 s : il faut laisser au joueur le temps de voir le coup qui
-    // l'a fait perdre avant que l'ecran se voile. La Victoire n'a pas ce besoin, on
-    // comprend immediatement qu'on a gagne : 650 ms suffisent, au-dela c'est une attente.
-    const t = setTimeout(() => setCeremonieFin(issue), issue === "defaite" ? 2400 : 650);
+    // Les deux issues attendent le meme plancher (12/09) : il faut laisser au joueur
+    // le temps de voir le dernier coup, celui qui l'a fait perdre comme celui qui l'a
+    // fait gagner, avant que l'ecran se voile. Et si ce coup se joue encore, on
+    // attend sa fin.
+    // Le dernier coup doit etre VU avant que l ecran se voile : on attend le plus long
+    // de -- le plancher ; la fin de la presentation d un coup recu ; la fin d une chaine
+    // jouee ici, plafonnee.
+    const maintenant = Date.now();
+    const finPresentation = Math.max(0, presentationJusquaRef.current - maintenant) + 400;
+    const finChaine = Math.min(Math.max(0, animsFinishAtRef.current - maintenant) + 400, CEREMONIE_CHAINE_MAX_MS);
+    const delai = Math.max(CEREMONIE_PLANCHER_MS, finPresentation, finChaine);
+    const t = setTimeout(() => setCeremonieFin(issue), delai);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
