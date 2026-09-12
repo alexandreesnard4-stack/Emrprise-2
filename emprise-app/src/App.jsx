@@ -674,12 +674,12 @@ const TUTORIAL_STEPS = [
   {
     kind: "info",
     title: "Bienvenue, Commandant",
-    text: "EMPRISE se joue sur vingt cases. Chacun pose ses huit cartes à tour de rôle ; à la fin, le camp qui en compte le plus sur le plateau l'emporte. Une partie dure quelques minutes, et se décide souvent à un rang près.",
+    text: "Chacun pose ses huit cartes à tour de rôle sur le plateau. À la fin, le camp qui en compte le plus l'emporte. Quelques minutes, et souvent un seul rang d'écart.",
   },
   {
     kind: "info",
     title: "Les quatre rangs",
-    text: "Chaque carte porte quatre rangs : haut, droite, bas, gauche. Quand vous posez une carte contre une carte ennemie, on ne compare que les deux rangs qui se font face. Le vôtre doit être STRICTEMENT supérieur : à égalité, rien ne bouge.",
+    text: "Chaque carte porte quatre rangs, un par côté. Posée contre une carte ennemie, seuls les deux rangs qui se font face comptent. Le vôtre doit être STRICTEMENT supérieur. À égalité, rien ne bouge.",
   },
   {
     kind: "play",
@@ -692,7 +692,7 @@ const TUTORIAL_STEPS = [
       b[8] = { ...tc(4, 4, 4, 2, { name: "Cendres", icon: ORDERS.find((l) => l.key === "cendres").icon, portrait: ORDERS.find((l) => l.key === "cendres").portrait }), owner: "red" };
       return b;
     })(),
-    after: "8 contre 2 : la carte passe sous votre bannière. Une carte capturée change de camp : elle ne quitte jamais le plateau.",
+    after: "8 contre 2, la carte passe sous votre bannière. Une carte capturée change de camp mais ne quitte jamais le plateau.",
   },
   {
     kind: "play",
@@ -700,7 +700,7 @@ const TUTORIAL_STEPS = [
     // Deux egalites EXACTES et rien d'autre sur le plateau : la Resonance capture les
     // deux cartes, et aucune des deux ne peut enchainer -- l'Onde a son propre ecran
     // juste apres. Melanger les deux, c'etait apprendre deux regles d'un coup.
-    text: "Ici, deux de vos rangs sont EXACTEMENT égaux à ceux qui leur font face. Seule, une égalité ne prend rien. Deux égalités en même temps, et les deux cartes tombent d'un coup : c'est la Résonance.",
+    text: "Ici, deux de vos rangs sont EXACTEMENT égaux à ceux d'en face. Une égalité seule ne prend rien. Deux en même temps, et les deux cartes tombent d'un coup. C'est la Résonance.",
     requiredCell: 7,
     handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -710,12 +710,12 @@ const TUTORIAL_STEPS = [
       b[8] = { ...tc(3, 3, 3, 6, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
       return b;
     })(),
-    after: "Deux cartes prises d'un seul geste. Retenez-le : ce qui ne capture pas tout seul peut capturer à deux.",
+    after: "Deux cartes prises d'un seul geste. Ce qui ne capture pas seul peut capturer à deux.",
   },
   {
     kind: "play",
     title: "L'Onde",
-    text: "Une carte que vous venez de retourner peut à son tour en capturer une autre, et ainsi de suite. Reposez votre carte au même endroit, et regardez la chaîne partir.",
+    text: "Une carte que vous venez de retourner peut à son tour en capturer une autre, et ainsi de suite. Reposez votre carte au même endroit et regardez la chaîne partir.",
     requiredCell: 7,
     handCard: tc(5, 6, 3, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -726,17 +726,17 @@ const TUTORIAL_STEPS = [
       b[8] = { ...tc(3, 3, 3, 6, { name: "Cendres", icon: cendres.icon, portrait: cendres.portrait }), owner: "red" };
       return b;
     })(),
-    after: "Deux cartes par Résonance, puis une troisième emportée par la chaîne : c'est l'Onde. Les plus belles parties se gagnent là.",
+    after: "Deux cartes par Résonance, puis une troisième emportée par la chaîne. C'est l'Onde, et les plus belles parties se gagnent là.",
   },
   {
     kind: "info",
     title: "Les Ordres",
-    text: "Vos cartes appartiennent à des Ordres : Dorés, Cendres, Archers, Gardiens, Piques, Scribes… Chacun a sa capacité, et vous en choisissez deux avant chaque duel. En voici deux à l'œuvre ; le bouton « i », en partie, vous les rappellera toutes.",
+    text: "Vos cartes appartiennent à des Ordres. Dorés, Cendres, Archers, Gardiens, Piques, Scribes… Chacun a sa capacité, et vous en choisissez deux avant chaque duel. En voici deux à l'œuvre. En partie, le bouton « i » vous les rappellera toutes.",
   },
   {
     kind: "play",
-    title: "Les Archers : frapper de loin",
-    text: "Les Archers capturent en ligne droite, même sans toucher leur cible. La carte ennemie est deux cases plus loin : posez quand même.",
+    title: "Les Archers",
+    text: "Les Archers capturent en ligne droite, même sans toucher leur cible. La carte ennemie est deux cases plus loin. Posez quand même.",
     requiredCell: 7,
     handCard: tc(3, 7, 3, 3, { name: "Archers", ability: "portee", icon: ORDERS.find((l) => l.key === "portee").icon, portrait: ORDERS.find((l) => l.key === "portee").portrait }),
     board: (() => {
@@ -748,13 +748,13 @@ const TUTORIAL_STEPS = [
   },
   {
     kind: "play",
-    title: "Les Gardiens : le Rempart",
+    title: "Les Gardiens",
     // A droite un Gardien : defRank lui ajoute +1, son 5 se defend comme un 6, et le 6
     // du joueur ne passe pas (il faut etre STRICTEMENT superieur). En bas une carte sans
     // defense, qui tombe. Une seule pose, les deux lecons cote a cote. Attention :
     // l'egalite a droite compte pour UNE seule concordance exacte, la Resonance en
     // demande deux -- elle ne se declenche pas ici, et c'est ce qui rend l'exemple lisible.
-    text: "Un Gardien ajoute +1 au rang qu'on attaque, le temps du combat. À droite, votre 6 vise un 5 qui se défend comme un 6 : rien ne passera. En bas, une Cendres sans défense. Posez, et comparez.",
+    text: "Un Gardien ajoute +1 au rang qu'on attaque, le temps du combat. À droite, votre 6 vise un 5 qui se défend comme un 6. Rien ne passera. En bas, une Cendres sans défense. Posez et comparez.",
     requiredCell: 7,
     handCard: tc(3, 6, 5, 3, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -770,21 +770,21 @@ const TUTORIAL_STEPS = [
   {
     kind: "info",
     title: "L'avance du premier",
-    text: "Vingt cases, seize cartes posées : quatre cases restent vides à la fin. Celui qui ouvre le duel ne pose pas la dernière carte, un vrai désavantage. Il reçoit donc deux points d'avance au décompte. Et ces deux points rendent l'égalité parfaite possible.",
+    text: "À la fin, seize cartes sont posées et quatre cases restent vides. Celui qui ouvre le duel ne pose pas la dernière carte, un vrai désavantage. Il reçoit donc deux points d'avance au décompte. Ces deux points rendent l'égalité parfaite possible.",
   },
   {
     kind: "reserve",
     title: "Votre Réserve",
     // Le joueur CHOISIT, il ne lit pas. Les huit cartes sont les quatre orientations de
     // ses deux Ordres, comme avant un vrai duel : les memes qu'il vient de voir jouer.
-    text: "Avant chaque duel, vous mettez deux cartes de côté : votre Réserve. UNE PAR ORDRE, jamais deux fois le même. Vous ne les jouerez peut-être jamais, ou elles décideront de tout. Choisissez-en deux.",
+    text: "Avant chaque duel, vous mettez deux cartes de côté. C'est votre Réserve. UNE PAR ORDRE, jamais deux fois le même. Vous ne les jouerez peut-être jamais, ou elles décideront de tout. Choisissez-en deux.",
     cartes: () => makeHand(ORDERS.find((l) => l.key === "portee"), ORDERS.find((l) => l.key === "guardian")),
-    after: "Elles se retournent : personne ne sait ce que vous gardez. Vous les retrouverez si le duel s'achève à égalité parfaite.",
+    after: "Elles se retournent. Personne ne sait ce que vous gardez. Vous les retrouverez si le duel s'achève à égalité parfaite.",
   },
   {
     kind: "play",
     title: "La Mort Subite",
-    text: "Le duel s'achève. Vous avez ouvert, donc deux points d'avance : huit cartes plus deux, dix. Dix à lui. Personne ne l'emporte. Alors chaque camp sort une carte de sa Réserve et la pose sur une case restée vide. Posez la vôtre.",
+    text: "Le duel s'achève. Vous avez ouvert, donc deux points d'avance. Huit cartes plus deux, dix. Dix à lui. Personne ne l'emporte. Alors chaque camp sort une carte de sa Réserve et la pose sur une case restée vide. Posez la vôtre.",
     requiredCell: 7,
     handCard: tc(1, 8, 1, 1, { name: "Dorés", icon: ORDERS.find((l) => l.key === "eveil").icon, portrait: ORDERS.find((l) => l.key === "eveil").portrait }),
     board: (() => {
@@ -808,17 +808,17 @@ const TUTORIAL_STEPS = [
       }
       return b;
     })(),
-    after: "Votre carte de Réserve a capturé sa voisine : neuf cartes plus deux contre neuf, l'égalité est rompue. Deux rondes au plus, une carte de Réserve par ronde.",
+    after: "Votre carte de Réserve a capturé sa voisine. Neuf plus deux contre neuf, l'égalité est rompue. Deux rondes au plus, une carte de Réserve par ronde.",
   },
   {
     kind: "info",
     title: "Le Dernier Mot",
-    text: "Et si l'égalité tient encore après les deux rondes ? Le Dernier Mot tranche : un point revient à celui qui n'a PAS ouvert le duel : c'est lui qui a subi les deux points d'avance de l'autre. Un duel d'EMPRISE ne s'achève jamais sur un nul.",
+    text: "Et si l'égalité tient encore après les deux rondes ? Le Dernier Mot tranche. Un point revient à celui qui n'a PAS ouvert le duel, lui qui a subi les deux points d'avance de l'autre. Un duel d'EMPRISE ne s'achève jamais sur un nul.",
   },
   {
     kind: "info",
     title: "Vous êtes prêt",
-    text: "Dix Ordres vous attendent, chacun avec sa capacité : vous les découvrirez en jouant. Ce tutoriel reste disponible dans les Réglages, à tout moment. Bonne chance, Commandant.",
+    text: "Dix Ordres vous attendent, chacun avec sa capacité. Vous les découvrirez en jouant. Ce tutoriel reste dans les Réglages, à tout moment. Bonne chance, Commandant.",
   },
 ];
 
