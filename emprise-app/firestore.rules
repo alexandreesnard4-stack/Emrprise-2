@@ -42,6 +42,17 @@ service cloud.firestore {
     // deplie -- ces listes sont assez courtes pour que ce soit exact.
     function cleCourte(v) { return v is string && v.size() <= 30; }
     function deuxClesCourtes(l) { return l is list && l.size() == 2 && cleCourte(l[0]) && cleCourte(l[1]); }
+    // Huit clés : le pool d'une Confluence draftée. Le langage des règles n'a pas de
+    // boucle, on nomme donc les huit rangs -- c'est la forme deja utilisee par
+    // combosBornes juste en dessous.
+    function huitClesCourtes(l) {
+      return l is list && l.size() == 8
+        && cleCourte(l[0]) && cleCourte(l[1]) && cleCourte(l[2]) && cleCourte(l[3])
+        && cleCourte(l[4]) && cleCourte(l[5]) && cleCourte(l[6]) && cleCourte(l[7]);
+    }
+    // Les Ordres d'un camp : DEUX en Duel classique et dans le defi a main commune,
+    // HUIT quand la partie sort d'un draft de Confluence. Rien d'autre.
+    function clesOrdresDunCamp(l) { return deuxClesCourtes(l) || huitClesCourtes(l); }
     function combosBornes(l) {
       return l is list && l.size() <= 3
         && (l.size() < 1 || cleCourte(l[0]))
@@ -79,6 +90,7 @@ service cloud.firestore {
                'board', 'poisonedCells', 'turn', 'firstPlayer', 'gameOver',
                'bluePseudo', 'redPseudo',
                'defiMode', 'defiHerauts', 'defiOrdres', 'defiMainCommune',
+               'draftPool', 'draftPickedBy', 'draftTurn',
                'tournoiId', 'matchKey', 'appariement', 'classique',
                'blueTrophees', 'redTrophees', 'blueTitre', 'redTitre',
                'blueBanniere', 'redBanniere', 'blueMedaillon', 'redMedaillon'
@@ -129,6 +141,14 @@ service cloud.firestore {
             || deuxClesCourtes(request.resource.data.defiOrdres))
         && (!('defiMainCommune' in request.resource.data) || request.resource.data.defiMainCommune == null
             || (request.resource.data.defiMainCommune is list && request.resource.data.defiMainCommune.size() == 8))
+        // Une partie naît le pool VIDE : on ne peut pas naître au milieu d'un draft,
+        // avec quatre Ordres deja poses et le tour dans son propre camp.
+        && (!('draftPool' in request.resource.data) || request.resource.data.draftPool == null
+            || (request.resource.data.draftPool is list && request.resource.data.draftPool.size() == 0))
+        && (!('draftPickedBy' in request.resource.data) || request.resource.data.draftPickedBy == null
+            || (request.resource.data.draftPickedBy is map && request.resource.data.draftPickedBy.keys().size() == 0))
+        && (!('draftTurn' in request.resource.data) || request.resource.data.draftTurn == null
+            || request.resource.data.draftTurn == 'blue' || request.resource.data.draftTurn == 'red')
         && (!('tournoiId' in request.resource.data)
             || (request.resource.data.tournoiId is string && request.resource.data.tournoiId.size() <= 40))
         && (!('matchKey' in request.resource.data)
@@ -150,6 +170,31 @@ service cloud.firestore {
             && request.auth.uid in get(docTournoiPourPartie(request.resource.data.tournoiId)).data.joueurs);
     }
 
+    // ---------- Un choix de draft (Confluence en ligne) ----------
+    // Le camp dont c'est le tour ajoute UN Ordre au pool commun et rend la main. Trois
+    // cles, jamais plus : on ne glisse ni une main, ni un plateau, ni un abandon dans
+    // le meme geste.
+    function clesDunChoixDeDraft() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['draftPool', 'draftPickedBy', 'draftTurn']);
+    }
+    // Le pool grandit d'EXACTEMENT un, la derniere clef est bornee, et la carte des
+    // choix compte autant d'entrees que le pool : c'est ce dernier point qui interdit
+    // de rejouer un Ordre deja pris, sans avoir a parcourir la liste (impossible ici).
+    function choixDeDraftBienForme() {
+      return resource.data.draftPool is list
+        && request.resource.data.draftPool is list
+        && request.resource.data.draftPool.size() == resource.data.draftPool.size() + 1
+        && request.resource.data.draftPool.size() <= 8
+        && cleCourte(request.resource.data.draftPool[resource.data.draftPool.size()])
+        && request.resource.data.draftPickedBy is map
+        && request.resource.data.draftPickedBy.keys().size() == request.resource.data.draftPool.size()
+        && resource.data.gameOver == false
+        && !('abandonPar' in resource.data)
+        // Le draft precede les mains : une fois les Ordres envoyes, le pool est scelle.
+        && resource.data.blueOrderKeys == null
+        && resource.data.redOrderKeys == null;
+    }
     // ---------- La preparation d'un camp ----------
     // Un camp ecrit SES cles, et seulement tant qu'il n'a pas envoye ses Ordres : sa
     // parure a l'entree (banniere et medaillon, ecriture separee parce que les champs du
@@ -176,7 +221,7 @@ service cloud.firestore {
     }
     function preparationAzurBienFormee() {
       return (!('blueOrderKeys' in request.resource.data) || request.resource.data.blueOrderKeys == null
-              || deuxClesCourtes(request.resource.data.blueOrderKeys))
+              || clesOrdresDunCamp(request.resource.data.blueOrderKeys))
         && (!('blueHand' in request.resource.data) || request.resource.data.blueHand == null
             || (request.resource.data.blueHand is list && request.resource.data.blueHand.size() <= 8))
         && (!('blueReserve' in request.resource.data)
@@ -198,7 +243,7 @@ service cloud.firestore {
     }
     function preparationVermeilBienFormee() {
       return (!('redOrderKeys' in request.resource.data) || request.resource.data.redOrderKeys == null
-              || deuxClesCourtes(request.resource.data.redOrderKeys))
+              || clesOrdresDunCamp(request.resource.data.redOrderKeys))
         && (!('redHand' in request.resource.data) || request.resource.data.redHand == null
             || (request.resource.data.redHand is list && request.resource.data.redHand.size() <= 8))
         && (!('redReserve' in request.resource.data)
@@ -415,6 +460,14 @@ service cloud.firestore {
         || (resource.data.redUid == request.auth.uid
             && resource.data.redOrderKeys == null
             && clesPreparationVermeil() && preparationVermeilBienFormee())
+        // Le choix de draft d'Azur : c'est son tour, et il le rend.
+        || (resource.data.blueUid == request.auth.uid
+            && resource.data.draftTurn == 'blue' && request.resource.data.draftTurn == 'red'
+            && clesDunChoixDeDraft() && choixDeDraftBienForme())
+        // Le choix de draft de Vermeil.
+        || (resource.data.redUid == request.auth.uid
+            && resource.data.draftTurn == 'red' && request.resource.data.draftTurn == 'blue'
+            && clesDunChoixDeDraft() && choixDeDraftBienForme())
 
         // Le coup d'Azur : c'est son tour, la partie a commence et n'est pas scellee.
         || (resource.data.blueUid == request.auth.uid
