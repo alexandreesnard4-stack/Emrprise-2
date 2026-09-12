@@ -7279,6 +7279,20 @@ const APP_STYLES = `
         .histo-sb { color: var(--blue-bright); }
         .histo-sr { color: var(--red-bright); }
         .histo-quand { flex: none; }
+        /* Maquette A (12/09) : l'adversaire en tete de ligne, son medaillon en sceau a
+           gauche comme dans la liste d'amis, le resultat range a droite. La ligne entiere
+           s'ouvre sur sa fiche. Une ligne d'avant cette date n'a pas d'adversaire : pas
+           de medaillon, pas de curseur, et elle le dit en italique. */
+        .histo-ligne.tapable { display: flex; align-items: center; gap: 10px; cursor: pointer; border-color: rgba(203,164,86,0.28); }
+        .histo-ligne.tapable:hover { border-color: var(--gold); }
+        .histo-corps { flex: 1; min-width: 0; }
+        .histo-haut { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .histo-adversaire {
+          font-family: 'Cinzel', serif; font-size: 12.5px; letter-spacing: 0.05em; color: var(--bone);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+        }
+        .histo-adversaire.inconnu { color: var(--muted); font-style: italic; font-family: 'Spectral', Georgia, serif; letter-spacing: 0; font-size: 11.5px; }
+        .histo-resultat.petit { flex: none; font-size: 11px; }
         .hub-rouage {
           width: 48px; height: 48px; flex: none;
           display: flex; align-items: center; justify-content: center;
@@ -15689,6 +15703,7 @@ export default function Emprise() {
   // la section Amis oublie ses saisies et ses messages. Pose ici, apres activeModal.
   useEffect(() => {
     if (activeModal === "profil" || activeModal === "amis") chargerFiches(amis.map((a) => a.uid), true);
+    if (activeModal === "historique") chargerFiches(historique.map((h) => h.adversaireUid).filter(Boolean), true);
     if (activeModal !== "amis") { setAvisAmis(null); setCodeAmiSaisi(""); setAmiARetirer(null); }
   }, [activeModal]);
   // Pseudos des deux camps d'une partie en ligne, lus dans le document : les deux ecrans
@@ -16937,6 +16952,8 @@ export default function Emprise() {
           camp: onlineRole,
           trophees: trophyGainReel,
           motif: finMotif || null,
+          adversaireUid: adversaireUid || null,
+          adversairePseudo: (adversaireUid && fichesRef.current[adversaireUid] && fichesRef.current[adversaireUid].pseudo) || "",
         }));
       }
       // La progression d'Histoire vit desormais DANS la chaine de fin de partie
@@ -22799,23 +22816,39 @@ export default function Emprise() {
                     ? (h.vainqueur === h.camp ? "Victoire" : "Défaite")
                     : (h.vainqueur === "blue" ? "Azur l'emporte" : "Écarlate l'emporte");
                   const gagnee = h.camp ? h.vainqueur === h.camp : null;
+                  // L'adversaire : la fiche fraiche d'abord, l'instantane de la partie en repli.
+                  // Une ligne d'avant cette mission n'a pas d'uid : elle le dit, et ne s'ouvre pas.
+                  const uidAdv = h.adversaireUid || null;
+                  const ficheAdv = uidAdv ? fiches[uidAdv] : null;
+                  const nomAdv = uidAdv ? nomAffiche((ficheAdv && ficheAdv.pseudo) || h.adversairePseudo || "") : "";
+                  const medAdv = ficheAdv && medaillonDeCle(ficheAdv.medaillon) ? ficheAdv.medaillon : null;
+                  const ouvrir = uidAdv ? () => setProfilAdverse({ uid: uidAdv, nom: nomAdv }) : null;
                   return (
-                    <div key={h.t + "-" + i} className="histo-ligne">
-                      <div className={`histo-resultat ${gagnee === true ? "gagnee" : gagnee === false ? "perdue" : ""}`}>
-                        {resultat}
-                        {h.motif === "abandon" && <span className="histo-motif"> (abandon)</span>}
-                        {h.motif === "forfait" && <span className="histo-motif"> (forfait)</span>}
-                      </div>
-                      <div className="histo-detail">
-                        {/* Toutes les lignes etant classees, le nom du mode n'apprendrait
-                            rien : la variation de trophees, elle, est l'enjeu du mode. */}
-                        <span className="histo-mode">
-                          {typeof h.trophees === "number" && h.trophees !== 0
-                            ? `${h.trophees > 0 ? "+" : ""}${h.trophees} trophées`
-                            : "Classé"}
-                        </span>
-                        <span className="histo-score"><b className="histo-sb">{h.sb}</b> &middot; <b className="histo-sr">{h.sr}</b></span>
-                        <span className="histo-quand">{ilYa(h.t)}</span>
+                    <div key={h.t + "-" + i} className={`histo-ligne ${uidAdv ? "tapable" : ""}`}
+                         {...(ouvrir ? { role: "button", tabIndex: 0, onClick: ouvrir, onKeyDown: KEY_ACTIVATE(ouvrir), "aria-haspopup": "dialog", "aria-label": `Voir le profil de ${nomAdv}` } : {})}>
+                      {medAdv && (
+                        <img className="amis-avatar" src={imageMedaillon(medAdv)} alt="" aria-hidden="true" width="36" height="36" loading="lazy" />
+                      )}
+                      <div className="histo-corps">
+                        <div className="histo-haut">
+                          <span className={`histo-adversaire ${uidAdv ? "" : "inconnu"}`}>{uidAdv ? nomAdv : "Adversaire non enregistré"}</span>
+                          <span className={`histo-resultat petit ${gagnee === true ? "gagnee" : gagnee === false ? "perdue" : ""}`}>
+                            {resultat}
+                            {h.motif === "abandon" && <span className="histo-motif"> (abandon)</span>}
+                            {h.motif === "forfait" && <span className="histo-motif"> (forfait)</span>}
+                          </span>
+                        </div>
+                        <div className="histo-detail">
+                          {/* Toutes les lignes etant classees, le nom du mode n'apprendrait
+                              rien : la variation de trophees, elle, est l'enjeu du mode. */}
+                          <span className="histo-mode">
+                            {typeof h.trophees === "number" && h.trophees !== 0
+                              ? `${h.trophees > 0 ? "+" : ""}${h.trophees} trophées`
+                              : "Classé"}
+                          </span>
+                          <span className="histo-score"><b className="histo-sb">{h.sb}</b> &middot; <b className="histo-sr">{h.sr}</b></span>
+                          <span className="histo-quand">{ilYa(h.t)}</span>
+                        </div>
                       </div>
                     </div>
                   );
