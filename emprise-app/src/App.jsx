@@ -11980,6 +11980,26 @@ const APP_STYLES = `
         }
         .reserve-pile.revisible:active { transform: translateY(-50%) scale(0.94); }
         .reserve-pile.revisible:hover .reserve-dos { border-color: var(--gold-bright); }
+        /* ---------- Rangee longue : la Reserve rentre dans le rang (13/09) ---------- */
+        /* En Confluence la rangee aligne huit vignettes et court jusqu a 357 px ; la
+           Reserve posee en absolu a 58 px du bord tombait sur la 7e et la 8e, et les
+           couvrait -- deux Ordres injouables au toucher. Ici elle quitte l absolu,
+           se range a droite des vignettes, un peu plus petite, et le tout se centre
+           dans le conteneur (justify-content: center). A 375 px il reste 8 px de
+           chaque cote. Le duel classique, rangee courte, garde sa Reserve en absolu. */
+        .main-et-reserve.en-partie.rang-long { gap: 6px; }
+        /* Les marges automatiques de la rangee absorberaient tout l espace libre du
+           conteneur flex et rejetteraient la Reserve au bord de l ecran. */
+        .main-et-reserve.en-partie.rang-long .hand-row { margin: 0; }
+        .main-et-reserve.en-partie.rang-long .reserve-pile {
+          position: relative; right: auto; top: auto; transform: none;
+          width: 34px; height: 46px;
+        }
+        .main-et-reserve.en-partie.rang-long .reserve-dos { width: 28px; height: 40px; border-radius: 6px; }
+        .main-et-reserve.en-partie.rang-long .reserve-dos.d1 { transform: translate(6px, 0) rotate(4deg); }
+        /* Le :active de la pile revisible suppose la position absolue (translateY -50%) :
+           dans le rang il ferait sauter la pile d une demi-hauteur au toucher. */
+        .main-et-reserve.en-partie.rang-long .reserve-pile.revisible:active { transform: scale(0.94); }
         /* ---------- Le face-a-face d'avant-partie, en ligne ---------- */
         /* Les plaques vs-bandeau, vs-plaque, vs-banniere et vs-nom sont mortes
            le 01/09 : l'apercu ET l'attente en ligne vivent dans les
@@ -16811,8 +16831,10 @@ export default function Emprise() {
     // La rangee reste montee tant qu'il reste une Reserve : sinon elle disparaissait au
     // dernier coup, juste avant la Mort Subite, au moment ou l'on veut justement la voir.
     if (main.length === 0 && reserveRestante(camp).length === 0) return null;
+    // rang-long compte les VIGNETTES (un Ordre = une vignette), pas les cartes : en duel
+    // classique la main a huit cartes mais deux vignettes, et sa Reserve reste en absolu.
     return (
-      <div className="main-et-reserve en-partie">
+      <div className={`main-et-reserve en-partie ${(camp === "red" ? redGroups : blueGroups).length > 4 ? "rang-long" : ""}`}>
         <div className={`hand-row camp-${teinte(camp)} ${turn === camp && !gameOver ? "active" : ""} ${turn !== camp ? "disabled" : ""} ${main.length > 4 ? "compact" : ""}`}>
           {renderHandGroups(camp)}
         </div>
