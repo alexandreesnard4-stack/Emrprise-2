@@ -15909,7 +15909,7 @@ export default function Emprise() {
     // cadrage et le meme voile.
     // EN TETE de l onglet (01/09) : c est le seul mode APPARIE de la famille,
     // et l ordre du tableau est celui de l ecran -- il n y a pas de tri.
-    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec les Hérauts, sans trophées", image: "/fonds/classique.webp",
+    { famille: "multi", titre: "Partie classique", phrase: "Apparié en ligne, avec vos Hérauts, sans trophées", image: "/fonds/classique.webp",
       beta: true,
       lancer: () => chercherAdversaire("classique") },
     { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", image: "/modes/local.webp",
@@ -16406,14 +16406,14 @@ export default function Emprise() {
   }
   // Un Ordre affiche son encoche s'il possède un Héraut ET que son chapitre d'Histoire
   // est terminé. Dorés et Chimères n'ont pas de Héraut : jamais d'encoche pour eux.
-  // 01/09 : la Partie classique ouvre l'encoche a son tour. Le Classe, lui,
-  // reste ferme -- c'est partieClassique qui ouvre, jamais partieClassee, et
-  // les deux drapeaux s'excluent. En classique le Heraut coche part dans MA
-  // main seule : applyOrderChoice ne construit que la main de son camp, et
-  // chaque camp choisit ses Ordres sur son propre appareil. Rien a inventer,
-  // c'est deja ainsi que la main se fabrique.
+  // Ou les Herauts sont permis (13/09) : contre l'Echo, en Partie classique, et en defi
+  // entre amis quand l'option est cochee. Jamais en Classe ni en tournoi. Partout la
+  // meme regle : on ne coche que ce qu'on a gagne, et cocher, c'est jouer. En ligne,
+  // c'est commencerReserveEnLigne qui empile les encoches sur la main -- pas
+  // applyOrderChoice, reserve aux parties hors ligne.
+  const herautsPermis = mode === "bot" || partieClassique || (mode === "online" && !!partieDefi.herauts);
   const encocheVisible = (order) =>
-    (mode === "bot" || partieClassique) &&
+    herautsPermis &&
     HEROES.some((h) => h.orderKey === order.key) &&
     storyProgress.completedChapters.includes(order.key);
   const encocheCochee = (order) => herautsCoches.includes(order.key);
@@ -19347,21 +19347,25 @@ export default function Emprise() {
   function commencerReserveEnLigne(picked) {
     const chosen = picked && picked.length === 2 ? picked : null;
     if (!chosen || !onlineGameId || !onlineRole) return;
-    // Les capacites superieures ne s'invitent en ligne QUE si le defi les a demandees --
-    // jamais en Classe ni en tournoi, dont les documents ne portent pas l'option. TOUS
-    // les Herauts, pour les DEUX camps : la version « chacun ses Herauts gagnes » aurait
-    // avantage le plus assidu, et un defi est une fete, pas un examen.
-    const brute = makeHand(chosen[0], chosen[1]);
-    const hand = partieDefi.herauts ? applyAllHeroesToHand(brute) : brute;
+    // Les capacites superieures ne s'invitent en ligne que la ou elles sont permises --
+    // Partie classique, ou defi qui les a demandees ; jamais en Classe ni en tournoi.
+    // Et CHACUN LES SIENS (13/09) : un Heraut se gagne en battant le Seigneur de Guerre
+    // de son chapitre, la version « tous les Herauts pour les deux camps » faisait jouer
+    // des capacites jamais gagnees. Les encoches ne proposent que les chapitres
+    // termines ; on refiltre quand meme sur la progression, par prudence.
+    const herautsPermisIci = partieClassique || !!partieDefi.herauts;
+    const gagnes = herautsCoches.filter((k) => storyProgress.completedChapters.includes(k));
+    const avecHerauts = (h) => (herautsPermisIci ? gagnes.reduce((acc, key) => applyHeroToHand(acc, key), h) : h);
+    const hand = avecHerauts(makeHand(chosen[0], chosen[1]));
     if (onlineRole === "blue") { setBlueOrders(chosen); setBlueHand(hand); }
     else { setRedOrders(chosen); setRedHand(hand); }
     setPickerChoice([]);
     setReserveChoix([]);
+    setHerautsCoches([]);
     // La Reserve recoit le MEME habillage que la main : sans cela, mesure sur une vraie
     // partie, les mains etaient a 8 Herauts sur 8 et la Reserve a 0 -- en Mort Subite la
     // carte posee aurait perdu sa capacite superieure.
-    const sourceReserve = cartesPourReserve(chosen);
-    setReserveSource(partieDefi.herauts ? applyAllHeroesToHand(sourceReserve) : sourceReserve);
+    setReserveSource(avecHerauts(cartesPourReserve(chosen)));
     setPhase(onlineRole === "blue" ? "select-reserve-blue" : "select-reserve-red");
   }
 
@@ -21495,7 +21499,7 @@ export default function Emprise() {
                       dedans, le cadre porte la couleur de son Ordre. */}
                   <h2 className="boutique-titre">Hérauts</h2>
                   <p className="boutique-sous">La capacité supérieure d&apos;un Ordre, gagnée en terminant son chapitre.</p>
-                  <p className="boutique-mention">Les Hérauts se jouent contre l&apos;Écho et en défi entre amis, jamais en Classé ni en tournoi. En défi, les deux camps en bénéficient.</p>
+                  <p className="boutique-mention">Les Hérauts se jouent contre l&apos;Écho et en défi entre amis, jamais en Classé ni en tournoi. En défi comme en Partie classique, chacun joue les siens.</p>
                   {/* Un seul Heraut par jour (01/09), le meme pour tous. Les
                       sept autres ne sont pas grises : ils ne sont pas rendus
                       du tout. Le tableau d un seul element garde le corps du
@@ -25590,7 +25594,8 @@ export default function Emprise() {
               </button>
             ))}
             {/* Les Herauts ne s'offrent qu'en Duel classique : en Confluence les deux
-                camps ont la meme main, les memes Herauts s'annuleraient. La ligne reste
+                camps ont la meme main, les memes Herauts s annuleraient. Depuis le 13/09, chacun
+                joue les siens : l option autorise, l encoche du choix des Ordres decide. La ligne reste
                 visible mais eteinte, pour que l'option ne semble pas disparue. */}
             <button
               className={`defi-config-herauts ${defiConfig.mode !== "classique" ? "eteint" : ""}`}
@@ -25601,7 +25606,7 @@ export default function Emprise() {
               <span className="defi-config-herauts-texte">
                 <b>Capacités supérieures</b>
                 <span>{defiConfig.mode === "classique"
-                  ? "Les Hérauts des dix Ordres, pour les deux camps"
+                  ? "Chacun joue les Hérauts qu'il a gagnés dans l'Histoire"
                   : "Réservées au Duel classique"}</span>
               </span>
               <div className={`settings-bascule ${defiConfig.mode === "classique" && defiConfig.herauts ? "on" : ""}`} aria-hidden="true"><span /></div>
