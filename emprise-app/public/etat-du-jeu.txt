@@ -172,3 +172,4 @@ L'écran de fin de partie, victoire comme défaite, n'apparaît qu'une fois le d
 L'icône de l'onglet du navigateur est le gantelet, la même que l'icône d'écran d'accueil.
 Relecture des textes du jeu : accents, accords et formulations corrigés dans les réglages, les astuces, les quêtes, la boutique et la page de confidentialité ; l'étape La Résonance du tutoriel nomme les côtés comparés.
 Page de confidentialité : le titre sur la durée de conservation est une vraie question, et la suppression du compte est annoncée au futur, l'effacement venant après.
+La Confluence en ligne attend son heure : la bannière Confluence à 2 affiche « Bientôt » et le défi Confluence « Prochainement », ni l'une ni l'autre ne se lance. Elle reste jouable contre un Écho, avec son draft de 8 Ordres.
