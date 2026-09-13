@@ -826,9 +826,15 @@ const TUTORIAL_STEPS = [
 // le connait, et le tirage au sort des Ordres -- la meme partie, mais personne ne
 // choisit sa main, ce qui fait de chaque duel une surprise. La Confluence en ligne
 // demanderait de synchroniser un draft entier : elle viendra dans sa propre etape.
+// La Confluence EN LIGNE est fermee (13/09) : elle promet un draft a huit Ordres que
+// le multijoueur ne sait pas encore synchroniser, et un mode qui ne tient pas sa
+// promesse vaut moins qu une porte fermee. Elle reste jouable contre un Echo, et rien
+// de son moteur n a ete retire : remettre true rouvre le defi Confluence ET la
+// Confluence a 2 du meme geste.
+const CONFLUENCE_EN_LIGNE = false;
 const DEFI_MODES = [
   { cle: "classique", nom: "Duel classique", detail: "Chacun choisit ses 2 Ordres" },
-  { cle: "confluence", nom: "Confluence", detail: "Deux Ordres tirés au sort, la même main pour les deux camps" },
+  { cle: "confluence", nom: "Confluence", detail: "Deux Ordres tirés au sort, la même main pour les deux camps", ferme: !CONFLUENCE_EN_LIGNE },
 ];
 function defiModeNom(cle) {
   const m = DEFI_MODES.find((x) => x.cle === cle);
@@ -9060,6 +9066,7 @@ const APP_STYLES = `
         }
         .defi-config-mode b { font-family: 'Cinzel', serif; font-size: 13px; }
         .defi-config-mode span { font-size: 11px; color: var(--muted); line-height: 1.35; }
+        .defi-config-mode.eteint { opacity: 0.45; cursor: default; }
         .defi-config-herauts {
           display: flex; align-items: center; justify-content: space-between; gap: 10px;
           width: 100%; margin: 12px 0 14px; padding: 9px 12px; border-radius: 11px;
@@ -9655,6 +9662,24 @@ const APP_STYLES = `
           text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         }
         .reduced-motion .mode-banniere { animation: none; }
+        /* Un mode ferme (13/09) : la porte reste visible, elle ne s ouvre pas. Meme
+           vocabulaire que les Ordres verrouilles de la grille -- gris, eteint, phrase
+           en italique : le joueur reconnait le code sans qu on le lui explique. */
+        .mode-banniere.fermee { cursor: not-allowed; border-color: rgba(203,164,86,0.13); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .mode-banniere.fermee .mode-banniere-fond { filter: grayscale(0.92) brightness(0.42); }
+        .mode-banniere.fermee:hover { border-color: rgba(203,164,86,0.13); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .mode-banniere.fermee:hover .mode-banniere-fond { transform: none; filter: grayscale(0.92) brightness(0.42); }
+        .mode-banniere.fermee:active { transform: none; }
+        .mode-banniere.fermee .mode-banniere-titre { color: var(--muted); }
+        .mode-banniere.fermee .mode-banniere-phrase { color: var(--muted); font-style: italic; }
+        /* La pastille se pose exactement ou se pose BETA, en tons eteints : meme forme,
+           meme coin, une seule lecture a apprendre. */
+        .prochainement-etiquette {
+          position: absolute; z-index: 2; top: 8px; right: 10px;
+          font-family: 'Cinzel', serif; font-size: 7.5px; font-weight: 700; letter-spacing: 0.2em;
+          padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+          background: #241f2e; border: 1px solid rgba(203,164,86,0.26); color: var(--muted);
+        }
         /* Page de maitrise : 4 Ordres par ligne, chacun avec sa vague et son
            pourcentage. Trois lignes tiennent sous le titre sans defiler. */
         .hub-ordres-grille4 {
@@ -14710,7 +14735,12 @@ export default function Emprise() {
     // et le premier restait chez l'ami sans etre ni ecoute ni annulable.
     if (defiEnVolRef.current) return;
     defiEnVolRef.current = true;
-    const opts = { mode: (options && options.mode) || "classique", herauts: !!(options && options.herauts) };
+    // Un mode ferme ne part pas, meme si un etat d avant la fermeture le demande :
+    // le defi retombe sur le Duel classique plutot que d ouvrir une partie que
+    // l adversaire ne saura pas jouer.
+    const modeDemande = (options && options.mode) || "classique";
+    const modeOuvert = DEFI_MODES.find((m) => m.cle === modeDemande && !m.ferme) ? modeDemande : "classique";
+    const opts = { mode: modeOuvert, herauts: !!(options && options.herauts) };
     if (defiEnvoye && defiEnvoye.code) annulerDefiEnAttente("remplace");
     const code = await creerDocumentPartie(opts);
     // Sans ce message, un echec de creation laissait le bouton « Defier » sans le moindre
@@ -15865,6 +15895,7 @@ export default function Emprise() {
     { famille: "multi", titre: "2 Commandants", phrase: "Chacun son tour, sur le même écran", image: "/modes/local.webp",
       lancer: () => chooseMode("local") },
     { famille: "multi", titre: "Confluence à 2", phrase: "8 Ordres draftés, sur le même écran", image: "/modes/confluence2.webp",
+      ferme: !CONFLUENCE_EN_LIGNE,
       lancer: () => chooseConfluenceLocal() },
     // 01/09 : la phrase promettait « un code a partager », ce qui n est plus
     // vrai depuis que le code a quitte cet ecran. On defie, on ne dicte plus.
@@ -22741,11 +22772,14 @@ export default function Emprise() {
                 <div className="modes-bannieres" key={familleModes}>
                   {MODES_DE_JEU.filter((m) => m.famille === familleModes && !m.cache).map((m, i) => {
                     return (
-                      <button key={m.titre} className="mode-banniere" style={{ animationDelay: `${i * 60}ms` }}
-                              onClick={() => { setActiveModal(null); m.lancer(); }}
-                              aria-label={`${m.titre} : ${m.phrase}`}>
+                      <button key={m.titre} className={`mode-banniere ${m.ferme ? "fermee" : ""}`} style={{ animationDelay: `${i * 60}ms` }}
+                              disabled={!!m.ferme}
+                              onClick={() => { if (m.ferme) return; setActiveModal(null); m.lancer(); }}
+                              aria-label={m.ferme ? `${m.titre} : prochainement` : `${m.titre} : ${m.phrase}`}>
                         <span className="mode-banniere-fond" style={{ backgroundImage: `url(${m.image})` }} aria-hidden="true" />
-                        {EN_BETA && m.beta && <span className="beta-etiquette">BÊTA</span>}
+                        {m.ferme
+                          ? <span className="prochainement-etiquette">BIENTÔT</span>
+                          : (EN_BETA && m.beta && <span className="beta-etiquette">BÊTA</span>)}
                         <span className="mode-banniere-texte">
                           <span className="mode-banniere-titre">{m.titre}</span>
                           <span className="mode-banniere-phrase">{m.phrase}</span>
@@ -25523,12 +25557,14 @@ export default function Emprise() {
             {DEFI_MODES.map((m) => (
               <button
                 key={m.cle}
-                className={`defi-config-mode ${defiConfig.mode === m.cle ? "choisi" : ""}`}
+                className={`defi-config-mode ${defiConfig.mode === m.cle ? "choisi" : ""} ${m.ferme ? "eteint" : ""}`}
                 aria-pressed={defiConfig.mode === m.cle}
-                onClick={() => setDefiConfig((d) => ({ ...d, mode: m.cle }))}
+                aria-disabled={!!m.ferme}
+                disabled={!!m.ferme}
+                onClick={() => { if (m.ferme) return; setDefiConfig((d) => ({ ...d, mode: m.cle })); }}
               >
                 <b>{m.nom}</b>
-                <span>{m.detail}</span>
+                <span>{m.detail}{m.ferme ? " · Prochainement" : ""}</span>
               </button>
             ))}
             {/* Les Herauts ne s'offrent qu'en Duel classique : en Confluence les deux
