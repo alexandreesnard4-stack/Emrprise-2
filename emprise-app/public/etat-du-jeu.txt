@@ -175,3 +175,4 @@ Page de confidentialité : le titre sur la durée de conservation est une vraie 
 La Confluence en ligne attend son heure : la bannière Confluence à 2 affiche « Bientôt » et le défi Confluence « Prochainement », ni l'une ni l'autre ne se lance. Elle reste jouable contre un Écho, avec son draft de 8 Ordres.
 En Confluence, la Réserve se range à droite des huit vignettes au lieu de les recouvrir : les huit Ordres répondent au toucher.
 Les capacités supérieures ne se jouent plus que gagnées : en défi entre amis comme en Partie classique, chacun coche les Hérauts de ses chapitres terminés, et personne n'en reçoit d'office.
+En partie, l'étoile d'un Héraut actif se lit dans la pastille du médaillon, à côté du nombre de cartes : « 4 ★ ». Elle était rognée par le cercle et ne se voyait pas.
