@@ -11895,16 +11895,19 @@ const APP_STYLES = `
         .hand-row.compact { gap: 4px; padding: 7px 8px; max-width: 340px; }
         .order-tile:active { transform: translateY(0) scale(0.94); }
         .order-tile-portrait { width: 100%; height: 100%; object-fit: cover; display: block; }
-        /* Compteur de cartes restantes, meme famille visuelle que la pastille du Heraut
-           en haut du medaillon. Pose en BAS pour ne jamais la recouvrir. */
+        /* Compteur de cartes restantes, et l etoile du Heraut quand il est actif : une
+           seule pastille, posee en BAS -- le seul endroit d un medaillon rond qui n est
+           jamais coupe par overflow hidden. */
         .order-tile-compte {
           position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+          display: inline-flex; align-items: center; justify-content: center; gap: 3px;
           min-width: 17px; padding: 0 4px; border-radius: 999px;
           font-family: 'Cinzel', serif; font-size: 10px; line-height: 15px; font-weight: 700;
           color: var(--bone); background: rgba(8,6,12,0.9);
           border: 1px solid rgba(203,164,86,0.55);
           box-shadow: 0 1px 4px rgba(0,0,0,0.6); pointer-events: none;
         }
+        .order-tile-compte .order-tile-etoile { color: var(--gold-bright); font-size: 10px; line-height: 1; }
         .order-tile-icon { font-size: 20px; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
         /* Éventail ouvert pour cette vignette : même halo doré que .hand-row.active,
            à l'échelle d'une seule vignette. */
@@ -11913,7 +11916,6 @@ const APP_STYLES = `
            l'éventail lui-même est refermé : le halo rappelle qu'il reste une action en
            attente dans cette vignette-là. */
         .order-tile.tile-pending { border-color: var(--gold-bright); box-shadow: 0 0 0 2px var(--gold-bright), 0 0 14px rgba(203,164,86,0.5); animation: hint-pulse 1.4s ease-in-out infinite; }
-        .order-tile-hero { position: absolute; top: -2px; right: -2px; font-size: 11px; line-height: 1; color: var(--gold-bright); text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.6); pointer-events: none; }
 
         /* Éventail déployé : une SUPERPOSITION, jamais dans le flux, ne pousse aucun
            autre élément et se pose PAR-DESSUS le plateau (z-index élevé) plutôt que de
@@ -20382,6 +20384,7 @@ export default function Emprise() {
       const isOpen = fanOpen[owner] === group.ability;
       const isClosing = !isOpen && fanClosing[owner] === group.ability;
       const hasSelectedInside = !!(selected && selected.owner === owner && group.cards.some((c) => c.handIdx === selected.idx));
+      const herautActif = group.cards.some((c) => c.card.heroActive);
       const hasHintInside = owner === campAugure && !!hint && group.cards.some((c) => c.handIdx === hint.cardIdx);
 
       return (
@@ -20415,18 +20418,23 @@ export default function Emprise() {
               toggleFan(owner, group.ability);
             }}
             aria-expanded={isOpen}
-            aria-label={`Cartes ${group.order ? group.order.name : ""}, ${group.cards.length} en main`}
+            aria-label={`Cartes ${group.order ? group.order.name : ""}, ${group.cards.length} en main${herautActif ? ", Héraut actif" : ""}`}
           >
             {group.order && group.order.portrait ? (
               <img className="order-tile-portrait" src={group.order.portrait} alt={group.order.name} />
             ) : (
               <span className="order-tile-icon">{group.order ? group.order.icon : "?"}</span>
             )}
-            {group.cards.some((c) => c.card.heroActive) && <span className="order-tile-hero" title="Héraut actif">★</span>}
-            {/* Combien de cartes restent dans cet Ordre. Masque a 1 : le medaillon seul
-                le dit deja, et un "1" sur chaque vignette ferait du bruit pour rien. */}
-            {group.cards.length > 1 && (
-              <span className="order-tile-compte" aria-hidden="true">{group.cards.length}</span>
+            {/* Combien de cartes restent dans cet Ordre, et son Heraut s il est actif,
+                dans UNE pastille en bas du medaillon (13/09). Le chiffre se masque a 1 :
+                le medaillon seul le dit deja. L etoile ne vit plus dans le coin du
+                bouton : un cercle a overflow hidden coupe ses coins, et elle y etait
+                rognee entiere -- personne ne la voyait. */}
+            {(group.cards.length > 1 || herautActif) && (
+              <span className="order-tile-compte" aria-hidden="true">
+                {group.cards.length > 1 && group.cards.length}
+                {herautActif && <span className="order-tile-etoile">★</span>}
+              </span>
             )}
           </button>
           {(isOpen || isClosing) && (
